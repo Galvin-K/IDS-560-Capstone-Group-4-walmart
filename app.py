@@ -1068,10 +1068,13 @@ with planning:
         )
 
     with col1:
-        st.metric(
-            "Simulated Starting Stock",
-            f"{on_hand:,} units"
-        )
+    on_hand = st.number_input(
+        "Starting Stock (units)",
+        min_value=0,
+        value=int(on_hand),
+        step=1,
+        key=f"starting_stock_{store}_{item}"
+    )
 
     with col2:
         st.metric(
