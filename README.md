@@ -101,7 +101,7 @@ The next development priorities include improving forecasting–RAG integration,
 
 University of Illinois Chicago — IDS 560 Capstone, Group 4
 
-**Industry Sponsor:** Walmart
+**Industry Sponsor:** Walmart Anjali Garg
 
 **Academic Supervisor:** Professor Fatemeh Sarayloo
 
