@@ -1956,12 +1956,10 @@ with assistant:
 
                         except Exception as e:
                             import traceback
-                            from pathlib import Path
-                            (Path(__file__).resolve().parent / "gemini_error.log").write_text(traceback.format_exc())
-                            st.warning(
-                                "Gemini is temporarily unavailable "
-                                f"({type(e).__name__}). "
-                                "You can still review the evidence below."
+                            traceback.print_exc()
+                            st.error(
+                                f"Gemini request failed ({type(e).__name__}). "
+                                "Check the Streamlit logs for details."
                             )
 
                 if not evidence.empty:
