@@ -1906,7 +1906,7 @@ with assistant:
                     import os
                     from google import genai
 
-                    key = os.environ.get("GEMINI_API_KEY")
+                    key = st.secrets.get("GEMINI_API_KEY")
 
                     if not key:
                         st.error("Gemini key is not available to Streamlit.")
