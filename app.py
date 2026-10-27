@@ -1957,10 +1957,8 @@ with assistant:
                         except Exception as e:
                             import traceback
                             traceback.print_exc()
-                            st.error(
-                                f"Gemini request failed ({type(e).__name__}). "
-                                "Check the Streamlit logs for details."
-                            )
+                            st.error(f"Gemini API error: {type(e).__name__}")
+                            st.code(str(e))
 
                 if not evidence.empty:
 
