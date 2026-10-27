@@ -1943,7 +1943,7 @@ with assistant:
                                 gemini_client = genai.Client(api_key=key)
 
                                 answer = gemini_client.models.generate_content(
-                                    model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
+                                    model=os.environ.get("GEMINI_MODEL", "gemini-3.5-flash"),
                                     contents=prompt
                                 )
 
