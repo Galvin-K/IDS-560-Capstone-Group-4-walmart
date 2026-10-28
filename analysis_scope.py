@@ -24,7 +24,7 @@ def choose_scope(choice, question):
         return "Selected store"
     return "Selected product"
 
-def scope_summary(forecasts, store, dept, item, scope, uploaded, mode, overrides):
+def scope_summary(forecasts, store, dept, item, scope, uploaded, mode, overrides, missing_policy="Use simulated inventory"):
     """Aggregate distinct item-store forecast rows, without using external RAG text."""
     scope_df = forecasts
     if scope == "Selected product":
@@ -37,7 +37,7 @@ def scope_summary(forecasts, store, dept, item, scope, uploaded, mode, overrides
         demand=('forecast', 'sum'), daily_p90_sum=('p90', 'sum'))
     source['demand'] = source['demand'].fillna(0).clip(lower=0)
     source['daily_p90_sum'] = source['daily_p90_sum'].fillna(0).clip(lower=0)
-    source = apply_inventory(source, uploaded, mode, overrides)
+    source = apply_inventory(source, uploaded, mode, overrides, missing_policy=missing_policy)
     source['gap'] = (source.demand - source.starting_stock).clip(lower=0)
     source['order_gap'] = source.gap.map(math.ceil)
     by_store = source.groupby('store_id', as_index=False).agg(
