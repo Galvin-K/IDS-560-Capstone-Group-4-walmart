@@ -66,6 +66,17 @@ New products may not have enough sales history for the current forecasting featu
 
 Selecting the top K passages does not mean that every returned passage is actually relevant. Options worth testing include tighter metadata filters, similarity thresholds, reranking, and evaluation with no-answer questions. A threshold alone is not enough: our earlier test retrieved a plausible match for a question that did not have a relevant historical source. **These are proposed improvements, not confirmed deployment changes.**
 
+
+## Extending Forecasting (7–14 Days), Safety Stock, and Ordering Rule
+
+The updated RAG notebook extends our current seven-day LightGBM forecasting approach to a 14-day protection period, combining a seven-day replenishment lead time and a seven-day review period.
+
+The method also introduces safety stock based on historical forecast errors and a more detailed ordering rule. Instead of simply calculating the difference between predicted demand and available inventory, it considers expected demand, safety stock, current inventory, and outstanding orders to estimate how much should be ordered.
+
+The notebook successfully tested these calculations using historical M5 scenarios, generating results for 14-day demand, safety stock, and suggested order quantities. However, the ordering approach has not yet been validated against actual inventory outcomes or purchasing costs.
+
+This method has not been integrated into the Streamlit dashboard yet. We plan to compare it with our existing seven-day inventory calculations and review whether it should be included after receiving feedback from our sponsor and professor.
+
 ## Pending external feedback
 
 - **Sponsor:** Utility of assumed unit cost versus selling-price/revenue metrics; preferred action priorities; decision-support expectations.
