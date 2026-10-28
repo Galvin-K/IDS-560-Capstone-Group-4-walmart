@@ -42,7 +42,9 @@ def scope_summary(forecasts, store, dept, item, scope, uploaded, mode, overrides
     source['order_gap'] = source.gap.map(math.ceil)
     by_store = source.groupby('store_id', as_index=False).agg(
         forecast=('demand','sum'), stock=('starting_stock','sum'),
-        gap=('gap','sum'), units_to_cover=('order_gap','sum'), items=('item_id','count'))
+        gap=('gap','sum'), units_to_cover=('order_gap','sum'),
+        total_item_series=('item_id','count'),
+        item_series_with_shortage=('gap', lambda g: int((g > 0).sum())))
     by_store = by_store.sort_values('gap', ascending=False)
     by_dept = source.groupby('dept_id', as_index=False).agg(
         forecast=('demand','sum'), gap=('gap','sum'), items=('item_id','count'))
@@ -59,7 +61,10 @@ def scope_summary(forecasts, store, dept, item, scope, uploaded, mode, overrides
              f'Items with a positive gap: {(source.gap > 0).sum():,}',
              'Stock origins: '+', '.join(f'{k}: {v}' for k,v in source.inventory_source.value_counts().items()),
              'Largest store-level shortages (forecast gap units):']
-    lines += [f'- {r.store_id}: forecast {r.forecast:,.2f}, gap {r.gap:,.2f}, items {r.items:,}' for r in by_store.head(10).itertuples()]
+    lines += [f'- {r.store_id}: forecast {r.forecast:,.2f}, gap {r.gap:,.2f}, '
+              f'total item-store series {r.total_item_series:,}, '
+              f'item-store series with a positive gap {r.item_series_with_shortage:,}'
+              for r in by_store.head(10).itertuples()]
     lines += ['Top departments by forecast:']
     lines += [f'- {r.dept_id}: forecast {r.forecast:,.2f}, gap {r.gap:,.2f}' for r in by_dept.head(8).itertuples()]
     lines += ['Largest individual shortages:']
