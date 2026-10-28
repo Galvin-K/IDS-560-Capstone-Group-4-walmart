@@ -1,102 +1,72 @@
-
 # Walmart IDS 560 Capstone — Development Update
 
 **Date:** October 27, 2026  
-**Status:** The updated dashboard is working. Waiting for feedback from our sponsor and professor before making further changes.
+**Status:** Dashboard implementation working in demonstration; business assumptions and academic validation awaiting sponsor/faculty feedback.
 
-## Updates Since the Previous Version
+## Summary of changes since the earlier README/update
 
-We've made quite a few changes to the Streamlit dashboard, mainly improving the layout, inventory planning, and AI assistant.
+The earlier update described an assistant that could retrieve historical evidence but was not connected to numerical forecasting. That description is **out of date**.
 
-### AI Assistant (Gemini + RAG)
+- **Forecast-aware AI:** Python-calculated forecast and inventory summaries are passed to Gemini alongside historical RAG passages. Store-level and department-level questions have produced numeric explanations aligned with on-screen comparison tables in manual tests.
+- **Automatic question scope:** User can select a scope explicitly or use Automatic to identify product, department, store, and cross-store questions. Automatic classification is rule-based and should be manually checked for ambiguous questions.
+- **Inventory sources:** Simulated stock or a user-uploaded `store_id,item_id,on_hand` CSV. Missing uploaded quantities can fall back to simulated stock or be assumed zero. Manual product overrides are supported.
+- **Executive Overview:** Restored summary and inventory KPI design, simulation assumptions, action prioritization, 5/10/20/50 selectable priority rows, and illustrative order costs.
+- **Demand Forecasting:** Department summary table/chart first, then page-specific product selection, product KPIs, daily table and chart.
+- **Inventory Planning:** Action list, illustrative order list, selection/override, stock assumptions, KPIs, product graph, chosen-products runway, and potential-shortage section.
+- **Presentation:** Compact KPI cards, structured comparison tables, more focused Gemini explanations, and collapsible historical evidence.
 
-Previously, the AI assistant could retrieve historical information through RAG, but it wasn't directly connected to our forecasting results.
+## Confirmed manual demonstration checks
 
-I updated the integration so Gemini can now access the forecasting and inventory calculations and use them when answering questions. Users can ask about individual products, departments, stores, or comparisons across all stores.
+- New Streamlit deployment runs from the active GitHub repository rather than the older dashboard repository.
+- Gemini API configured in the new Streamlit app's Secrets; generation has succeeded.
+- A store-ranking question was interpreted as cross-store analysis, and its displayed numeric order matched the computed table.
+- A department comparison question returned department-level forecasts and gaps.
+- A prior error interpreting total item-store series as affected items was corrected by exposing separate `total_item_series` and `item_series_with_shortage` fields.
 
-I also added an automatic analysis scope feature, which identifies what the user is asking about and selects the appropriate data. Users can still manually choose the scope if needed.
+These are manual UI observations, **not** complete regression tests or an independent audit of all calculations.
 
-I tested questions about store-level and department-level inventory shortages, and Gemini returned numbers that matched our dashboard calculations. I also fixed an issue where Gemini confused the total number of products with the number of products experiencing shortages.
+## Known limitations and outstanding decisions
 
-The RAG system still retrieves historical evidence to provide additional context. However, the retrieved information may not always be relevant, so we'll need to continue checking the quality of the responses.
+### Cost assumption — await sponsor/professor response
 
-### Inventory Data and Planning
+M5 includes **historical selling prices**, but **not actual procurement cost**. The current dashboard assumes a configurable default unit cost of **$5** for illustrative order-cost calculations. We should not call it a verified Walmart cost or replace it with selling price without redefining the metric. The sponsor/professor may advise whether to retain the current assumption, add user-provided procurement costs, or join M5 historical selling prices for a separate revenue-oriented measure.
 
-The dashboard now allows users to upload their own inventory data using a CSV file with `store_id`, `item_id`, and `on_hand`.
+### Other limitations
 
-For products missing inventory information, users can choose to either use simulated stock or assume zero inventory. They can also manually change the starting inventory for individual products.
+- Forecasts are historical/precomputed and cover the included 50% modeling sample.
+- User-supplied or simulated inventory is not observed live Walmart stock.
+- No validated stockout, inbound replenishment, supplier lead-time, or order-policy data.
+- Summed daily P10/P90 values are illustrative scenarios, not calibrated multi-day intervals.
+- RAG passage relevance is imperfect; Gemini can overgeneralize, duplicate context, or misinterpret retrieved statistics.
+- No production data pipeline or autonomous order execution.
 
-I reorganized the Inventory Planning page to make it easier to use. It now starts with the prioritized inventory action list and simulated order list, followed by product selection, inventory assumptions, KPIs, and inventory graphs.
+## Suggested validation before next presentation
 
-I also changed the stock runway graph so users can choose which products they want to display instead of having the dashboard automatically select them.
-
-### Executive Overview
-
-I kept most of the original Executive Overview because it already worked well, but made a few adjustments.
-
-Users can now choose to display the top 5, 10, 20, or 50 priority items. I also added estimated order costs to the priority table.
-
-The page still includes inventory KPIs, simulation settings, store comparisons, and other inventory summaries.
-
-### Demand Forecasting
-
-I reorganized the page so users first see the department-level forecasting table and graph. They can then select a product to view its forecast KPIs, daily forecast table, and graph.
-
-I also moved the department and product filters into the relevant pages instead of keeping them in the sidebar.
-
-### Dashboard Layout
-
-I made some smaller changes to improve how the results are displayed, including shorter Gemini explanations, clearer KPI cards, and expandable sections for detailed calculations and historical RAG evidence.
-
-**Updated dashboard:**  
-https://ids-560-capstone-group-4-walmart.streamlit.app/
-
-## Testing So Far
-
-I've tested the main dashboard functions, and everything appears to be working well so far.
-
-- Gemini can now answer questions using the forecasting and inventory results.
-- Automatic analysis scope correctly identified the store and department comparison questions I tested.
-- The numerical results in Gemini's responses matched the dashboard tables in those tests.
-- The updated inventory and forecasting pages are loading and displaying their information.
-- The inventory source options and manual stock controls are available.
-
-These are the tests I've done through the dashboard so far. We still need to check more scenarios, especially uploading inventory files with missing values and confirming that calculations update correctly across different pages.
-
-## Current Limitations
-
-### 1. Inventory Cost
-
-One limitation I noticed is that the M5 dataset contains historical selling prices but doesn't include Walmart's actual purchasing costs.
-
-For now, the dashboard uses an assumed unit cost of **$5**, which users can change in the simulation settings. This is used to estimate order costs, so the results are only illustrative.
-
-We could potentially add the historical selling prices to calculate revenue-related metrics, but selling price and purchasing cost are different. I'd prefer to wait for feedback from our sponsor and professor before deciding whether this is necessary.
-
-### 2. Forecasting and Inventory Data
-
-Our forecasting results are based on historical M5 data from 2011–2016, using the 50% modeling sample. The forecasts are already calculated and loaded into the dashboard rather than generated by the model in real time.
-
-Since M5 doesn't contain actual inventory levels, we still rely on simulated inventory or user-uploaded stock data. We also don't have actual replenishment lead times, supplier information, or observed stockout records.
-
-The forecast uncertainty estimates are based on daily P10 and P90 values. When combined across multiple days, they should be treated as illustrative scenarios rather than validated seven-day prediction intervals.
-
-### 3. AI Assistant
-
-Although Gemini can now use our forecasting and inventory results, it can still misinterpret information or include historical evidence that isn't directly relevant to the question.
-
-The automatic analysis scope is also based on predefined rules, so some questions may still require users to select the scope manually.
-
-The AI assistant only provides explanations and suggestions. It doesn't automatically adjust inventory or place orders.
-
-## What Still Needs to Be Checked
-
-Before the next presentation, I want to test a few more things:
-
-1. Upload inventory data with missing values and test both fallback options.
-2. Check whether manually changing inventory levels updates the relevant KPIs and graphs.
-3. Test additional Gemini questions involving different stores, departments, and products.
-4. Make sure estimated order costs change correctly when the assumed unit cost changes.
-5. Review the retrieved RAG evidence and check whether Gemini is interpreting it correctly.
+1. Confirm all four pages load after the documentation-only commit.
+2. Upload a tiny CSV with a valid `on_hand=0`, a positive quantity, and a missing item-store pair. Verify both fallback choices and that zero stays zero.
+3. Confirm page-specific product/department selectors and stock override values are consistent with the action and runoff views.
+4. Ask Gemini one store-level and one department-level question; compare its figures directly against the numerical table.
+5. Check that changing the assumed unit cost changes illustrative order-cost amounts but not forecast demand or units to order.
+6. Remove any temporary verbose Gemini API error display from the public app if it remains.
 
 
+## RAG agent notebook and possible next steps
+
+Tyler has developed a separate LightGBM-based RAG agent notebook (`M5_RAG_agent_v2_lightgbm.ipynb`). It now includes an illustrative order-up-to rule based on forecast demand, lead time, review period, and safety stock, plus flags for questionable zero-sales patterns. The notebook also compares four explanation options: a template, RAG + LLM, a LangChain agent, and LLM without RAG. Its evaluation checks whether order quantities are preserved, whether claims are supported and cited, and whether future-dated evidence enters the answer.
+
+The working Streamlit dashboard already combines forecast/inventory numbers with historical RAG and Gemini, but it **does not yet use Tyler's more detailed ordering rule**. She is still testing the newer work, and the updated chunks/index files have not been added to the deployed app. We should review those files and test compatibility before changing the dashboard.
+
+### New-product forecasting idea
+
+New products may not have enough sales history for the current forecasting features. One idea is to estimate their initial demand from similar products grouped by **category, price, and region**. As sales data come in for the new product, we could gradually use more of its own history. When there are too few comparable products, we could broaden the matching criteria. This will take some brainstorming and trial-and-error testing; historical cold-start simulations could help us compare different grouping rules. **Not implemented yet.**
+
+### RAG retrieval quality
+
+Selecting the top K passages does not mean that every returned passage is actually relevant. Options worth testing include tighter metadata filters, similarity thresholds, reranking, and evaluation with no-answer questions. A threshold alone is not enough: our earlier test retrieved a plausible match for a question that did not have a relevant historical source. **These are proposed improvements, not confirmed deployment changes.**
+
+## Pending external feedback
+
+- **Sponsor:** Utility of assumed unit cost versus selling-price/revenue metrics; preferred action priorities; decision-support expectations.
+- **Professor:** Appropriate limitations, metric terminology, model-evaluation requirements, and what constitutes sufficient validation for the capstone.
+
+**Next-step ideas are recorded for discussion, not scheduled as completed work.** Review feedback and Tyler's testing results before integrating them.
