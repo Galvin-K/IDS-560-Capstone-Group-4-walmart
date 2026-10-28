@@ -318,11 +318,7 @@ The app retrieves forecasts from its checked-in CSV; it does **not** retrain Lig
 7. **No production integration.** There is no live database connection, validated stockout record, warehouse synchronization, production forecasting endpoint, or autonomous ordering.
 8. **Not yet fully regression-tested.** Selected cross-store and department questions worked during manual testing, but all stock-upload scenarios, overrides, page combinations, and explanation claims still need systematic verification.
 
-## 11. Next steps
 
-The team is holding the current dashboard stable while waiting for **sponsor and faculty feedback** about the procurement-cost assumption, useful order/priority metrics, validation expectations, and what further capabilities are worth implementing. Planned follow-up validation includes explicit-zero and missing-stock uploads, cross-page override consistency, comparing Gemini numbers to computed tables, and checking how estimated expenses respond to assumed cost changes.
-
-An updated RAG notebook was shared by Tyler but was not yet integrated into the running application at the time of this documentation update. Any future RAG or forecasting revision should be evaluated separately from the current deployed workflow.
 
 ## 12. Project documentation and evaluation
 
