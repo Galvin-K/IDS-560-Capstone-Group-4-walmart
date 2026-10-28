@@ -149,14 +149,13 @@ overview, forecasting, planning, assistant = st.tabs([
 with overview:
 
     st.header("Executive Overview")
-    dept = st.selectbox("Overview department", dept_options, key="overview_dept")
-    filtered = store_df[store_df["dept_id"] == dept].copy()
+    dept = dept_options[0]  # Legacy default; Executive Overview covers all departments.
+    filtered = store_df.copy()
     item = sorted(filtered["item_id"].dropna().unique().tolist())[0]
     item_data = filtered[filtered["item_id"] == item].sort_values("date").copy()
 
     st.write(
-        "Summary of predicted demand for the selected "
-        "store and department."
+        "Summary of predicted demand across all departments at the selected store."
     )
 
     total_demand = float(filtered["forecast"].sum())
@@ -169,7 +168,7 @@ with overview:
     )
 
     st.caption(
-        f"Store: {store} | Department: {dept} | "
+        f"Store: {store} | All departments | "
         f"7-day forecast: {total_demand:,.0f} units "
         f"across {total_products:,} sampled products."
     )
@@ -186,11 +185,7 @@ with overview:
     )
 
     with st.expander("Simulation settings", expanded=False):
-        inv_scope = st.selectbox(
-            "Inventory overview scope",
-            ["All departments", f"Selected department ({dept})"],
-            key="inv_overview_scope"
-        )
+        inv_scope = "All departments"
 
         inv_controls = st.columns(2)
 
@@ -1016,6 +1011,217 @@ with planning:
     st.write("Explore historical forecast demand using a chosen uploaded or simulated stock source.")
     st.warning("The M5 dataset has no actual stock-on-hand, replenishment lead times or observed stockouts. Uploaded stock is user-provided; simulated stock is illustrative, not actual Walmart data.")
 
+    st.subheader("Prioritized Inventory Action List")
+
+    inv_only = st.checkbox(
+        "Show shortages and high-demand monitoring only",
+        value=True,
+        key="inv_overview_only"
+    )
+
+    inv_search = st.text_input(
+        "Search product ID",
+        key="inv_overview_search"
+    )
+
+    inv_list = inv_items.sort_values(
+        [
+            "priority",
+            "first_shortage",
+            "gap",
+            "item_id"
+        ],
+        ascending=[True, True, False, True],
+        na_position="last"
+    ).copy()
+
+    if inv_only:
+        inv_list = inv_list[
+            inv_list["priority"] <= 1
+        ]
+
+    if inv_search.strip():
+        inv_list = inv_list[
+            inv_list["item_id"].str.contains(
+                inv_search.strip(),
+                case=False,
+                regex=False
+            )
+        ]
+
+    inv_list["Stockout date"] = (
+        inv_list["first_shortage"]
+        .dt.strftime("%b %d")
+        .fillna("—")
+    )
+
+    inv_columns = {
+        "item_id": "Product",
+        "dept_id": "Department",
+        "Status": "Status",
+        "demand": "7-Day Demand",
+        "daily_p90_sum": "Sum of Daily P90",
+        "gap": "Demand Gap",
+        "units_to_cover": "Units to Cover",
+        "Stockout date": "Stockout Date"
+    }
+
+    inv_display = (
+        inv_list[list(inv_columns)]
+        .rename(columns=inv_columns)
+    )
+
+    inv_display = inv_display.round({
+        "7-Day Demand": 2,
+        "Sum of Daily P90": 2,
+        "Demand Gap": 2
+    })
+
+    st.dataframe(
+        inv_display,
+        hide_index=True,
+        use_container_width=True
+    )
+
+    st.download_button(
+        "Download Action List CSV",
+        inv_display.to_csv(index=False),
+        file_name="simulated_inventory_actions.csv",
+        mime="text/csv",
+        key="inv_overview_download"
+    )
+
+    st.caption(
+        "Only products in the forecasting sample are included. "
+        "To inspect an individual stock runway, use the product controls "
+        "below in Inventory Planning."
+    )
+
+    # ORDER_LIST_V2
+
+    st.subheader("Today's Order List (Simulated)")
+
+    st.caption(
+        "Historical planning example as of December 31, 2015. "
+        "Order quantities cover the seven-day point-forecast gap. "
+        "Stock, lead time, and prices are assumed."
+    )
+
+    inv_show_orders_only = st.checkbox(
+        "Needs action only",
+        value=True,
+        key="inv_orders_only"
+    )
+
+    inv_order_search = st.text_input(
+        "Search order list by product ID",
+        key="inv_order_search"
+    )
+
+    inv_orders = inv_items.copy()
+
+    if inv_show_orders_only:
+        inv_orders = inv_orders[
+            inv_orders["units_to_cover"] > 0
+        ]
+
+    if inv_order_search.strip():
+        inv_orders = inv_orders[
+            inv_orders["item_id"].str.contains(
+                inv_order_search.strip(),
+                case=False,
+                regex=False
+            )
+        ]
+
+    inv_orders = inv_orders.sort_values(
+        ["priority", "first_shortage", "gap", "item_id"],
+        ascending=[True, True, False, True],
+        na_position="last"
+    ).copy()
+
+    inv_orders["Days of cover"] = (
+        inv_orders["first_shortage"] - inv_first_day
+    ).dt.days.apply(
+        lambda days: (
+            "7+" if pd.isna(days)
+            else str(max(0, int(days)))
+        )
+    )
+
+    inv_orders["Runs out"] = (
+        inv_orders["first_shortage"]
+        .dt.strftime("%b %d")
+        .fillna("—")
+    )
+
+    inv_orders["Order by"] = (
+        (
+            inv_orders["first_shortage"]
+            - pd.Timedelta(days=inv_lead_days)
+        )
+        .dt.strftime("%b %d, %Y")
+        .fillna("—")
+    )
+
+    inv_orders["Order qty"] = (
+        inv_orders["units_to_cover"].astype(int)
+    )
+
+    inv_orders["Est. cost"] = (
+        inv_orders["Order qty"] * inv_cost
+    ).round(2)
+
+    inv_order_table = inv_orders[
+        [
+            "item_id",
+            "dept_id",
+            "Status",
+            "Days of cover",
+            "Runs out",
+            "Order by",
+            "Order qty",
+            "Est. cost"
+        ]
+    ].rename(
+        columns={
+            "item_id": "Item",
+            "dept_id": "Department"
+        }
+    )
+
+    st.dataframe(
+        inv_order_table,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Est. cost": st.column_config.NumberColumn(
+                "Est. cost",
+                format="$%.2f"
+            )
+        }
+    )
+
+    st.download_button(
+        "Download Order List CSV",
+        inv_order_table.to_csv(index=False),
+        file_name="simulated_order_list.csv",
+        mime="text/csv",
+        key="inv_order_download"
+    )
+
+    st.caption(
+        "Days of cover counts complete forecast days before "
+        "the first expected shortage. An order-by date before "
+        "the forecast origin indicates an item requiring "
+        "earlier attention. Order quantities and costs are "
+        "illustrative, not validated replenishment decisions. "
+        "Sales at risk is based on predicted lead-time shortfall "
+        "multiplied by the assumed selling price."
+    )
+
+    st.divider()
+
     planning_dept = st.selectbox("Department for inventory planning", dept_options, key="planning_dept")
     planning_items = sorted(store_df[store_df["dept_id"] == planning_dept]["item_id"].dropna().unique().tolist())
     planning_item = st.selectbox("Product for inventory KPIs", planning_items, key="planning_item")
@@ -1143,216 +1349,7 @@ with planning:
     st.divider()
 
 
-    st.subheader("Prioritized Inventory Action List")
-
-    inv_only = st.checkbox(
-        "Show shortages and high-demand monitoring only",
-        value=True,
-        key="inv_overview_only"
-    )
-
-    inv_search = st.text_input(
-        "Search product ID",
-        key="inv_overview_search"
-    )
-
-    inv_list = inv_items.sort_values(
-        [
-            "priority",
-            "first_shortage",
-            "gap",
-            "item_id"
-        ],
-        ascending=[True, True, False, True],
-        na_position="last"
-    ).copy()
-
-    if inv_only:
-        inv_list = inv_list[
-            inv_list["priority"] <= 1
-        ]
-
-    if inv_search.strip():
-        inv_list = inv_list[
-            inv_list["item_id"].str.contains(
-                inv_search.strip(),
-                case=False,
-                regex=False
-            )
-        ]
-
-    inv_list["Stockout date"] = (
-        inv_list["first_shortage"]
-        .dt.strftime("%b %d")
-        .fillna("—")
-    )
-
-    inv_columns = {
-        "item_id": "Product",
-        "dept_id": "Department",
-        "Status": "Status",
-        "demand": "7-Day Demand",
-        "daily_p90_sum": "Sum of Daily P90",
-        "gap": "Demand Gap",
-        "units_to_cover": "Units to Cover",
-        "Stockout date": "Stockout Date"
-    }
-
-    inv_display = (
-        inv_list[list(inv_columns)]
-        .rename(columns=inv_columns)
-    )
-
-    inv_display = inv_display.round({
-        "7-Day Demand": 2,
-        "Sum of Daily P90": 2,
-        "Demand Gap": 2
-    })
-
-    st.dataframe(
-        inv_display,
-        hide_index=True,
-        use_container_width=True
-    )
-
-    st.download_button(
-        "Download Action List CSV",
-        inv_display.to_csv(index=False),
-        file_name="simulated_inventory_actions.csv",
-        mime="text/csv",
-        key="inv_overview_download"
-    )
-
-    st.caption(
-        "Only products in the forecasting sample are included. "
-        "To inspect an individual stock runway, select the "
-        "product in the sidebar and open Inventory Planning."
-    )
-
-    # ORDER_LIST_V2
-
-    st.subheader("Today's Order List (Simulated)")
-
-    st.caption(
-        "Historical planning example as of December 31, 2015. "
-        "Order quantities cover the seven-day point-forecast gap. "
-        "Stock, lead time, and prices are assumed."
-    )
-
-    inv_show_orders_only = st.checkbox(
-        "Needs action only",
-        value=True,
-        key="inv_orders_only"
-    )
-
-    inv_order_search = st.text_input(
-        "Search order list by product ID",
-        key="inv_order_search"
-    )
-
-    inv_orders = inv_items.copy()
-
-    if inv_show_orders_only:
-        inv_orders = inv_orders[
-            inv_orders["units_to_cover"] > 0
-        ]
-
-    if inv_order_search.strip():
-        inv_orders = inv_orders[
-            inv_orders["item_id"].str.contains(
-                inv_order_search.strip(),
-                case=False,
-                regex=False
-            )
-        ]
-
-    inv_orders = inv_orders.sort_values(
-        ["priority", "first_shortage", "gap", "item_id"],
-        ascending=[True, True, False, True],
-        na_position="last"
-    ).copy()
-
-    inv_orders["Days of cover"] = (
-        inv_orders["first_shortage"] - inv_first_day
-    ).dt.days.apply(
-        lambda days: (
-            "7+" if pd.isna(days)
-            else str(max(0, int(days)))
-        )
-    )
-
-    inv_orders["Runs out"] = (
-        inv_orders["first_shortage"]
-        .dt.strftime("%b %d")
-        .fillna("—")
-    )
-
-    inv_orders["Order by"] = (
-        (
-            inv_orders["first_shortage"]
-            - pd.Timedelta(days=inv_lead_days)
-        )
-        .dt.strftime("%b %d, %Y")
-        .fillna("—")
-    )
-
-    inv_orders["Order qty"] = (
-        inv_orders["units_to_cover"].astype(int)
-    )
-
-    inv_orders["Est. cost"] = (
-        inv_orders["Order qty"] * inv_cost
-    ).round(2)
-
-    inv_order_table = inv_orders[
-        [
-            "item_id",
-            "dept_id",
-            "Status",
-            "Days of cover",
-            "Runs out",
-            "Order by",
-            "Order qty",
-            "Est. cost"
-        ]
-    ].rename(
-        columns={
-            "item_id": "Item",
-            "dept_id": "Department"
-        }
-    )
-
-    st.dataframe(
-        inv_order_table,
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            "Est. cost": st.column_config.NumberColumn(
-                "Est. cost",
-                format="$%.2f"
-            )
-        }
-    )
-
-    st.download_button(
-        "Download Order List CSV",
-        inv_order_table.to_csv(index=False),
-        file_name="simulated_order_list.csv",
-        mime="text/csv",
-        key="inv_order_download"
-    )
-
-    st.caption(
-        "Days of cover counts complete forecast days before "
-        "the first expected shortage. An order-by date before "
-        "the forecast origin indicates an item requiring "
-        "earlier attention. Order quantities and costs are "
-        "illustrative, not validated replenishment decisions. "
-        "Sales at risk is based on predicted lead-time shortfall "
-        "multiplied by the assumed selling price."
-    )
-
-    st.divider()
+    product_inspection_slot = st.container()
 
     # MULTI_ITEM_RUNWAY_V3
 
@@ -1569,190 +1566,191 @@ with planning:
             "not calibrated seven-day prediction intervals."
         )
 
-        # Product-level inspection
+        with product_inspection_slot:
+            # Product-level inspection
 
-        st.subheader("Selected Product Inventory")
+            st.subheader("Selected Product Inventory")
 
-        selected_product = st.selectbox(
-            "Inspect a product (independent of the runway display)",
-            sorted(inv_items["item_id"].unique().tolist()),
-            key="runway_scaled_product"
-        )
-
-        product_runway = runway[
-            runway["item_id"] == selected_product
-        ].sort_values("day")
-
-        day_record = product_runway[
-            product_runway["day"] == runway_day
-        ].iloc[0]
-
-        starting_stock = simulated_stock[selected_product]
-
-        st.caption(
-            f"Scenario: {simulated_type[selected_product]} "
-            f"| Starting inventory: {starting_stock:,} units"
-        )
-
-        c1, c2, c3 = st.columns(3)
-
-        c1.metric(
-            "Starting Stock",
-            f"{starting_stock:,} units"
-        )
-
-        c2.metric(
-            "Expected Balance",
-            f"{max(0, day_record['point_balance']):.1f} units"
-        )
-
-        c3.metric(
-            "High-Demand Balance",
-            f"{max(0, day_record['high_balance']):.1f} units"
-        )
-
-        stock_chart = go.Figure()
-
-        stock_chart.add_trace(
-            go.Scatter(
-                x=[0] + product_runway["day"].tolist(),
-                y=[starting_stock] + (
-                    product_runway["point_balance"]
-                    .clip(lower=0).tolist()
-                ),
-                name="Point Forecast",
-                mode="lines+markers",
-                line=dict(color="#0071ce", width=3)
+            selected_product = st.selectbox(
+                "Inspect a product (independent of the runway display)",
+                sorted(inv_items["item_id"].unique().tolist()),
+                key="runway_scaled_product"
             )
-        )
 
-        stock_chart.add_trace(
-            go.Scatter(
-                x=[0] + product_runway["day"].tolist(),
-                y=[starting_stock] + (
-                    product_runway["high_balance"]
-                    .clip(lower=0).tolist()
-                ),
-                name="Illustrative High Demand",
-                mode="lines+markers",
-                line=dict(
-                    color="#d39a23",
-                    width=2,
-                    dash="dash"
+            product_runway = runway[
+                runway["item_id"] == selected_product
+            ].sort_values("day")
+
+            day_record = product_runway[
+                product_runway["day"] == runway_day
+            ].iloc[0]
+
+            starting_stock = simulated_stock[selected_product]
+
+            st.caption(
+                f"Scenario: {simulated_type[selected_product]} "
+                f"| Starting inventory: {starting_stock:,} units"
+            )
+
+            c1, c2, c3 = st.columns(3)
+
+            c1.metric(
+                "Starting Stock",
+                f"{starting_stock:,} units"
+            )
+
+            c2.metric(
+                "Expected Balance",
+                f"{max(0, day_record['point_balance']):.1f} units"
+            )
+
+            c3.metric(
+                "High-Demand Balance",
+                f"{max(0, day_record['high_balance']):.1f} units"
+            )
+
+            stock_chart = go.Figure()
+
+            stock_chart.add_trace(
+                go.Scatter(
+                    x=[0] + product_runway["day"].tolist(),
+                    y=[starting_stock] + (
+                        product_runway["point_balance"]
+                        .clip(lower=0).tolist()
+                    ),
+                    name="Point Forecast",
+                    mode="lines+markers",
+                    line=dict(color="#0071ce", width=3)
                 )
             )
-        )
 
-        stock_chart.add_hline(
-            y=0,
-            line_dash="dot",
-            line_color="#eb453d"
-        )
-
-        stock_chart.add_vline(
-            x=runway_day,
-            line_dash="dot",
-            line_color="#777777"
-        )
-
-        stock_chart.update_layout(
-            title=f"7-Day Stock Projection — {selected_product}",
-            xaxis_title="Forecast Day",
-            yaxis_title="Remaining Simulated Stock (Units)",
-            xaxis=dict(dtick=1, range=[0, 7]),
-            yaxis=dict(rangemode="tozero"),
-            height=370,
-            margin=dict(t=65, b=40),
-            legend=dict(orientation="h", y=-0.3)
-        )
-
-        st.plotly_chart(
-            stock_chart,
-            use_container_width=True,
-            config={"displayModeBar": False}
-        )
-
-        # INVENTORY_EXPLANATION_V1
-
-        st.subheader("Potential Shortage (Units)")
-
-        point_unmet = max(
-            0.0,
-            -float(day_record["point_balance"])
-        )
-
-        high_unmet = max(
-            0.0,
-            -float(day_record["high_balance"])
-        )
-
-        unmet_col1, unmet_col2 = st.columns(2)
-
-        unmet_col1.metric(
-            "Point-Forecast Shortage",
-            f"{point_unmet:.2f} units"
-        )
-
-        unmet_col2.metric(
-            "High-Demand Scenario Shortage",
-            f"{high_unmet:.2f} units"
-        )
-
-        with st.expander("How simulated inventory is calculated"):
-            st.markdown(
-                "When simulated inventory is selected or uploaded stock "
-                "is missing, starting inventory is generated using "
-                "the seven-day LightGBM forecast. "
-                "For simulations, products are consistently assigned "
-                "to one of three illustrative scenarios:"
+            stock_chart.add_trace(
+                go.Scatter(
+                    x=[0] + product_runway["day"].tolist(),
+                    y=[starting_stock] + (
+                        product_runway["high_balance"]
+                        .clip(lower=0).tolist()
+                    ),
+                    name="Illustrative High Demand",
+                    mode="lines+markers",
+                    line=dict(
+                        color="#d39a23",
+                        width=2,
+                        dash="dash"
+                    )
+                )
             )
 
-            st.markdown(
-                "- **Low stock:** 65% of predicted seven-day "
-                "demand, rounded down.\n"
-                "- **Moderate stock:** halfway between predicted "
-                "demand and the sum of daily P90 estimates, "
-                "rounded up.\n"
-                "- **High stock:** 115% of the sum of daily P90 "
-                "estimates, rounded up, plus one unit."
+            stock_chart.add_hline(
+                y=0,
+                line_dash="dot",
+                line_color="#eb453d"
             )
 
-            st.info(
-                "Simulated scenarios are synthetic assumptions; uploaded "
-                "values are user-provided and not independently verified. Summed daily "
-                "P90 values are not calibrated weekly P90 "
-                "prediction intervals."
+            stock_chart.add_vline(
+                x=runway_day,
+                line_dash="dot",
+                line_color="#777777"
             )
 
-        st.caption(
-            "Potential shortages are calculated when cumulative predicted "
-            "demand exceeds simulated starting inventory. "
-            "These are simulated shortages, not observed lost sales."
-        )
-
-        if day_record["point_balance"] < 0:
-            st.error(
-                "Simulated inventory is insufficient under "
-                "the point forecast by the selected day."
-            )
-        elif day_record["high_balance"] < 0:
-            st.warning(
-                "Expected inventory is sufficient, but the "
-                "illustrative high-demand scenario shows risk."
-            )
-        else:
-            st.success(
-                "Simulated inventory covers both scenarios "
-                "through the selected day."
+            stock_chart.update_layout(
+                title=f"7-Day Stock Projection — {selected_product}",
+                xaxis_title="Forecast Day",
+                yaxis_title="Remaining Simulated Stock (Units)",
+                xaxis=dict(dtick=1, range=[0, 7]),
+                yaxis=dict(rangemode="tozero"),
+                height=370,
+                margin=dict(t=65, b=40),
+                legend=dict(orientation="h", y=-0.3)
             )
 
-        st.caption(
-            "Projected balances are capped at zero for display. "
-            "Unmet demand is not shown as negative physical stock. "
-            "This runway uses the shared inventory source "
-            "used throughout the dashboard. "
-            ""
-        )
+            st.plotly_chart(
+                stock_chart,
+                use_container_width=True,
+                config={"displayModeBar": False}
+            )
+
+            # INVENTORY_EXPLANATION_V1
+
+            st.subheader("Potential Shortage (Units)")
+
+            point_unmet = max(
+                0.0,
+                -float(day_record["point_balance"])
+            )
+
+            high_unmet = max(
+                0.0,
+                -float(day_record["high_balance"])
+            )
+
+            unmet_col1, unmet_col2 = st.columns(2)
+
+            unmet_col1.metric(
+                "Point-Forecast Shortage",
+                f"{point_unmet:.2f} units"
+            )
+
+            unmet_col2.metric(
+                "High-Demand Scenario Shortage",
+                f"{high_unmet:.2f} units"
+            )
+
+            with st.expander("How simulated inventory is calculated"):
+                st.markdown(
+                    "When simulated inventory is selected or uploaded stock "
+                    "is missing, starting inventory is generated using "
+                    "the seven-day LightGBM forecast. "
+                    "For simulations, products are consistently assigned "
+                    "to one of three illustrative scenarios:"
+                )
+
+                st.markdown(
+                    "- **Low stock:** 65% of predicted seven-day "
+                    "demand, rounded down.\n"
+                    "- **Moderate stock:** halfway between predicted "
+                    "demand and the sum of daily P90 estimates, "
+                    "rounded up.\n"
+                    "- **High stock:** 115% of the sum of daily P90 "
+                    "estimates, rounded up, plus one unit."
+                )
+
+                st.info(
+                    "Simulated scenarios are synthetic assumptions; uploaded "
+                    "values are user-provided and not independently verified. Summed daily "
+                    "P90 values are not calibrated weekly P90 "
+                    "prediction intervals."
+                )
+
+            st.caption(
+                "Potential shortages are calculated when cumulative predicted "
+                "demand exceeds simulated starting inventory. "
+                "These are simulated shortages, not observed lost sales."
+            )
+
+            if day_record["point_balance"] < 0:
+                st.error(
+                    "Simulated inventory is insufficient under "
+                    "the point forecast by the selected day."
+                )
+            elif day_record["high_balance"] < 0:
+                st.warning(
+                    "Expected inventory is sufficient, but the "
+                    "illustrative high-demand scenario shows risk."
+                )
+            else:
+                st.success(
+                    "Simulated inventory covers both scenarios "
+                    "through the selected day."
+                )
+
+            st.caption(
+                "Projected balances are capped at zero for display. "
+                "Unmet demand is not shown as negative physical stock. "
+                "This runway uses the shared inventory source "
+                "used throughout the dashboard. "
+                ""
+            )
 
     st.divider()
 
