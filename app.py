@@ -50,20 +50,42 @@ df = load_forecasts()
 # DASHBOARD_STYLE_V1
 st.markdown('\n    <style>\n    /* DASHBOARD_STYLE_V1 */\n\n    /* Main background */\n    [data-testid="stAppViewContainer"] {\n        background-color: #f2f8fd;\n        color: #041e42;\n    }\n\n    /* Sidebar */\n    [data-testid="stSidebar"] {\n        background-color: #e7f1fa;\n        border-right: 1px solid #d2e2ef;\n    }\n\n    /* Page headings */\n    h1, h2, h3 {\n        color: #041e42;\n    }\n\n    /* KPI cards */\n    [data-testid="stMetric"] {\n        background: white;\n        border: 1px solid #d6e3ed;\n        border-radius: 10px;\n        padding: 16px;\n    }\n\n    /* Selected tabs */\n    button[data-baseweb="tab"][aria-selected="true"] {\n        color: #0071ce;\n        border-bottom-color: #0071ce;\n    }\n\n    /* Buttons */\n    div.stButton > button[kind="primary"],\n    button[data-testid="stFormSubmitButton"] {\n        border-radius: 8px;\n    }\n\n    /* Chart containers */\n    [data-testid="stPlotlyChart"] {\n        background: white;\n        border-radius: 10px;\n        padding: 8px;\n    }\n\n    /* Main content width */\n    .block-container {\n        max-width: 1280px;\n        padding-top: 2rem;\n    }\n    </style>\n    ', unsafe_allow_html=True)
 
-st.title("Walmart M5 | Demand & Inventory Planner")
-
-st.caption(
-    "Historical 2016 demonstration | "
-    "Final LightGBM model | "
-    "7-day forecast horizon | "
-    "50% forecasting sample"
+# Clean application header. Walmart logo is linked to the public Walmart wordmark file.
+# Trademark belongs to Walmart; this independent project is not an official Walmart system.
+st.markdown(
+    """
+    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:0 0 16px 0">
+      <img
+        src="https://commons.wikimedia.org/wiki/Special:Redirect/file/Walmart_logo_%282025%3B_Alt%29.svg"
+        alt="Walmart"
+        style="width:160px;height:auto;max-height:54px;object-fit:contain"
+      />
+      <span style="font-size:2.05rem;font-weight:730;color:#041e42;line-height:1.2">Demand &amp; Inventory Planner</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
 st.info(
-    "This application uses historical demand forecasts. "
-    "Inventory may be uploaded or simulated; missing uploaded stock can be simulated or assumed zero; stockout estimates are projections. "
-    "Results are not live Walmart inventory data."
+    "Demand forecasts come from a LightGBM model trained on historical Walmart M5 sales data. "
+    "Starting inventory is either entered by the user or estimated from forecast-based assumptions. "
+    "The dashboard combines these inputs to assess possible stock gaps and support planning."
 )
+
+with st.expander("About the Forecast & Data", expanded=False):
+    st.markdown(
+        "**Forecast:** Seven-day LightGBM forecasts for January 1–7, 2016, based on "
+        "the historical Walmart M5 dataset. The dashboard uses precomputed forecasts "
+        "for a 50% sample of item–store series, not live forecasts.\n\n"
+        "**Inventory:** The source labeled *Estimated inventory* uses predefined "
+        "forecast-based stock assumptions; it is not measured Walmart inventory. "
+        "*Uploaded inventory* uses user-provided records. When an uploaded item–store "
+        "record is missing, users can choose estimated stock or zero stock.\n\n"
+        "**Interpretation:** Stock gaps and ordering costs are illustrative; "
+        "supplier lead times, actual on-hand inventories, and replenishment policies "
+        "are not verified. This is a capstone decision-support application, "
+        "not an official Walmart operational system."
+    )
 
 # 4. SIDEBAR FILTERS
 
@@ -99,7 +121,8 @@ with st.sidebar.expander("Inventory data source", expanded=True):
         ["Simulated inventory", "Uploaded inventory"],
         index=0,
         key="inventory_mode",
-        help="Simulated inventory is illustrative. Uploaded inventory uses CSV stock levels; choose how missing stock records should be handled."
+        format_func=lambda value: "Estimated inventory" if value == "Simulated inventory" else value,
+        help="Estimated inventory is derived from preset stock assumptions using the seven-day forecast, not actual on-hand data. Uploaded inventory uses your CSV stock levels."
     )
     inventory_file = st.file_uploader(
         "Upload inventory CSV (store_id, item_id, on_hand)", type=["csv"],
@@ -118,17 +141,18 @@ with st.sidebar.expander("Inventory data source", expanded=True):
             "If a product's inventory is missing from the uploaded CSV",
             ["Use simulated inventory", "Assume 0 units"],
             key="missing_inventory_policy",
+            format_func=lambda value: "Use estimated inventory" if value == "Use simulated inventory" else value,
             help="Blank on_hand cells and absent item-store pairs count as missing. Zero is an explicit assumption, not observed stock."
         )
         if uploaded_inventory is None:
-            st.warning("Upload a CSV to use Uploaded inventory. Until then, simulated inventory is used for calculations.")
+            st.warning("Upload a CSV to use Uploaded inventory. Until then, estimated stock based on forecast assumptions is used for calculations.")
             effective_inventory_mode = "Simulated inventory"
         else:
             effective_inventory_mode = inventory_mode
     else:
         missing_inventory_policy = "Use simulated inventory"
         effective_inventory_mode = inventory_mode
-    st.caption("Inventory data are for the historical 2016 demonstration, not live stock.")
+    st.caption("Estimated stock is based on assumptions; uploaded stock comes from your CSV. Neither is a live Walmart inventory connection.")
 
 if "inventory_overrides" not in st.session_state:
     st.session_state["inventory_overrides"] = {}
@@ -2044,15 +2068,3 @@ with assistant:
         "Forecast and inventory numbers use the chosen analysis scope. "
         "RAG provides historical context; Gemini does not modify stock."
     )
-
-# ============================================================
-# FOOTER
-# ============================================================
-
-st.divider()
-
-st.caption(
-    "Walmart M5 Academic Project | "
-    "Historical forecasting demonstration | "
-    "Simulated inventory planning"
-)
