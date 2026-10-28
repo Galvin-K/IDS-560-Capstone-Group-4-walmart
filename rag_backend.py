@@ -9,8 +9,8 @@ from sentence_transformers import SentenceTransformer
 
 RAG_DIR = (Path(__file__).resolve().parent / "RAG")
 
-CHUNKS_FILE = RAG_DIR / "chunks_v2_lightgbm.pkl"
-INDEX_FILE = RAG_DIR / "index_v2_lightgbm.pkl"
+CHUNKS_FILE = RAG_DIR / "chunks_v3.pkl"
+INDEX_FILE = RAG_DIR / "index_v3.pkl"
 
 MAX_AGE_DAYS = {
     "storm_event": 45,
