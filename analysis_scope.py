@@ -7,14 +7,20 @@ from inventory_bridge import apply_inventory
 SCOPES = ["Automatic (from question)", "Selected product", "Selected department", "Selected store", "All stores"]
 
 def choose_scope(choice, question):
+    """Conservative rule-based routing; store-to-store questions need all stores."""
     if choice != SCOPES[0]:
         return choice
-    q = question.lower()
-    if re.search(r'\b(all stores|across stores|compare stores|overall|companywide|entire dataset|all locations|all products)\b', q):
+    q = question.lower().strip()
+    # Questions about differences, rankings, or multiple stores must include all stores.
+    if re.search(r"\b(all stores|across (?:all )?stores|compare stores|stores compared|store comparison|between stores|which stores|what stores|top \d+ stores|highest[- ](?:shortage|demand).*stores|stores with|store rankings?|rank(?:ing)? stores|overall|companywide|entire dataset|all locations|all products|across locations|each store|every store)\b", q):
         return "All stores"
-    if re.search(r'\b(department|category)\b', q):
+    if re.search(r"\bstores\b", q):
+        return "All stores"  # plural implies more than one store
+    if re.search(r"\b(across|compare|rank|ranking|top|highest|lowest|which)\b.*\b(departments|categories)\b", q):
+        return "All stores"  # broad department rankings are not one selected department
+    if re.search(r"\b(department|category)\b", q):
         return "Selected department"
-    if re.search(r'\b(store|location)\b', q):
+    if re.search(r"\b(store|location)\b", q):
         return "Selected store"
     return "Selected product"
 
