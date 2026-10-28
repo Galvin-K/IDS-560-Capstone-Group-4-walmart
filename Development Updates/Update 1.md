@@ -17,7 +17,7 @@ The earlier update described an assistant that could retrieve historical evidenc
 
 ## Confirmed manual demonstration checks
 
-- New Streamlit deployment runs from the active GitHub repository rather than the older dashboard repository.
+- New Streamlit deployment runs from the active GitHub repository rather than the older dashboard repository. (https://ids-560-capstone-group-4-walmart.streamlit.app/)
 - Gemini API configured in the new Streamlit app's Secrets; generation has succeeded.
 - A store-ranking question was interpreted as cross-store analysis, and its displayed numeric order matched the computed table.
 - A department comparison question returned department-level forecasts and gaps.
