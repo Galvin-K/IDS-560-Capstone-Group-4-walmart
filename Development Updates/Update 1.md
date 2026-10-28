@@ -99,12 +99,4 @@ Before the next presentation, I want to test a few more things:
 4. Make sure estimated order costs change correctly when the assumed unit cost changes.
 5. Review the retrieved RAG evidence and check whether Gemini is interpreting it correctly.
 
-## Next Steps
 
-For now, I think the dashboard is in a good place. Most of the features we originally planned are implemented, and the forecasting, inventory planning, and AI assistant are now connected.
-
-I'd like to wait for our sponsor's and professor's feedback before making more changes, especially regarding the assumed inventory cost, forecasting limitations, and whether they want any additional functions.
-
-Tyler has also shared an updated RAG notebook, which still needs to be added to GitHub and tested.
-
-Once we receive feedback, we can decide what needs to be improved for the final presentation.
