@@ -7,13 +7,23 @@
 
 The earlier update described an assistant that could retrieve historical evidence but was not connected to numerical forecasting. That description is **out of date**.
 
-- **Forecasting AI integration:** Python-calculated forecast and inventory summaries are passed to Gemini alongside historical RAG passages. Store-level and department-level questions have produced numeric explanations aligned with on-screen comparison tables in manual tests.
-- **Automatic question scope:** User can select a scope explicitly or use Automatic to identify product, department, store, and cross-store questions. Automatic classification is rule-based and should be manually checked for ambiguous questions.
-- **Inventory sources:** Simulated stock or a user-uploaded `store_id,item_id,on_hand` CSV. Missing uploaded quantities can fall back to simulated stock or be assumed zero. Manual product overrides are supported.
-- **Executive Overview:** Restored summary and inventory KPI design, simulation assumptions, action prioritization, 5/10/20/50 selectable priority rows, and illustrative order costs.
-- **Demand Forecasting:** Department summary table/chart first, then page-specific product selection, product KPIs, daily table and chart.
-- **Inventory Planning:** Action list, illustrative order list, selection/override, stock assumptions, KPIs, product graph, chosen-products runway, and potential-shortage section.
-- **Presentation:** Compact KPI cards, structured comparison tables, more focused Gemini explanations, and collapsible historical evidence.
+
+- **Forecasting AI integration:** Connected Gemini to our LightGBM forecasting and inventory calculations, alongside historical evidence retrieved through RAG. The assistant can now answer questions about individual products, departments, categories, states, and multiple stores. We tested several comparisons and confirmed that Gemini's numerical results matched the dashboard tables.
+
+- **Automatic question scope:** Improved the automatic analysis scope so the AI Assistant no longer depends on the store or product selected in the sidebar. It can identify specific products, stores, states, and categories from the user's question. For example, users can compare TX_1 and CA_1 or analyze Foods demand across California stores. Users can also manually select an analysis scope if needed. The classification is rule-based, so some questions may still require manual checking.
+
+- **Inventory sources:** Users can choose estimated inventory or upload their own CSV containing `store_id`, `item_id`, and `on_hand`. Estimated inventory is generated using predefined assumptions, while demand forecasts come from LightGBM. If inventory values are missing from the uploaded file, users can choose to use estimated stock or assume zero inventory. Individual product inventory levels can also be manually adjusted.
+
+- **Executive Overview:** Kept the original inventory summary and KPI layout, including inventory assumptions, store comparisons, action prioritization, and estimated order costs. Users can now choose to display the top 5, 10, 20, or 50 priority items using a dropdown menu. Estimated order costs use an adjustable assumed unit cost, currently set to $5 by default.
+
+- **Demand Forecasting:** Reorganized the page to display the department-level forecast table and graph first, followed by department/product selection, product KPIs, and daily forecasting results. Added interactive product selection and a heatmap that allows users to inspect demand patterns for individual products.
+
+- **Inventory Planning:** Reorganized the page to show the prioritized inventory action list and estimated order list first, followed by department/product selection, inventory overrides, inventory assumptions, projected inventory KPIs, product-level graphs, a customizable seven-day stock runway, and potential shortage analysis. Users can choose which products to display in the stock runway instead of relying on automatically selected products.
+
+- **Dashboard presentation:** Updated the header with the Walmart logo and simplified the title to "Demand & Inventory Planner." Removed the technical subtitle and footer, replaced several references to simulated inventory with estimated inventory, and added an expandable "About the Forecast & Data" section. The dashboard now uses cleaner KPI cards, structured comparison tables, shorter Gemini explanations, and collapsible historical evidence.
+
+
+- **Walmart logo:** Added the Walmart logo beside the "Demand & Inventory Planner" title to improve the dashboard's appearance and make it more consistent with Walmart's branding.
 
 ## Confirmed manual demonstration checks
 
