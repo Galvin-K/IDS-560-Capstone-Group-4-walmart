@@ -7,7 +7,7 @@
 
 The earlier update described an assistant that could retrieve historical evidence but was not connected to numerical forecasting. That description is **out of date**.
 
-- **Forecast-aware AI:** Python-calculated forecast and inventory summaries are passed to Gemini alongside historical RAG passages. Store-level and department-level questions have produced numeric explanations aligned with on-screen comparison tables in manual tests.
+- **Forecasting AI integration:** Python-calculated forecast and inventory summaries are passed to Gemini alongside historical RAG passages. Store-level and department-level questions have produced numeric explanations aligned with on-screen comparison tables in manual tests.
 - **Automatic question scope:** User can select a scope explicitly or use Automatic to identify product, department, store, and cross-store questions. Automatic classification is rule-based and should be manually checked for ambiguous questions.
 - **Inventory sources:** Simulated stock or a user-uploaded `store_id,item_id,on_hand` CSV. Missing uploaded quantities can fall back to simulated stock or be assumed zero. Manual product overrides are supported.
 - **Executive Overview:** Restored summary and inventory KPI design, simulation assumptions, action prioritization, 5/10/20/50 selectable priority rows, and illustrative order costs.
@@ -17,13 +17,12 @@ The earlier update described an assistant that could retrieve historical evidenc
 
 ## Confirmed manual demonstration checks
 
-- New Streamlit deployment runs from the active GitHub repository rather than the older dashboard repository.
+- New Streamlit deployment runs from the active GitHub repository rather than the older dashboard repository. (https://ids-560-capstone-group-4-walmart.streamlit.app/)
 - Gemini API configured in the new Streamlit app's Secrets; generation has succeeded.
 - A store-ranking question was interpreted as cross-store analysis, and its displayed numeric order matched the computed table.
 - A department comparison question returned department-level forecasts and gaps.
 - A prior error interpreting total item-store series as affected items was corrected by exposing separate `total_item_series` and `item_series_with_shortage` fields.
 
-These are manual UI observations, **not** complete regression tests or an independent audit of all calculations.
 
 ## Known limitations and outstanding decisions
 
@@ -40,7 +39,7 @@ M5 includes **historical selling prices**, but **not actual procurement cost**. 
 - RAG passage relevance is imperfect; Gemini can overgeneralize, duplicate context, or misinterpret retrieved statistics.
 - No production data pipeline or autonomous order execution.
 
-## Suggested validation before next presentation
+## Planned Validation 
 
 1. Confirm all four pages load after the documentation-only commit.
 2. Upload a tiny CSV with a valid `on_hand=0`, a positive quantity, and a missing item-store pair. Verify both fallback choices and that zero stays zero.
@@ -49,12 +48,6 @@ M5 includes **historical selling prices**, but **not actual procurement cost**. 
 5. Check that changing the assumed unit cost changes illustrative order-cost amounts but not forecast demand or units to order.
 6. Remove any temporary verbose Gemini API error display from the public app if it remains.
 
-
-## RAG agent notebook and possible next steps
-
-Tyler has developed a separate LightGBM-based RAG agent notebook (`M5_RAG_agent_v2_lightgbm.ipynb`). It now includes an illustrative order-up-to rule based on forecast demand, lead time, review period, and safety stock, plus flags for questionable zero-sales patterns. The notebook also compares four explanation options: a template, RAG + LLM, a LangChain agent, and LLM without RAG. Its evaluation checks whether order quantities are preserved, whether claims are supported and cited, and whether future-dated evidence enters the answer.
-
-The working Streamlit dashboard already combines forecast/inventory numbers with historical RAG and Gemini, but it **does not yet use Tyler's more detailed ordering rule**. She is still testing the newer work, and the updated chunks/index files have not been added to the deployed app. We should review those files and test compatibility before changing the dashboard.
 
 ### New-product forecasting idea
 
