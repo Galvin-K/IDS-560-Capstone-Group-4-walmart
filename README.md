@@ -1,4 +1,3 @@
-
 # Walmart M5 | Demand & Inventory Decision Support
 
 **UIC IDS 560 Capstone — Group 4**  
@@ -9,26 +8,24 @@
 
 **[Open the Streamlit dashboard](https://ids-560-capstone-group-4-walmart.streamlit.app/)**
 
-## 1. Project Overview
+## 1. Project overview
 
 **Business question:** *How can a store manager order enough inventory to meet customer demand without ordering too much?*
 
-The project uses the public Walmart M5 data to study sales behavior, forecast demand by product and store, and turn the numerical results into a dashboard that supports inventory decisions.
-
-Our approach has four parts:
+The project uses the public Walmart M5 data to study sales behavior, forecast demand by product and store, and turn the numerical results into a dashboard that supports inventory decisions. The approach has four parts:
 
 1. **Understand past demand:** Explore sales patterns across products, stores, dates, prices, and SNAP benefit days.
 2. **Forecast demand:** Compare simple baselines, intermittent-demand models, and LightGBM using future periods the models have not seen.
 3. **Explain the results:** Retrieve historical evidence and use a language model to explain Python-calculated forecasts and inventory gaps.
 4. **Present possible actions:** Display forecasts, illustrative inventory levels, prioritized items, order-gap calculations, and limitations for a manager to review.
 
-This is **not a live Walmart application**. The project has no access to Walmart's internal stock, supplier, purchasing, or order-management systems. The dashboard does not place orders or independently determine an operationally optimal ordering policy.
+This is **not a live Walmart application**. The project has no access to Walmart's internal stock, supplier, purchasing, or order-management systems. The dashboard does **not** place orders or independently determine an operationally optimal ordering policy.
 
-## 2. Dataset and Data Preparation
+## 2. Data
 
-### 2.1 M5 Data Sources
+### M5 sources and granularity
 
-The midterm analysis uses three primary files from the public M5 forecasting dataset:
+The analysis uses three primary files from the public M5 forecasting dataset:
 
 | Source | Contents | How it is used |
 | --- | --- | --- |
@@ -36,563 +33,178 @@ The midterm analysis uses three primary files from the public M5 forecasting dat
 | Calendar (`calendar.csv`) | Dates, weekdays, events/holidays, SNAP flags by state | Calendar and event features |
 | Selling prices (`sell_prices.csv`) | Historical weekly selling prices by item, store, and Walmart week | Price-related analysis and forecast features |
 
-The **modeling unit is an item–store–day**.
+The **modeling unit is an item–store–day**. The original data cover **3,049 items, seven departments, three broad categories (Foods, Hobbies, Household), and 10 stores** across California (4), Texas (3), and Wisconsin (3). The dataset contains approximately **59.2 million daily sales observations**, **30,490 item–store series**, and **1,941 daily observations per series** (January 2011–May 2016). These are dataset-level counts, *not* the number of records loaded into the Streamlit application.
 
-The original data cover:
+Sales are joined to the calendar by day and to prices by item, store, and Walmart week. The team conducted nine integrity checks, removed pre-launch periods before an item's first sale from relevant analysis, and handled incomplete historical price coverage. The source price table covers approximately **79% of item–store weeks**; the project does not infer that a missing price represents a sale price of zero.
 
-- **3,049 products**
-- **7 departments**
-- **3 categories:** Foods, Hobbies, Household
-- **10 stores:** California (4), Texas (3), Wisconsin (3)
-- **30,490 item–store series**
-- **Approximately 59.2 million daily sales observations**
-- **1,941 daily observations per series**, covering January 2011–May 2016
+### Sampling strategy
 
-These are dataset-level counts, not the number of records loaded into the Streamlit application.
+The team sampled **complete item–store series**, not isolated daily rows, using proportional quotas across **nine state × category groups** and a fixed random ordering:
 
-### 2.2 Data Cleaning and Joining
-
-Sales are joined to the calendar by day and to prices by item, store, and Walmart week.
-
-As described in our midterm presentation, we:
-
-1. Joined sales, calendar, and selling-price data using their shared identifiers.
-2. Conducted nine data-integrity checks.
-3. Removed periods before a product's first sale from relevant analyses.
-4. Checked incomplete price coverage rather than interpreting missing prices as zero.
-5. Created stratified samples for model development and evaluation.
-
-The historical price table covers approximately **79% of item–store weeks**.
-
-### 2.3 Sampling Strategy
-
-We sampled **complete item–store series**, rather than individual daily records, using proportional sampling across nine state × category groups.
-
-| Dataset | Item–store series | Share of full data |
+| Dataset | Item–store series | Share of full M5 series |
 | --- | ---: | ---: |
-| Full M5 dataset | 30,490 | 100% |
-| Main modeling sample | 15,245 | 50% |
+| Full M5 set | 30,490 | 100% |
+| Larger modeling sample | 15,245 | 50% |
 | Smaller modeling sample | 6,098 | 20% |
-| Initial prototype sample | 100 | Exploratory subset |
+| Initial prototype subset | 100 | Exploratory subset |
 
-The 20% sample is nested within the 50% sample.
+The 20% sample is nested within the 50% sample. The **deployed dashboard uses the 50% sample's precomputed forecasting output**. Results should not be described as performance for all of Walmart's products.
 
-The deployed dashboard uses the **50% sample's precomputed forecasting results**. Therefore, its results represent the included sample rather than every product in the full M5 dataset.
+## 3. Exploratory data analysis
 
-## 3. Exploratory Data Analysis
+The following findings summarize our exploratory analysis. They describe observed relationships, **not established causes**.
 
-Our EDA focused on understanding demand patterns and identifying factors that could affect forecasting accuracy.
+| Area | Finding | Why it matters |
+| --- | --- | --- |
+| Sparse demand | **68.0%** of item–store days had zero recorded sales | A single overall accuracy score can hide poor performance on sporadic series |
+| Demand types | **72.7% intermittent**, **18.3% lumpy**, **6.2% smooth**, **2.8% erratic** | Motivates intermittent-demand baselines and segmented evaluation |
+| Sales trend | Average daily units increased **14.7%** from 2012 to 2015 | Older training data can produce systematic bias as sales levels change |
+| Category mix | Foods accounted for **68.6% of units** but approximately **58.0% of estimated revenue** | Volume and financial importance are different rankings |
+| Revenue concentration | Approximately **37%** of item–store series accounted for **80% of estimated revenue** | Reviewing items in priority order is more practical than reviewing all 30,490 series |
+| Weekdays | Saturday sales were about **21% above** an average day; Wednesdays about **13% below** | Weekday features and planning cycles matter |
+| Holidays | Labor Day was about **24% above** a local baseline; Thanksgiving **29% below** | Event effects need explicit calendar treatment |
+| SNAP | Wisconsin Foods sales were approximately **30.4% higher on SNAP days**; Texas **15.9%**, California **10.6%** | State/category-specific calendar information helps describe variation |
+| Price association | Sales were about **1.24× normal** for weeks priced 10–20% below the item's typical price | Useful predictive association, **not** proof of discount causality |
 
-The following findings come from our midterm presentation.
+**Important limitation:** M5 provides sales, not unconstrained demand. A zero-sale day may reflect no customer purchases, a stockout, a product not being offered, or other factors. Actual inventory and lost sales are not observed.
 
-### 3.1 Demand Sparsity
+## 4. Forecasting methodology
 
-Approximately **68% of item–store days have zero recorded sales**.
+### Evaluation design
 
-Products were classified into four demand types:
+The project used **chronological evaluation**, keeping training and testing in their correct time order:
 
-| Demand Type | Share |
-| --- | ---: |
-| Intermittent | 72.7% |
-| Lumpy | 18.3% |
-| Smooth | 6.2% |
-| Erratic | 2.8% |
+- **Training:** 2011–2014.
+- **Validation:** Rolling-origin evaluation during 2015, with roughly 50 weekly forecast origins.
+- **Final holdout:** January–May 2016, evaluated after model selection.
+- **Forecast horizons:** 7, 14, and 28 days.
+- **Unit of comparison:** Daily item–store forecasts, using comparable series, forecast dates, and error definitions.
 
-Intermittent and lumpy demand account for approximately **90.9%** of the classified series.
+Demand-type classifications were calculated from the training period, rather than using future observations. A leakage audit was also conducted to ensure forecasts did not use future sales as input.
 
-This matters because models that perform well on frequently purchased products may struggle with products that sell irregularly.
+### Demand segmentation
 
-### 3.2 Historical Sales Growth
+Demand patterns were classified with **Average Demand Interval (ADI)** and the **squared coefficient of variation (CV²)** of nonzero demand. The analysis used cutoffs of **ADI = 1.32** and **CV² = 0.49** to distinguish smooth, intermittent, erratic, and lumpy series. A separate no-sales group captured series without positive sales in the training history.
 
-Average daily sales increased by approximately **14.7% between 2012 and 2015**.
+This segmentation was used both to understand error patterns and to guide forecasting-range calibration.
 
-This suggests that models trained on older sales levels may systematically underpredict later demand.
+### Forecast candidates
 
-The forecasting pipeline therefore considers periodic retraining and bias correction.
+We evaluated several model families under a common protocol:
 
-### 3.3 Category and State Differences
+- **Simple baselines:** Zero Naive, Weekly Seasonal Naive, Recent Mean (7-day), and a 28-day Recent Mean control.
+- **Intermittent-demand methods:** Croston, Syntetos–Boylan Approximation (SBA), and Teunter–Syntetos–Babai (TSB).
+- **Machine learning:** **LightGBM**, with a Tweedie objective suited to nonnegative, zero-heavy sales.
 
-Foods accounted for approximately **68.6% of total units sold**, but only **58.0% of estimated revenue**.
+The final LightGBM implementation used **28 features in six groups**, including historical rolling sales levels and variability, price information, item/store attributes, calendar/SNAP/event signals, same-weekday history, and forecast lead time. Model-gain analysis assigned about **89.3% of gain to recent sales features**; that reflects what the model uses, **not** a causal estimate of added accuracy.
 
-Household products accounted for a smaller share of units but a larger share of revenue relative to their sales volume.
+### Bias handling and model selection
 
-California represented approximately **43.6% of units sold**.
+The first LightGBM version systematically under-forecast as total sales increased over time. The validation results were:
 
-These findings suggest that demand volume and financial importance are different considerations when prioritizing inventory decisions.
+1. The initial 2015 signed bias was approximately **−4.4%**.
+2. Quarterly retraining reduced it to approximately **−3.1%**.
+3. A correction based on the previous 13 weeks of known errors, by demand type and capped at **0.8–1.25×**, reduced it to approximately **−0.3%**.
 
-### 3.4 Revenue Concentration
+The team predefined four model-selection checks related to improvement on sporadic demand, performance relative to the 28-day control, not harming smooth/erratic demand, and avoiding excessive aggregate bias. The evaluation showed that the selected LightGBM configuration passed those checks in the evaluated samples and horizons.
 
-Approximately **37% of item–store series generated 80% of estimated revenue**.
+### Metrics
 
-The top 10% of series generated approximately 47% of estimated revenue.
+- **WAPE:** `sum(abs(actual - forecast)) / sum(actual) × 100%` — primary relative absolute-error metric; lower is better.
+- **Signed bias:** `sum(forecast - actual) / sum(actual) × 100%` — indicates net over- or under-forecasting.
+- **RMSE:** Emphasizes larger misses.
+- **Pinball loss and empirical coverage:** Evaluate daily P10/P90 ranges.
 
-This supports the idea of prioritizing products instead of requiring managers to manually examine every item–store combination.
+**WAPE depends on the evaluation granularity.** Daily item–store WAPE is not directly comparable to a score computed on weekly totals or aggregate store sales.
 
-### 3.5 Weekday and Seasonal Patterns
+## 5. Forecasting results
 
-Our analysis found that:
+### Final 2016 holdout: WAPE by horizon
 
-- Saturday sales were approximately **21% above** an average day.
-- Wednesday sales were approximately **13% below** average.
-- August sales were approximately 7% above average.
-- January sales were approximately 9% below average.
+The following results are from the 2016 holdout evaluation using the 50% stratified sample.
 
-The weekly pattern was particularly noticeable.
-
-These observations support including weekday and calendar variables in the forecasting model.
-
-### 3.6 Holiday Effects
-
-Holiday periods showed substantial changes in recorded sales.
-
-Examples from the midterm include:
-
-| Holiday | Approximate change |
-| --- | ---: |
-| Labor Day | +24% |
-| Thanksgiving | -29% |
-| New Year's Day | -21% |
-| Christmas | -100% |
-
-Christmas closures are especially important because a simple recent-average model could mistake temporary closures for declining demand.
-
-### 3.7 SNAP Benefit Days
-
-SNAP benefit days were associated with different food-sales patterns across states.
-
-| State | Foods sales difference on SNAP days |
-| --- | ---: |
-| Wisconsin | +30.4% |
-| Texas | +15.9% |
-| California | +10.6% |
-
-These results support using state-specific SNAP indicators as forecasting features.
-
-However, they represent observed associations and do not establish causality.
-
-### 3.8 Selling Prices
-
-Weekly sales were approximately **1.24 times normal** when an item's price was 10–20% below its typical level.
-
-Sales were lower when prices were substantially above the normal level.
-
-Price information was therefore included in the forecasting model.
-
-However, these results do not prove that changing prices directly caused the observed differences in sales.
-
-### 3.9 Main EDA Findings
-
-Our EDA identified several challenges:
-
-- Most item–store series have intermittent or lumpy sales.
-- Demand differs across states and product categories.
-- Weekdays, holidays, SNAP schedules, and prices are associated with sales variation.
-- Historical sales levels change over time.
-- The M5 dataset does not include actual inventory levels.
-
-These findings shaped our forecasting methodology and the dashboard's inventory-planning design.
-
-## 4. Forecasting Methodology
-
-### 4.1 Chronological Data Splitting
-
-We evaluated models using a time-based split:
-
-| Period | Purpose |
-| --- | --- |
-| 2011–2014 | Training |
-| 2015 | Validation and model selection |
-| January–May 2016 | Final holdout testing |
-
-The 2015 validation used rolling-origin backtesting with approximately 50 weekly forecast dates.
-
-We evaluated three forecasting horizons:
-
-- 7 days
-- 14 days
-- 28 days
-
-This approach ensures that models are evaluated on future observations rather than using randomly mixed historical dates.
-
-Demand-type classifications were also calculated using training-period information.
-
-The midterm reported a leakage audit confirming that future sales were not used to generate forecasts.
-
-### 4.2 Demand Classification
-
-Demand behavior was classified using:
-
-- **Average Demand Interval (ADI):** Measures how frequently nonzero sales occur.
-- **Squared Coefficient of Variation (CV²):** Measures variation in positive sales quantities.
-
-The midterm used thresholds of:
-
-- ADI = 1.32
-- CV² = 0.49
-
-These measures were used to distinguish smooth, intermittent, erratic, and lumpy demand.
-
-A separate no-sales group captured series without positive sales in the training history.
-
-### 4.3 Forecasting Models
-
-We compared several forecasting methods.
-
-**Baseline models:**
-
-- Zero Naive
-- Weekly Seasonal Naive
-- Recent Mean (7-day)
-- Recent Mean (28-day control)
-
-**Intermittent-demand models:**
-
-- Croston
-- Syntetos–Boylan Approximation (SBA)
-- Teunter–Syntetos–Babai (TSB)
-
-**Machine learning:**
-
-- LightGBM
-
-LightGBM was selected as the final forecasting model.
-
-Its Tweedie objective was appropriate for nonnegative sales with many zero observations.
-
-### 4.4 Feature Engineering
-
-The LightGBM model used **28 features across six groups**.
-
-| Feature Group | Examples |
-| --- | --- |
-| Recent sales | Rolling averages over 7, 14, 28, 56, and 365 days |
-| Price | Current selling price, historical price comparisons, price changes |
-| Item and store | Category, department, store, state, demand type |
-| Calendar | Weekday, month, holidays, events, SNAP |
-| Same-weekday history | Historical sales on corresponding weekdays |
-| Forecast horizon | Days ahead |
-
-Recent sales features accounted for approximately **89.3% of model gain**.
-
-The 28-day historical average was particularly important.
-
-Feature gain represents model reliance rather than the causal contribution of each variable.
-
-### 4.5 Bias Correction
-
-The initial LightGBM model tended to underpredict later demand.
-
-Our midterm reported the following changes:
-
-| Model adjustment | Signed bias |
-| --- | ---: |
-| Initial LightGBM | -4.4% |
-| Quarterly retraining | -3.1% |
-| Retraining with 13-week correction | -0.3% |
-
-The correction used recent known forecasting errors by demand type, with an adjustment capped between 0.8 and 1.25 times the original prediction.
-
-### 4.6 Evaluation Metrics
-
-Our main metrics were:
-
-**Weighted Absolute Percentage Error (WAPE)**
-
-WAPE measures total absolute forecast error relative to actual demand.
-
-Lower WAPE indicates better forecasting accuracy.
-
-**Signed Forecast Bias**
-
-Measures whether forecasts systematically overpredict or underpredict actual sales.
-
-**Root Mean Squared Error (RMSE)**
-
-Places more weight on large forecasting errors.
-
-**Pinball Loss and Coverage**
-
-Used to evaluate the quality of P10 and P90 prediction ranges.
-
-Because we forecast at the daily item–store level, our WAPE values should not be directly compared with models evaluated only on aggregated weekly or store-level totals.
-
-## 5. Forecasting Results
-
-### 5.1 Model Performance on the 2016 Holdout
-
-Our final LightGBM model performed better than the Recent Mean baselines across all three horizons.
-
-| Forecast Horizon | LightGBM WAPE | Recent Mean (7d) | Recent Mean (28d) |
+| Forecast horizon | LightGBM WAPE | Recent Mean 7d WAPE | Recent Mean 28d WAPE |
 | --- | ---: | ---: | ---: |
-| 7 days | **71.6%** | 74.6% | 73.9% |
-| 14 days | **72.6%** | 75.8% | 74.7% |
-| 28 days | **73.9%** | 77.3% | 75.9% |
+| **7 days** | **71.6%** | 74.6% | 73.9% |
+| **14 days** | **72.6%** | 75.8% | 74.7% |
+| **28 days** | **73.9%** | 77.3% | 75.9% |
 
-The **seven-day horizon performed best** among the three evaluated horizons.
+At the seven-day horizon, the evaluation also found **RMSE 2.040** for LightGBM versus **2.219** for Recent Mean, and signed bias of **−0.7%** versus **−1.8%**. These are results on historical holdout sales, not live-order performance.
 
-At seven days, LightGBM also achieved:
+For 2015 validation, the final LightGBM achieved approximately **75.0% seven-day WAPE**, compared with **77.5%** for Recent Mean on the validation set.
 
-- RMSE: **2.040**, compared with 2.219 for Recent Mean.
-- Signed bias: **-0.7%**, compared with -1.8% for Recent Mean.
+### Practical historical example: January 1–7, 2016
 
-The results indicate improved forecasting performance on historical holdout data, not proven improvements in real-world inventory outcomes.
+The week after Christmas provides a useful example to illustrate the value of recognizing calendar effects:
 
-### 5.2 Validation Performance
+- **Actual sales:** 130,915 units across the 15,245-series sample.
+- **LightGBM forecast:** approximately 136,272 units (**+4.1%** relative to actual).
+- **Recent Mean 7-day forecast:** approximately **−19.6%** relative to actual, partly because the previous week included Christmas closure.
 
-During 2015 validation:
+This is the **historical week used in the deployed dashboard**, not a prediction for the current calendar week. A close forecast is useful, but it does not establish avoided stockouts or optimal orders.
 
-| Model | 7-Day WAPE |
-| --- | ---: |
-| LightGBM final | 75.0% |
-| TSB | 76.4% |
-| Recent Mean (7d) | 77.5% |
-| SBA | 85.9% |
-| Croston | 87.2% |
+### Where errors remain
 
-LightGBM produced the lowest WAPE among these reported candidates.
+Baseline diagnostics found that:
 
-### 5.3 Historical Example: January 1–7, 2016
+- Intermittent and lumpy series contributed roughly **71.9% of the baseline's total absolute error**.
+- Foods contributed approximately **59.4% of absolute error**, while Hobbies had the largest **category-level WAPE (104.7%)**.
+- High-volume series contributed approximately **62.4%** of the baseline absolute-error total, even though low-volume products often had worse *relative* WAPE.
 
-The midterm presentation included a practical comparison following Christmas.
+These figures describe **Recent Mean baseline error analysis**; they should not be presented as a segmented error decomposition for the final LightGBM model.
 
-For the 15,245-series sample:
+### Prediction ranges
 
-| Measure | Result |
-| --- | ---: |
-| Actual sales | 130,915 units |
-| LightGBM forecast | Approximately 136,272 units |
-| LightGBM error relative to actual | +4.1% |
-| Recent Mean error relative to actual | -19.6% |
+The forecasting work also generated **daily P10/P90 ranges**. The 2016 evaluation found **77.7% empirical coverage on 2016 daily observations**, slightly below the **80% target**, with demand-type-based calibration proposed/selected because a single pooled range performed unevenly across demand types.
 
-The Recent Mean baseline underpredicted demand partly because the previous week included Christmas Day, when stores were closed.
+**Dashboard-specific caution:** The deployed `dashboard_forecasts.csv` contains daily `p10` and `p90` columns. Summing daily bounds produces *illustrative seven-day scenarios*, **not** a calibrated prediction interval for the seven-day total. The displayed file's range-calibration variant should be checked against the saved forecasting notebook before claiming that the deployed bounds use the selected demand-type calibration.
 
-This demonstrates why calendar-aware forecasting can be more useful than simply averaging recent sales.
+## 6. RAG and AI explanation methodology
 
-**This historical January 2016 forecast is also used in our current Streamlit demonstration.**
+### Historical evidence retrieval
 
-### 5.4 Forecasting Error by Demand Type
+The RAG work assembled public historical sources, including:
 
-Our baseline error analysis found that:
+- Federal Reserve Beige Book materials;
+- NOAA Storm Events records;
+- SNAP-related government information;
+- Walmart SEC filings; and
+- M5-derived historical evidence cards.
 
-- Intermittent and lumpy series contributed approximately **71.9% of total absolute error**.
-- Foods contributed approximately **59.4% of total absolute error**.
-- Hobbies had the highest category-level WAPE at approximately **104.7%**.
-- High-volume series contributed approximately **62.4% of the total absolute error**.
+The retrieval index contained of approximately **7,333 dated passages from 4,796 documents**, embedded using a BGE-small sentence embedding model. Passages are tagged with dates and relevant geographic context; retrieval filters out documents published **after the forecast decision date** to reduce future-information leakage.
 
-These findings came from the Recent Mean baseline analysis, rather than a segmented decomposition of the final LightGBM model.
+The deployed application calls `rag_backend.py` to retrieve supporting passages, and Google Gemini produces the readable explanation. **Historical evidence is context, not a substitute for numerical forecast or inventory calculations.** The dashboard's main numeric summaries are calculated in Python before they are passed to Gemini.
 
-They highlight why both relative error and the total number of incorrectly forecast units matter.
+### What the RAG tests found
 
-### 5.5 Prediction Uncertainty
+Retrieval testing found:
 
-The forecasting work generated daily P10 and P90 estimates.
+- **13 of 15** questions requiring a relevant source returned the expected kind of evidence.
+- **No future-dated documents** appeared in the reported date-filter checks (16 queries plus 200 random checks).
+- A question with no reasonable historical answer (COVID-19 demand in a pre-2020 library) still scored **0.68** in similarity, overlapping the scores of valid matches.
 
-The midterm reported approximately **77.7% coverage** on 2016 daily sales observations, compared with the nominal 80% target.
+The last finding matters: **a similarity threshold alone is not a reliable no-answer detector**. The assistant must still distinguish supported claims from missing evidence.
 
-Demand-type-based calibration was considered because a single pooled interval did not perform equally well across demand types.
+An early comparison across three test orders also found that RAG + LLM cited sources in **84% of its reasons**, compared with **0%** for an LLM without retrieval. A LangChain variant accessed more kinds of evidence but cited less consistently and needed more model calls. These are **small-sample experiments**, not validated production benchmarks or claims about the current Gemini deployment.
 
-**Important limitation:** Adding daily P10 and P90 values across seven days does not produce a statistically calibrated seven-day prediction interval.
+**Current implementation:** The working Streamlit assistant now combines deterministic Python forecast/inventory summaries with retrieved RAG passages and Gemini explanations, rather than restricting the assistant to historical retrieval alone. Tyler's newer `M5_RAG_agent_v3.ipynb` was shared separately but had **not yet been merged/tested** in the working dashboard as of this update.
 
-The dashboard therefore treats summed daily bounds as illustrative scenarios.
+## 7. Dashboard — current implementation
 
-The calibration method stored in the deployed forecast file should be verified against the final forecasting notebook before claiming that the dashboard uses the selected demand-type calibration.
+**Live application:** https://ids-560-capstone-group-4-walmart.streamlit.app/
 
-## 6. Retrieval-Augmented Generation (RAG)
+The Streamlit interface reads **precomputed** LightGBM results from `dashboard_forecasts.csv` and presents four pages. It is a decision-support **demonstration**, not an inventory management system.
 
-### 6.1 Objective
-
-The RAG component was developed to provide historical evidence that helps explain forecast and inventory results.
-
-Instead of relying entirely on a language model's general knowledge, the system retrieves relevant documents and provides them as supporting context.
-
-### 6.2 Historical Evidence Sources
-
-The midterm RAG work used several public sources:
-
-- Federal Reserve Beige Book
-- NOAA Storm Events Database
-- SNAP-related government information
-- Walmart SEC filings
-- M5-derived historical evidence cards
-
-The midterm reported approximately **7,333 passages from 4,796 documents**.
-
-These passages were embedded using a BGE-small sentence-embedding model.
-
-Documents were tagged with dates and relevant geographic information.
-
-### 6.3 Preventing Future-Information Leakage
-
-The RAG retrieval system filters evidence by the forecast decision date.
-
-For example, when generating an explanation for January 2016, the system should not retrieve a document published later in 2016.
-
-This helps avoid using historical information that would not have been available to a store manager at the time of the forecast.
-
-### 6.4 Retrieval Evaluation
-
-The midterm reported:
-
-| Evaluation | Result |
+| Page | Current functionality |
 | --- | --- |
-| Questions returning the expected type of source | 13 of 15 |
-| Future-dated documents in the reported leakage tests | 0 |
-| Similarity score for a no-answer COVID-19 question | 0.68 |
+| **Executive Overview** | Selected-store forecast overview, inventory KPIs, adjustable assumed costs/lead time, store comparisons and priority list; select **5, 10, 20, or 50** rows and view illustrative ordering costs. |
+| **Demand Forecasting** | Department-level summary table and chart first; then page-specific department/product selection, item KPIs, daily point forecasts and P10/P90 displays, and evaluation details. |
+| **Inventory Planning** | Prioritized action list, simulated order list, page-specific product/department choice and stock override, inventory KPIs, product stock trajectories, user-selected multi-product stock runway, and potential-shortage views. |
+| **AI Assistant** | Automatic or manual analysis scope, deterministic forecast and inventory context, comparisons at product/department/store/all-store level, historical RAG retrieval, and Gemini explanations. |
 
-The COVID-19 question demonstrated an important limitation: a high retrieval similarity score does not necessarily indicate that relevant evidence exists.
+### Inventory input rules
 
-Therefore, a fixed similarity threshold alone is not sufficient to determine whether the system should answer a question.
-
-### 6.5 Comparison of AI Approaches
-
-The midterm compared four explanation methods:
-
-- Baseline template
-- RAG + LLM
-- LangChain agent
-- LLM without RAG
-
-An early evaluation using three test orders found:
-
-| Measure | Baseline | RAG + LLM | LangChain | LLM without RAG |
-| --- | ---: | ---: | ---: | ---: |
-| Answers completed | 3/3 | 3/3 | 2/3 | 3/3 |
-| Reasons with citations | 67% | 84% | 57% | 0% |
-| Average kinds of evidence used | 1.0 | 1.3 | 3.0 | 0 |
-
-RAG + LLM provided more consistently cited explanations, while the LangChain approach retrieved more varied evidence but required more model calls.
-
-These were small-sample midterm experiments, not production-level benchmarks.
-
-### 6.6 Latest RAG Integration
-
-Since the midterm, the Streamlit dashboard has been updated so Gemini receives:
-
-1. Python-calculated forecasting results.
-2. Inventory calculations based on uploaded or simulated stock.
-3. Historical evidence retrieved through RAG.
-4. The user's question and selected analysis scope.
-
-Gemini then generates a natural-language explanation using this context.
-
-The assistant does **not** independently calculate forecasts or change the numerical results.
-
-Tyler has also shared an updated RAG notebook, `M5_RAG_agent_v3.ipynb`, which had not yet been uploaded and tested in the working application at the time of this documentation update.
-
-## 7. Streamlit Dashboard
-
-**Live dashboard:**  
-https://ids-560-capstone-group-4-walmart.streamlit.app/
-
-The current dashboard integrates precomputed LightGBM forecasts, inventory calculations, and Gemini + RAG explanations.
-
-It contains four pages.
-
-### 7.1 Executive Overview
-
-The Executive Overview provides a summary of forecasting and inventory-planning results for a selected store.
-
-Main features include:
-
-- Seven-day demand summary
-- Inventory action KPIs
-- Estimated units to order
-- Estimated order costs
-- Items fully covered
-- Items with potential shortages
-- Store-level comparisons
-- Prioritized inventory items
-
-Users can also adjust simulation settings such as:
-
-- Assumed unit cost
-- Assumed selling price
-- Assumed replenishment lead time
-
-The **Top Priorities** table allows users to display the top **5, 10, 20, or 50 products**.
-
-The table includes:
-
-- Product ID
-- Department
-- Predicted demand gap
-- Illustrative units to order
-- Estimated order cost
-
-Estimated costs are calculated using the assumed unit cost rather than verified Walmart purchasing costs.
-
-### 7.2 Demand Forecasting
-
-The Demand Forecasting page allows users to explore forecasts at the department and product levels.
-
-The page is organized as follows:
-
-1. Department-level forecast table
-2. Department-level comparison chart
-3. Department and product selection
-4. Product forecast KPIs
-5. Daily forecast table
-6. Daily forecast visualization
-7. Additional forecast analysis and evaluation
-
-The daily forecasting view displays the LightGBM point forecast and P10/P90 estimates.
-
-The current dashboard uses the historical January 1–7, 2016 forecast period.
-
-### 7.3 Inventory Planning
-
-The Inventory Planning page combines forecasted demand with user-provided or simulated starting inventory.
-
-The page includes:
-
-**Prioritized Inventory Action List**
-
-Products are ranked according to the inventory-planning calculations.
-
-**Today's Order List (Simulated)**
-
-Shows illustrative order quantities, assumed lead times, and estimated costs.
-
-**Department and Product Selection**
-
-Allows users to select an individual product for further analysis.
-
-**Inventory Overrides**
-
-Users can manually change the assumed starting stock for individual products.
-
-**Inventory Assumptions**
-
-Displays the selected product's starting stock and seven-day predicted demand.
-
-**Projected Inventory KPIs**
-
-Summarizes illustrative shortages and stock projections.
-
-**Selected Product Inventory**
-
-Displays projected remaining inventory for an individual product.
-
-**Stock Runway — Next 7 Days**
-
-Users can choose which products to compare.
-
-**Potential Shortage**
-
-Displays shortage-related results under the selected inventory assumptions.
-
-The inventory calculations assume no new replenishment unless otherwise stated.
-
-They do not represent observed Walmart stockouts or validated order recommendations.
-
-### 7.4 Inventory Upload
-
-The dashboard supports two main inventory sources:
-
-- Simulated inventory
-- Uploaded inventory
-
-Users can upload a CSV with the following columns:
+The sidebar supports **Simulated inventory** and **Uploaded inventory**. The uploaded CSV format is:
 
 ```csv
 store_id,item_id,on_hand
@@ -601,391 +213,124 @@ CA_1,FOODS_1_002,0
 TX_1,HOUSEHOLD_1_001,12
 ```
 
-If a product is missing from the uploaded inventory data, users can choose to:
+If an item–store pair is missing from the uploaded file, or its `on_hand` value is blank, the user can select **simulated fallback** or **assume 0 units**. An explicit zero remains zero. The inventory planning page also supports a **manual stock override** for a chosen product.
 
-1. Use simulated inventory for the missing item.
-2. Assume the missing item has zero units available.
+**Missing inventory is not the same as confirmed zero inventory.** Assuming zero is a user-selected demonstration scenario, not a verified Walmart stock reading.
 
-An explicitly entered inventory value of zero remains zero.
+### What the calculations mean
 
-The dashboard also supports product-specific stock overrides.
-
-**Important:** Missing inventory data does not necessarily mean zero inventory. The zero-stock fallback is a user-selected assumption.
-
-### 7.5 Inventory Calculations
-
-For each item–store series, the dashboard compares predicted demand with starting inventory.
-
-The simplified demand-gap calculation is:
-
-```python
-positive_gap = max(0, predicted_7_day_demand - starting_stock)
-```
-
-Illustrative units to cover are calculated using:
-
-```python
-units_to_cover = ceil(positive_gap)
-```
-
-Estimated ordering cost is:
-
-```python
-estimated_order_cost = units_to_cover * assumed_unit_cost
-```
-
-These calculations are useful for demonstrating inventory decision support, but they are not validated replenishment optimization.
-
-For example, the dashboard does not yet account for all real operational constraints such as supplier minimum order quantities, warehouse capacity, or verified replenishment lead times.
-
-When aggregating across multiple items, we sum positive item-level shortages rather than simply subtracting total stock from total demand.
-
-This matters because excess inventory for one product cannot automatically cover a shortage of another product.
-
-### 7.6 Assumed Order Cost
-
-The current dashboard uses a default assumed unit cost of **$5**, which users can change in Simulation Settings.
-
-Although the M5 dataset includes historical selling prices, it does not provide Walmart's actual procurement costs.
-
-Therefore, the estimated ordering expenses are illustrative.
-
-Historical selling prices could potentially be included in a future revenue-related calculation, but they should not be treated as purchasing costs.
-
-We plan to wait for sponsor and faculty feedback before deciding whether this functionality should be expanded.
-
-## 8. AI Assistant Integration
-
-### 8.1 Current Architecture
-
-The current implementation connects forecast and inventory calculations with historical evidence retrieval and Gemini.
+For each item–store series, the dashboard compares seven-day predicted units with starting stock. In simplified form:
 
 ```text
-M5 Sales + Calendar + Prices
-              |
-              v
-      LightGBM Forecasting
-              |
-              v
-   Precomputed Forecast CSV
-              |
-              v
-    Python Forecast Calculations
-              |
-              +------------------------+
-              |                        |
-              v                        v
-     Inventory Calculations      Dashboard KPIs
-              |
-              v
-     Structured AI Context
-              |
-              +------------------------+
-              |                        |
-              v                        v
-      Historical RAG Evidence    Gemini API
-              |                        |
-              +-----------+------------+
-                          |
-                          v
-                Gemini Explanation
-                          |
-                          v
-                    User Review
+illustrative_positive_gap = max(0, predicted_7_day_units - starting_stock)
+illustrative_units_to_cover = ceil(illustrative_positive_gap)
+estimated_order_cost = illustrative_units_to_cover × assumed_unit_cost
 ```
 
-### 8.2 Automatic Analysis Scope
+The dashboard also displays estimated runoff/stockout timing under the scenario of **no new replenishment**. These are *scenario calculations*, not verified order quantities or observed stockouts. **Sum of positive item-level gaps is not the same as total forecast demand minus total starting stock**: excess stock for one item cannot automatically cover a different item's shortage.
 
-Users can manually select an analysis scope or allow the dashboard to identify one based on their question.
+The default **assumed unit procurement cost is $5**, and users can change it. The M5 price file provides **historical selling prices**, not Walmart's actual procurement costs. Estimated order expense therefore uses an assumption, not observed purchase costs. Historical selling prices could be incorporated later for a separately defined estimated sales-value metric, subject to sponsor/faculty input.
 
-Available scopes include:
-
-- Automatic (from question)
-- Selected product
-- Selected department
-- Selected store
-- All stores
-
-The automatic selection uses predefined rules to interpret the question.
-
-For example:
-
-**Question:**
-
-> Which stores have the highest predicted inventory shortages over the next seven days?
-
-The dashboard selects the all-store analysis scope and calculates store-level results.
-
-Gemini then explains those numerical results.
-
-This feature uses rule-based question classification rather than a fully autonomous planning agent.
-
-### 8.3 Store-Level Analysis
-
-The dashboard can compare inventory shortages across all ten M5 stores.
-
-The numerical results are calculated in Python and displayed in comparison tables before being included in the Gemini prompt.
-
-In our manual testing, Gemini correctly identified the stores with the largest calculated shortages and matched the displayed numerical rankings.
-
-### 8.4 Department-Level Analysis
-
-Users can also ask questions about departments across multiple stores.
-
-For example:
-
-> Which departments have the highest predicted inventory shortages across all stores?
-
-The system aggregates the relevant data and provides Gemini with the calculated department-level results.
-
-### 8.5 Gemini Explanations
-
-The updated assistant generally organizes responses into:
-
-- Main finding
-- Explanation or comparison
-- Relevant historical context
-- Monitoring suggestion
-
-The dashboard also distinguishes between:
-
-- Total item–store series
-- Item–store series with calculated shortages
-
-This was added after a previous Gemini response incorrectly interpreted the total number of products as the number experiencing shortages.
-
-### 8.6 Historical Evidence
-
-RAG passages are shown in an expandable section so users can inspect the supporting sources.
-
-The assistant may retrieve historical reports, M5 evidence cards, and other dated documents.
-
-However, retrieval similarity does not guarantee that the selected evidence is relevant.
-
-Users should treat Gemini's explanations as decision-support information and verify important claims against the numerical tables and original sources.
-
-### 8.7 Example Questions
-
-Users can test the AI Assistant using questions such as:
-
-- Which stores have the largest predicted inventory shortages over the next seven days?
-- Which departments have the highest predicted inventory gaps across all stores?
-- What is the forecast and starting stock for this selected product?
-- What historical evidence could help explain Foods demand in Wisconsin?
-
-The store- and department-ranking examples were tested manually and produced responses consistent with the displayed numerical results.
-
-These checks do not constitute a full audit of every possible question or calculation.
-
-## 9. Repository Structure
+### How Gemini and RAG fit into the dashboard
 
 ```text
-IDS-560-Capstone-Group-4-walmart/
-│
-├── app.py
-│   # Streamlit dashboard and page logic
-│
-├── analysis_scope.py
-│   # Automatic analysis scope and aggregated summaries
-│
-├── inventory_bridge.py
-│   # Uploaded inventory and fallback calculations
-│
-├── rag_backend.py
-│   # Historical evidence retrieval used by the dashboard
-│
-├── dashboard_forecasts.csv
-│   # Precomputed LightGBM forecasts
-│
-├── requirements.txt
-│   # Python dependencies
-│
-├── forecasting/
-│   # Forecasting notebooks and experiments
-│
-├── RAG/
-│   # RAG development files and evidence
-│
-├── evaluation/
-│   # Evaluation files
-│
-├── Development Updates/
-│   # Development notes and progress updates
-│
+M5 historical sales + calendar + prices
+                │
+                ▼
+    Offline forecast training / evaluation
+                │
+                ▼
+       dashboard_forecasts.csv
+                │
+     user stock input / simulation
+                │
+                ▼
+ Python forecast + inventory calculations ──► displayed KPIs / tables
+                │
+                ├──► structured context ───────┐
+                │                              │
+Historical documents / M5 evidence cards      │
+                │                              │
+       dated RAG retrieval ────────────────────┤
+                                               ▼
+                                        Gemini explanation
+                                               │
+                                               ▼
+                                       Manager reviews
+```
+
+The **Automatic** scope selector uses rules based on question wording; it is not an independently validated semantic planner. Users can explicitly choose a product, department, selected store, or all stores. The assistant does not modify the forecasts, change stock, or place orders.
+
+### Example demo questions
+
+- `Which stores have the largest predicted inventory shortages over the next seven days?`
+- `Which departments have the highest predicted inventory gaps across all stores?`
+- `What is the forecast and starting stock for this selected product?`
+- `What historical evidence could help explain Foods demand in Wisconsin?`
+
+For the first two examples, the team manually checked that Gemini's displayed rankings aligned with the Python-generated numerical tables. That is **limited UI verification**, not comprehensive system validation.
+
+## 8. Repository layout
+
+```text
+.
+├── app.py                   # Streamlit UI and page logic
+├── analysis_scope.py        # Question-scope routing and aggregate summaries
+├── inventory_bridge.py     # Uploaded inventory and fallback calculations
+├── rag_backend.py           # Historical evidence retrieval used by the app
+├── dashboard_forecasts.csv  # Precomputed 7-day demo forecasts
+├── requirements.txt        # Runtime Python dependencies
+├── forecasting/            # Forecast notebooks and modeling work
+├── RAG/                    # RAG development and evidence artifacts
+├── evaluation/             # Evaluation work
+├── Development Updates/    # Dated progress notes
 ├── README.md
-│
 └── .gitignore
 ```
 
-The dashboard files currently remain in the repository root because the working Streamlit deployment uses `app.py` as its entrypoint.
+*Keep the Python entrypoint and relative data paths together when reorganizing files. The working Streamlit app currently expects `app.py` at the repository root.*
 
-Moving those files into another folder would require updating the deployment entrypoint and relevant file paths.
+## 9. Running the dashboard
 
-## 10. Running the Dashboard
-
-Install the required packages:
+From the repository root:
 
 ```bash
 pip install -r requirements.txt
-```
-
-Start the dashboard:
-
-```bash
 streamlit run app.py
 ```
 
-The deployed application uses Streamlit Community Cloud.
-
-### Gemini API Configuration
-
-The Gemini API key must be configured through Streamlit Secrets or another secure environment configuration.
-
-Example:
+The Gemini API key belongs in **Streamlit Secrets** for the deployed app (or in a securely configured local environment), never in the committed repository:
 
 ```toml
-GEMINI_API_KEY = "YOUR_API_KEY"
+GEMINI_API_KEY = "YOUR_KEY_HERE"
 ```
 
-API keys should never be committed directly to the public GitHub repository.
+The app retrieves forecasts from its checked-in CSV; it does **not** retrain LightGBM on each page load. If Gemini is unavailable, the forecasting and calculation portions are separate from the API-generated explanation. The app may need the local RAG index files for evidence retrieval.
 
-The application uses precomputed forecasts and does not retrain LightGBM when a user opens the dashboard.
+## 10. Limitations and open questions
 
-Historical RAG retrieval also requires the relevant evidence index files.
+1. **Historic, limited scope.** M5 covers 2011–2016. The live UI shows a historical January 2016 case, using only the 15,245-series sample, not current Walmart demand.
+2. **Sales are not unconstrained demand.** Out-of-stock periods and missed sales cannot be observed directly.
+3. **No verified inventory or purchasing inputs.** Stock, replenishment timing, procurement costs, and operational order constraints are user-provided or assumed. Order suggestions remain illustrative.
+4. **Cost ≠ selling price.** The adjustable $5 assumed unit cost is not Walmart procurement cost; M5's historical selling prices cannot simply replace it.
+5. **Imperfect forecasts and uncertainty coverage.** Daily WAPE remains substantial for sparse series; historical P10/P90 coverage fell below the nominal 80% target. Summing daily bounds does not give a calibrated seven-day interval.
+6. **RAG/LLM limitations.** A high similarity score does not guarantee useful evidence. Retrieval can miss relevant context, and Gemini can overstate or misread statistics; original sources and Python tables take priority.
+7. **No production integration.** There is no live database connection, validated stockout record, warehouse synchronization, production forecasting endpoint, or autonomous ordering.
+8. **Not yet fully regression-tested.** Selected cross-store and department questions worked during manual testing, but all stock-upload scenarios, overrides, page combinations, and explanation claims still need systematic verification.
 
-## 11. Current Limitations
+## 11. Next steps
 
-### 11.1 Historical Dataset
+The team is holding the current dashboard stable while waiting for **sponsor and faculty feedback** about the procurement-cost assumption, useful order/priority metrics, validation expectations, and what further capabilities are worth implementing. Planned follow-up validation includes explicit-zero and missing-stock uploads, cross-page override consistency, comparing Gemini numbers to computed tables, and checking how estimated expenses respond to assumed cost changes.
 
-The M5 dataset covers 2011–2016.
+An updated RAG notebook was shared by Tyler but was not yet integrated into the running application at the time of this documentation update. Any future RAG or forecasting revision should be evaluated separately from the current deployed workflow.
 
-The dashboard demonstrates historical forecasting and inventory planning rather than making current Walmart forecasts.
+## 12. Project documentation and evaluation
 
-### 11.2 Sales Versus Actual Demand
+This README combines:
 
-Recorded sales may not represent true customer demand if products were unavailable.
+- **Research and evaluation:** The EDA, model-selection results, holdout metrics, uncertainty evaluation, and initial RAG tests are documented in the project research materials and relevant notebooks.
+- **Forecasting work:** See the notebook(s) under `forecasting/` for implementation details and outputs.
+- **Current dashboard:** The code in `app.py`, `analysis_scope.py`, `inventory_bridge.py`, `rag_backend.py`, and the checked-in `dashboard_forecasts.csv` describes the deployed demonstration.
+- **Change history:** See dated Markdown files under `Development Updates/` for subsequent implementation changes.
 
-The dataset does not allow us to directly identify all stockout events or lost sales.
-
-### 11.3 Missing Inventory Data
-
-M5 does not provide actual inventory-on-hand records.
-
-The dashboard therefore uses simulated inventory or quantities uploaded by users.
-
-### 11.4 Procurement Cost
-
-M5 includes historical selling prices but not verified procurement costs.
-
-The default $5 unit cost is an assumption.
-
-Estimated order costs should not be interpreted as Walmart's actual purchasing expenses.
-
-### 11.5 Replenishment Constraints
-
-The dashboard does not include verified:
-
-- Supplier lead times
-- Warehouse capacity
-- Minimum order quantities
-- Supplier purchasing costs
-- Actual inventory replenishment records
-- Observed stockout events
-
-The current ordering calculations are illustrative.
-
-### 11.6 Forecast Accuracy
-
-LightGBM improved upon the evaluated baselines, but daily item–store forecasts still have substantial errors, especially for sparse demand.
-
-### 11.7 Prediction Intervals
-
-Daily P10/P90 coverage was below the nominal 80% target in the reported historical evaluation.
-
-Summing daily prediction bounds does not generate a validated seven-day prediction interval.
-
-### 11.8 RAG and Gemini
-
-Gemini may misinterpret numerical information, overgeneralize from historical evidence, or produce explanations that need additional verification.
-
-Automatic analysis scope is rule-based and may not correctly classify every question.
-
-### 11.9 No Production Integration
-
-The dashboard is not connected to Walmart's live inventory, warehouse, or purchasing systems.
-
-It does not execute orders automatically.
-
-### 11.10 Additional Validation Needed
-
-Manual testing has confirmed selected dashboard functions, including store and department comparisons.
-
-However, further testing is needed for:
-
-- Inventory CSV uploads
-- Missing inventory records
-- Zero-inventory handling
-- Manual stock overrides
-- Cross-page calculation consistency
-- Gemini responses
-- RAG evidence relevance
-
-## 12. Next Steps
-
-The dashboard is currently functioning as an academic prototype.
-
-For now, our priority is to wait for feedback from our sponsor and professor before deciding which additional features are necessary.
-
-Potential follow-up tasks include:
-
-1. Test uploaded inventory records with missing values and explicit zeros.
-2. Verify inventory overrides and cross-page calculations.
-3. Test more Gemini questions across products, departments, and stores.
-4. Review RAG retrieval quality and unsupported claims.
-5. Confirm the assumed cost calculations under different simulation settings.
-6. Review whether historical selling prices should be added for revenue-related analysis.
-7. Test Tyler's updated RAG notebook before integrating it into the dashboard.
-
-Any further improvements should be guided by the project's academic requirements and sponsor feedback.
-
-## 13. Project Documentation
-
-This README combines the project's midterm methodology and results with the updated Streamlit dashboard implementation.
-
-### Midterm Presentation
-
-**Group 4 Midterm — Agentic AI for Retail Demand & Inventory Decision Support**
-
-The midterm provides the basis for:
-
-- Business problem and project objectives
-- Dataset preparation
-- Exploratory data analysis
-- Model training and evaluation
-- Forecasting performance
-- Prediction uncertainty
-- RAG methodology and initial evaluation
-
-### Forecasting Notebooks
-
-See the `forecasting/` directory for the forecasting implementation and related results.
-
-### RAG Development
-
-See the `RAG/` directory for the historical evidence retrieval development files.
-
-### Dashboard Code
-
-The dashboard implementation is maintained in:
-
-- `app.py`
-- `analysis_scope.py`
-- `inventory_bridge.py`
-- `rag_backend.py`
-- `dashboard_forecasts.csv`
-
-### Development History
-
-See the `Development Updates/` folder for notes about dashboard improvements made after the midterm.
-
-**Note:** Midterm model-evaluation results, manual dashboard testing, and proposed future work are separate categories of evidence and should not be treated as equally validated results.
+**Interpretation rule:** Offline model-evaluation results, manually checked dashboard examples, and proposed future work are different kinds of evidence. They should not be presented as if they were all independently validated current-system results.
