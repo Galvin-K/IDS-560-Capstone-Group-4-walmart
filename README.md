@@ -187,7 +187,31 @@ The last finding matters: **a similarity threshold alone is not a reliable no-an
 
 An early comparison across three test orders also found that RAG + LLM cited sources in **84% of its reasons**, compared with **0%** for an LLM without retrieval. A LangChain variant accessed more kinds of evidence but cited less consistently and needed more model calls. These are **small-sample experiments**, not validated production benchmarks or claims about the current Gemini deployment.
 
-**Current implementation:** The working Streamlit assistant now combines deterministic Python forecast/inventory summaries with retrieved RAG passages and Gemini explanations, rather than restricting the assistant to historical retrieval alone. Tyler's newer `M5_RAG_agent_v3.ipynb` was shared separately but had **not yet been merged/tested** in the working dashboard as of this update.
+**Current dashboard:** The working Streamlit assistant combines Python-calculated forecast/inventory summaries, retrieved historical passages, and Gemini explanations. It does not autonomously execute orders.
+
+### RAG agent development (separate from the deployed dashboard)
+
+Tyler's `M5_RAG_agent_v2_lightgbm.ipynb` develops a more detailed workflow for combining LightGBM forecasts with inventory decision rules and historical evidence. The notebook includes:
+
+- LightGBM forecast loading and a Recent Mean fallback when a requested forecast is missing;
+- an illustrative order-up-to calculation that considers forecast demand, lead time, review period, and safety stock, plus review flags for potentially misleading zero-sales periods;
+- date-aware retrieval of historical evidence and M5-derived context, with additional metadata filtering and controls over retrieved passages;
+- four explanation approaches for comparison: a fixed template, RAG + LLM, a LangChain agent, and an LLM without RAG; and
+- evaluation checks for citation use, unsupported claims, future-information leakage, preservation of order quantities, and response cost/latency.
+
+This notebook's ordering rule is **not the same** as the dashboard's simpler seven-day demand-gap calculation. The notebook and its evaluation should be reviewed before any integration. The saved notebook is labeled `v2_lightgbm`; an updated v3 version and replacement chunks/index files have been mentioned but are **not yet confirmed as integrated or validated** in the deployed app.
+
+### Improving retrieval quality (proposed)
+
+Retrieving the top **K** most similar passages does not guarantee that they are relevant to the question. Potential improvements to test include:
+
+- **Metadata filtering:** Restrict candidates by publication date, state, document type, and other relevant attributes before ranking.
+- **Similarity thresholds:** Evaluate whether a minimum score helps reject weak matches, while recognizing that relevant and irrelevant passages can have overlapping scores.
+- **Reranking:** Reorder the retrieved candidates using a second relevance check, then keep the most useful evidence.
+- **Retrieval evaluation:** Compare approaches on supported answers, irrelevant passages, no-answer questions, and citation quality.
+
+These are possible experiments, **not claims that a new threshold or reranker has already been implemented**. Because the COVID-19 no-answer test returned a plausible similarity score, a threshold should not be the only safeguard.
+
 
 ## 7. Dashboard — current implementation
 
@@ -318,9 +342,16 @@ The app retrieves forecasts from its checked-in CSV; it does **not** retrain Lig
 7. **No production integration.** There is no live database connection, validated stockout record, warehouse synchronization, production forecasting endpoint, or autonomous ordering.
 8. **Not yet fully regression-tested.** Selected cross-store and department questions worked during manual testing, but all stock-upload scenarios, overrides, page combinations, and explanation claims still need systematic verification.
 
+### New-product forecasting (proposed / cold start)
+
+The current model relies on an item's sales history, which creates a challenge when forecasting a new product with little or no recorded demand. One possible starting point is to use the history of **similar products** rather than assume the new item will behave exactly like an established product.
+
+We could first group candidates by **category, price range, and region**, then use comparable products' demand patterns as an initial estimate. As the new product collects its own sales history, the forecast could gradually shift toward product-specific information. If there are too few suitable matches, the matching criteria could be progressively broadened (for example, from department and price band to the broader category).
+
+This will require experimentation. We should compare alternative grouping strategies through historical cold-start simulations—temporarily treating known products as new and evaluating which comparable groups lead to the best forecasts. We should also check how changing price and region criteria affects the number and relevance of matches. **No cold-start forecasting method has been validated or deployed yet.**
 
 
-## 12. Project documentation and evaluation
+## 11. Project documentation and evaluation
 
 This README combines:
 
