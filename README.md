@@ -8,7 +8,7 @@
 
 ## Project overview
 
-This project explores how historical demand forecasts, inventory inputs, and an AI assistant can support retail inventory planning. It uses the public Walmart M5 competition dataset for historical forecasting demonstrations. However, we do not have access to Walmart's internal data and the dataset **not** connected to Walmart's current inventory, purchasing, or operational systems.
+This project explores how historical demand forecasts, inventory inputs, and an AI assistant can support retail inventory planning. It uses the public Walmart M5 competition dataset for historical forecasting demonstrations. However, we do not have access to Walmart's internal data and the dataset **is not** connected to Walmart's current inventory, purchasing, or operational systems.
 
 The dashboard combines precomputed LightGBM item-store-day forecasts, illustrative inventory calculations, historical evidence retrieval (RAG), and Gemini-generated explanations. Calculations are performed in Python; Gemini interprets the supplied context rather than generating the forecast or executing orders.
 
