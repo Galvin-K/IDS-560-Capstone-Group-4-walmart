@@ -40,7 +40,7 @@ def simulated_stock(item_id, demand, p90_sum):
     return max(0, math.ceil(upper * 1.15) + 1)
 
 
-def apply_inventory(items, uploaded, mode, overrides=None):
+def apply_inventory(items, uploaded, mode, overrides=None, missing_policy="Use simulated inventory"):
     """Returns item-store rows with starting_stock and inventory_source."""
     out = items.copy()
     if 'store_id' not in out.columns or not set(KEYS).issubset(out.columns):
@@ -52,6 +52,9 @@ def apply_inventory(items, uploaded, mode, overrides=None):
     if mode == 'Uploaded inventory' and uploaded is not None:
         out = out.merge(uploaded, on=KEYS, how='left', validate='many_to_one')
         matched = out['on_hand'].notna()
+        if missing_policy == 'Assume 0 units':
+            out.loc[~matched, 'starting_stock'] = 0
+            out.loc[~matched, 'inventory_source'] = 'Assumed zero (missing upload)'
         out.loc[matched, 'starting_stock'] = out.loc[matched, 'on_hand'].astype('int64')
         out.loc[matched, 'inventory_source'] = 'Uploaded'
         out = out.drop(columns='on_hand')
