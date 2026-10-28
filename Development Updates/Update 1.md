@@ -3,7 +3,7 @@
 **Date:** October 27, 2026  
 **Status:** Dashboard implementation working in demonstration; business assumptions and academic validation awaiting sponsor/faculty feedback.
 
-## Summary of changes since the earlier README/update
+## Summary of changes 
 
 The earlier update described an assistant that could retrieve historical evidence but was not connected to numerical forecasting. That description is **out of date**.
 
@@ -69,4 +69,3 @@ Selecting the top K passages does not mean that every returned passage is actual
 - **Sponsor:** Utility of assumed unit cost versus selling-price/revenue metrics; preferred action priorities; decision-support expectations.
 - **Professor:** Appropriate limitations, metric terminology, model-evaluation requirements, and what constitutes sufficient validation for the capstone.
 
-**Next-step ideas are recorded for discussion, not scheduled as completed work.** Review feedback and Tyler's testing results before integrating them.
