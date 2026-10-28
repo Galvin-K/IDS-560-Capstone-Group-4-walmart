@@ -48,17 +48,17 @@ df = load_forecasts()
 # 3. HEADER
 
 # DASHBOARD_STYLE_V1
-st.markdown('\n    <style>\n    /* DASHBOARD_STYLE_V1 */\n\n    /* Main background */\n    [data-testid="stAppViewContainer"] {\n        background-color: #f2f8fd;\n        color: #041e42;\n    }\n\n    /* Sidebar */\n    [data-testid="stSidebar"] {\n        background-color: #e7f1fa;\n        border-right: 1px solid #d2e2ef;\n    }\n\n    /* Page headings */\n    h1, h2, h3 {\n        color: #041e42;\n    }\n\n    /* KPI cards */\n    [data-testid="stMetric"] {\n        background: white;\n        border: 1px solid #d6e3ed;\n        border-radius: 10px;\n        padding: 16px;\n    }\n\n    /* Selected tabs */\n    button[data-baseweb="tab"][aria-selected="true"] {\n        color: #0071ce;\n        border-bottom-color: #0071ce;\n    }\n\n    /* Buttons */\n    div.stButton > button[kind="primary"],\n    button[data-testid="stFormSubmitButton"] {\n        border-radius: 8px;\n    }\n\n    /* Chart containers */\n    [data-testid="stPlotlyChart"] {\n        background: white;\n        border-radius: 10px;\n        padding: 8px;\n    }\n\n    /* Main content width */\n    .block-container {\n        max-width: 1280px;\n        padding-top: 2rem;\n    }\n    </style>\n    ', unsafe_allow_html=True)
+st.markdown('\n    <style>\n    /* DASHBOARD_STYLE_V1 */\n\n    /* Main background */\n    [data-testid="stAppViewContainer"] {\n        background-color: #f2f8fd;\n        color: #041e42;\n    }\n\n    /* Sidebar */\n    [data-testid="stSidebar"] {\n        background-color: #e7f1fa;\n        border-right: 1px solid #d2e2ef;\n    }\n\n    /* Page headings */\n    h1, h2, h3 {\n        color: #041e42;\n    }\n\n    /* KPI cards */\n    [data-testid="stMetric"] {\n        background: white;\n        border: 1px solid #d6e3ed;\n        border-radius: 10px;\n        padding: 16px;\n    }\n\n    /* Selected tabs */\n    button[data-baseweb="tab"][aria-selected="true"] {\n        color: #0071ce;\n        border-bottom-color: #0071ce;\n    }\n\n    /* Buttons */\n    div.stButton > button[kind="primary"],\n    button[data-testid="stFormSubmitButton"] {\n        border-radius: 8px;\n    }\n\n    /* Chart containers */\n    [data-testid="stPlotlyChart"] {\n        background: white;\n        border-radius: 10px;\n        padding: 8px;\n    }\n\n    /* Main content width */\n    .block-container {\n        max-width: 1280px;\n        padding-top: 3.25rem;\n    }\n    </style>\n    ', unsafe_allow_html=True)
 
 # Clean application header. Walmart logo is linked to the public Walmart wordmark file.
 # Trademark belongs to Walmart; this independent project is not an official Walmart system.
 st.markdown(
     """
-    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:0 0 16px 0">
+    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;min-height:80px;padding:16px 0 12px 0;margin:0 0 12px 0;overflow:visible">
       <img
         src="https://commons.wikimedia.org/wiki/Special:Redirect/file/Walmart_logo_%282025%3B_Alt%29.svg"
         alt="Walmart"
-        style="width:160px;height:auto;max-height:54px;object-fit:contain"
+        style="display:block;width:160px;max-width:100%;height:55px;object-fit:contain;object-position:center"
       />
       <span style="font-size:2.05rem;font-weight:730;color:#041e42;line-height:1.2">Demand &amp; Inventory Planner</span>
     </div>
@@ -208,7 +208,7 @@ with overview:
         "are assumptions. No replenishment is modeled."
     )
 
-    with st.expander("Simulation settings", expanded=False):
+    with st.expander("Inventory assumptions", expanded=False):
         inv_scope = "All departments"
 
         inv_controls = st.columns(2)
@@ -433,12 +433,12 @@ with overview:
     if inv_action:
         st.warning(
             f"{inv_action:,} of {inv_total:,} included items "
-            "have a simulated point-forecast shortage "
+            "have an estimated point-forecast shortage "
             "within seven days."
         )
     else:
         st.success(
-            "No simulated point-forecast shortages "
+            "No estimated point-forecast shortages "
             "within seven days."
         )
 
@@ -490,7 +490,7 @@ with overview:
 
     st.caption(
         "Compare all available stores using the same "
-        "seven-day forecast horizon, inventory simulation "
+        "seven-day forecast horizon, inventory estimation "
         "rules, and assumed unit cost. Select a store "
         "to update the entire dashboard."
     )
@@ -666,7 +666,7 @@ with overview:
 
     st.caption(
         "Inventory levels use uploaded records when selected and available, "
-        "otherwise simulated values. Units to order cover "
+        "otherwise estimated values. Units to order cover "
         "point-forecast gaps, not validated purchase orders. "
         "Figures exclude products outside the forecasting "
         "sample and use an assumed common unit cost."
@@ -702,7 +702,7 @@ with overview:
             "item_id": "Product",
             "dept_id": "Department",
             "gap": "Demand Gap (Units)",
-            "units_to_cover": "Units to Order (Simulated)",
+            "units_to_cover": "Estimated Units to Order",
             "estimated_order_cost": "Est. Order Cost ($)",
         }).round(2)
         st.dataframe(
@@ -712,7 +712,7 @@ with overview:
         )
 
     st.caption(
-        "Estimated order costs use the same assumed unit cost as the simulated "
+        "Estimated order costs use the same assumed unit cost as the estimated "
         "order list; these are illustrative, not validated purchase orders. "
         "Full inventory and order lists are in Inventory Planning."
     )
@@ -1042,8 +1042,8 @@ with planning:
 
     st.header("Inventory Planning")
 
-    st.write("Explore historical forecast demand using a chosen uploaded or simulated stock source.")
-    st.warning("The M5 dataset has no actual stock-on-hand, replenishment lead times or observed stockouts. Uploaded stock is user-provided; simulated stock is illustrative, not actual Walmart data.")
+    st.write("Explore forecast demand using uploaded stock or assumption-based inventory estimates.")
+    st.warning("M5 does not include inventory-on-hand, supplier lead times, or observed stockouts. Uploaded quantities are user-provided; estimated quantities follow forecast-based assumptions.")
 
     st.subheader("Prioritized Inventory Action List")
 
@@ -1133,7 +1133,7 @@ with planning:
 
     # ORDER_LIST_V2
 
-    st.subheader("Today's Order List (Simulated)")
+    st.subheader("Estimated Order List")
 
     st.caption(
         "Historical planning example as of December 31, 2015. "
@@ -1314,7 +1314,7 @@ with planning:
             if not selected_inventory_row.empty else "Simulated"
         )
         st.metric("Starting Stock (units)", f"{on_hand:,}")
-        st.caption(f"Inventory source: {selected_source}. Change it in the sidebar inventory settings.")
+        st.caption(f"Inventory source: {'Estimated' if selected_source == 'Simulated' else selected_source}. Change it in the sidebar inventory settings.")
 
     with col2:
         st.metric(
@@ -1390,9 +1390,9 @@ with planning:
     st.subheader("Stock Runway — Next 7 Days")
 
     st.caption(
-        "Product-specific inventory uses the chosen uploaded or simulated "
+        "Product-specific inventory uses the chosen uploaded or estimated "
         "source consistently across the dashboard. Stockout projections "
-        "are illustrative, not observed Walmart stockouts."
+        "are estimates, not observed Walmart stockouts."
     )
 
     import math
@@ -1464,9 +1464,9 @@ with planning:
         )
 
         scenario_names = {
-            0: "Low simulated stock",
-            1: "Moderate simulated stock",
-            2: "High simulated stock"
+            0: "Low estimated stock",
+            1: "Moderate estimated stock",
+            2: "High estimated stock"
         }
 
         simulated_type = dict(
@@ -1595,7 +1595,7 @@ with planning:
         )
 
         st.caption(
-            "Colors reflect simulated stock levels and cumulative "
+            "Colors reflect estimated stock levels and cumulative "
             "demand. Summed daily P90 values are illustrative, "
             "not calibrated seven-day prediction intervals."
         )
@@ -1690,7 +1690,7 @@ with planning:
             stock_chart.update_layout(
                 title=f"7-Day Stock Projection — {selected_product}",
                 xaxis_title="Forecast Day",
-                yaxis_title="Remaining Simulated Stock (Units)",
+                yaxis_title="Projected Remaining Stock (Units)",
                 xaxis=dict(dtick=1, range=[0, 7]),
                 yaxis=dict(rangemode="tozero"),
                 height=370,
@@ -1730,13 +1730,13 @@ with planning:
                 f"{high_unmet:.2f} units"
             )
 
-            with st.expander("How simulated inventory is calculated"):
+            with st.expander("How estimated inventory is calculated"):
                 st.markdown(
-                    "When simulated inventory is selected or uploaded stock "
+                    "When estimated inventory is selected or uploaded stock "
                     "is missing, starting inventory is generated using "
                     "the seven-day LightGBM forecast. "
-                    "For simulations, products are consistently assigned "
-                    "to one of three illustrative scenarios:"
+                    "For estimates, products are consistently assigned "
+                    "to one of three assumption-based scenarios:"
                 )
 
                 st.markdown(
@@ -1750,7 +1750,7 @@ with planning:
                 )
 
                 st.info(
-                    "Simulated scenarios are synthetic assumptions; uploaded "
+                    "Estimated stock scenarios use predefined assumptions; uploaded "
                     "values are user-provided and not independently verified. Summed daily "
                     "P90 values are not calibrated weekly P90 "
                     "prediction intervals."
@@ -1758,13 +1758,13 @@ with planning:
 
             st.caption(
                 "Potential shortages are calculated when cumulative predicted "
-                "demand exceeds simulated starting inventory. "
-                "These are simulated shortages, not observed lost sales."
+                "demand exceeds estimated starting inventory. "
+                "These are estimated gaps, not observed lost sales."
             )
 
             if day_record["point_balance"] < 0:
                 st.error(
-                    "Simulated inventory is insufficient under "
+                    "Estimated inventory is insufficient under "
                     "the point forecast by the selected day."
                 )
             elif day_record["high_balance"] < 0:
@@ -1774,7 +1774,7 @@ with planning:
                 )
             else:
                 st.success(
-                    "Simulated inventory covers both scenarios "
+                    "Estimated inventory covers both scenarios "
                     "through the selected day."
                 )
 
@@ -1887,12 +1887,12 @@ with assistant:
             affected_items = int((scoped_rows["gap"] > 0).sum())
             k1, k2, k3, k4 = st.columns(4)
             k1.metric("7-day forecast", f"{total_forecast:,.2f}", help="Forecast units for the chosen scope")
-            k2.metric("Starting stock", f"{total_stock:,}", help="Uploaded, overridden, or simulated stock")
+            k2.metric("Starting stock", f"{total_stock:,}", help="Uploaded, overridden, or estimated stock")
             k3.metric("Item-level shortage", f"{total_gap:,.2f}", help="Sum of positive item-store forecast gaps")
             k4.metric("Items with shortage", f"{affected_items:,}", help=f"Out of {n_series:,} item-store series")
             st.caption(
                 f"Scope: {active_scope} | {n_series:,} item-store series | "
-                "Historical M5 sample; inventory may be simulated or uploaded. "
+                "Historical M5 sample; inventory may be estimated or uploaded. "
                 "No live stock or validated purchase orders."
             )
             if scoped_rows["store_id"].nunique() > 1:
