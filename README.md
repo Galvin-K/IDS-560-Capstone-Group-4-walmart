@@ -1,110 +1,112 @@
-# IDS-560-Capstone-Group-4-walmart-project
-# Walmart M5 – Retail Demand Forecasting & Inventory Decision Support
+# Walmart M5 | Demand & Inventory Planner
 
-**UIC IDS 560 Capstone Project | Group 4 | Fall 2026**
+**UIC IDS 560 Capstone — Group 4**  
+**Project status:** Functional academic prototype; sponsor and faculty feedback pending  
+**Updated:** October 27, 2026
 
-## Project Overview
+**Live dashboard:** https://ids-560-capstone-group-4-walmart.streamlit.app/
 
-This project develops an AI-assisted decision-support system to help retail managers make better inventory-planning decisions. Using historical Walmart M5 sales data, we forecast product demand, evaluate potential inventory shortages, and provide supporting business information through a Retrieval-Augmented Generation (RAG) assistant.
+## Project overview
 
-The project combines three main components:
+This project explores how historical demand forecasts, inventory inputs, and an AI assistant can support retail inventory planning. It uses the public Walmart M5 competition dataset for historical forecasting demonstrations. It is **not** connected to Walmart's current inventory, purchasing, or operational systems.
 
-1. **Demand Forecasting:** Predict future item-store sales using LightGBM and compare its performance with traditional forecasting methods.
-2. **Inventory Planning:** Use demand forecasts and simulated or user-provided inventory levels to support replenishment decisions.
-3. **AI Assistant:** Retrieve relevant historical evidence and provide contextual information through RAG.
+The dashboard combines precomputed LightGBM item-store-day forecasts, illustrative inventory calculations, historical evidence retrieval (RAG), and Gemini-generated explanations. Calculations are performed in Python; Gemini interprets the supplied context rather than generating the forecast or executing orders.
 
-The system is presented through an interactive Streamlit dashboard.
+## Dashboard pages
 
-## Live Dashboard
+| Page | What it provides |
+| --- | --- |
+| **Executive Overview** | Selected-store demand summary, inventory action KPIs, simulation assumptions, comparison charts, and a ranked **Top Priorities** table. The table offers 5, 10, 20, or 50 rows and includes estimated order cost. |
+| **Demand Forecasting** | Department-level forecast table and chart, page-specific department/product selection, product KPIs, and daily forecasts with illustrative P10/P90 ranges. |
+| **Inventory Planning** | Prioritized action and illustrative order lists, page-specific product selection and stock overrides, assumptions, projected inventory KPIs, product stock trajectories, user-selected multi-product stock runway, and shortage visualizations. |
+| **AI Assistant** | Question-based analysis scope (selected item, department, store, or all available stores/products), calculated forecast/inventory context, relevant historical evidence, and Gemini explanations. |
 
-**[SmartStock AI – Streamlit Dashboard](https://ids560-walmart-group4.streamlit.app/)**
+The AI assistant can compare stores and departments using calculated quantities from the dashboard's included forecasting sample. It also retrieves dated historical evidence; these documents provide contextual information, **not** the source of numerical inventory calculations.
 
-The dashboard provides:
+## Data and modeling
 
-- Interactive store, department, and product selection
-- LightGBM demand forecasts and prediction intervals
-- Inventory-planning scenarios with adjustable starting stock
-- Executive KPIs and forecasting visualizations
-- RAG-based AI assistant for retrieving supporting information
+- **Data:** Public M5 Forecasting Accuracy/Uncertainty data (historical sales, product/store hierarchy, calendar and historical selling-price inputs in the original M5 package). The deployed dashboard uses a derived forecast file rather than querying the raw M5 files at runtime.
+- **Unit of forecast:** Item–store–day; seven-day forecasts displayed for a historical January 2016 demonstration.
+- **Forecast model:** LightGBM with precomputed point estimates and daily lower/upper scenarios (`p10`, `p90`). Model work and evaluation artifacts are located under `forecasting/` and `evaluation/`.
+- **Scope:** The included forecast dataset is a **50% forecasting sample**, not all Walmart products. The number of item-store series displayed depends on the active analysis scope.
+- **Forecast evaluation:** Project evaluations are documented separately; avoid interpreting the app as a live accuracy or replenishment validation system.
 
-## Dataset
+## Inventory inputs and calculations
 
-The project primarily uses the public **M5 Forecasting Accuracy and M5 Forecasting Uncertainty** datasets, which contain historical Walmart sales information from 2011–2016.
+The sidebar provides two inventory modes:
 
-The data includes daily item-store sales, product and store identifiers, pricing, calendar events, and SNAP indicators. An external weather dataset was also joined with the M5 data for additional analysis.
+1. **Simulated inventory:** Generates illustrative starting stock for forecasted item-store pairs.
+2. **Uploaded inventory:** Accepts a CSV with the columns `store_id,item_id,on_hand`. For missing item-store records or missing `on_hand` values, the user chooses **use simulated inventory** or **assume 0 units**. An explicitly entered `0` is treated as zero stock.
 
-**Important limitation:** The M5 dataset does not provide actual inventory levels or stockout records. Inventory-planning scenarios therefore rely on simulated or user-provided values.
+Inventory Planning also supports a manual override for a chosen product. No inventory is fetched from Walmart systems. The uploaded values are supplied by the user for the historical demonstration and should not be assumed accurate or current.
 
-## Forecasting Methodology
+For each product, an illustrative point-forecast gap is calculated from predicted seven-day demand and starting stock. Summing positive item-level gaps is **not** equivalent to subtracting total stock from total demand. Units-to-order and stockout estimates exclude real lead-time constraints, inbound shipments, substitution effects, and validated ordering policies.
 
-The team evaluated several forecasting approaches, including Zero Naive, Weekly Seasonal Naive, Recent Mean, Croston, SBA, TSB, and LightGBM.
+## Prices versus costs: pending business clarification
 
-Models were evaluated using chronological validation and rolling-origin backtesting across 7-, 14-, and 28-day forecasting horizons.
+**The original M5 dataset includes historical selling prices, but it does not provide Walmart's actual product procurement costs.** These are different quantities.
 
-Evaluation metrics include WAPE, MAE, RMSE, Forecast Bias, and Forecast Value Added (FVA). Residual-based prediction intervals were evaluated using coverage, interval width, and Pinball Loss.
+- The dashboard currently uses an **adjustable assumed unit cost** (default **$5**) to estimate illustrative ordering expense: `estimated order cost = illustrative units to order × assumed unit cost`.
+- Historical **selling price** could support a separate estimated sales-value or revenue-at-risk metric after the appropriate product, store, and week join, but it is **not** a substitute for procurement cost.
+- The dashboard's current assumed selling-price field is likewise illustrative; neither field should be presented as actual transaction prices or purchasing costs.
+- **Decision pending:** Retain the cost assumption until the sponsor and professor advise whether to incorporate historical selling prices, user-supplied costs, or another explicitly defined metric. No cost-model change is planned before that feedback.
 
-### Key Results
+## AI Assistant architecture
 
-| Model | 7-Day WAPE (2016 Test) |
-|---|---:|
-| LightGBM | 71.6% |
-| Recent Mean | 74.6% |
+1. Load precomputed forecast data and the chosen inventory values.
+2. Determine analysis scope from the question (or let the user override it manually).
+3. Aggregate forecast and gap metrics deterministically in Python and display tables/KPIs.
+4. Retrieve eligible historical evidence from the local RAG corpus (`rag_backend.py`).
+5. Send the question, structured numeric context, and retrieved passages to Gemini for an explanation.
 
-LightGBM achieved the lowest forecasting error among the evaluated models, with the 7-day horizon performing best.
+**AI interpretation is not a decision engine.** Gemini does not change inventory, place orders, or re-run LightGBM. Outputs should be checked against the displayed tables. References to store/department shortages mean model-calculated gaps under the selected stock assumptions, not confirmed real-world stockouts.
 
-## RAG-Based AI Assistant
-
-The RAG component retrieves information from historical documents and external sources, including NOAA Storm Events data, economic reports, and other relevant business information.
-
-The team is evaluating multiple approaches, including Pure RAG, Pure LLM, RAG + LLM, and a LangChain-based agent.
-
-Evaluation focuses on retrieval relevance, answer correctness, citation quality, and unsupported-answer handling.
-
-The current assistant retrieves supporting evidence but is not yet fully integrated with numerical forecasting and inventory-planning calculations.
-
-## Repository Structure
+## Repository structure
 
 ```text
-IDS-560-Capstone-Group-4-walmart-dashboard/
-│
-├── app.py                    # Streamlit dashboard
-├── rag_backend.py            # RAG backend integration
-├── dashboard_forecasts.csv   # Precomputed forecasting results
-├── requirements.txt          # Application dependencies
-│
-├── forecasting/
-│   └── updated_M5_Final_Forecast.ipynb
-│
-├── RAG/                      # RAG development files
-├── evaluation/               # Evaluation files
-│
+.
+├── app.py                     # Streamlit dashboard (four pages)
+├── analysis_scope.py          # Scope selection and numeric summaries
+├── inventory_bridge.py       # CSV inventory parsing and stock-source logic
+├── rag_backend.py             # Retrieval of historical evidence
+├── dashboard_forecasts.csv    # Precomputed forecast output
+├── requirements.txt          # Python dependencies
+├── forecasting/              # Forecast development notebook(s)
+├── RAG/                      # Retrieval development and indexed evidence
+├── evaluation/               # Forecast / retrieval evaluation artifacts
 ├── README.md
 └── .gitignore
 ```
 
-Additional forecasting, RAG, and evaluation files will be incorporated as development continues.
+## Run locally
 
-## Current Limitations
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
 
-- Historical sales do not necessarily represent actual customer demand when products are out of stock.
-- Inventory values are simulated or entered manually.
-- Forecasting results are precomputed rather than generated through real-time model inference.
-- The AI assistant is not yet fully connected to numerical forecasting and inventory calculations.
-- The system is not connected to Walmart's operational databases or inventory systems.
-- The prototype is intended for academic demonstration and evaluation, not production deployment.
+Configure a Google Gemini API key in Streamlit Secrets (or an appropriate local secrets/environment setup):
 
-## Future Development
+```toml
+GEMINI_API_KEY = "YOUR_KEY_HERE"
+```
 
-The next development priorities include improving forecasting–RAG integration, expanding RAG evaluation, refining prediction intervals, investigating cold-start forecasting for new products, and improving inventory-planning functionality.
+Do **not** commit real API keys or uploaded inventory containing confidential information to GitHub. If Gemini is unavailable, forecast displays and local RAG retrieval can still work independently.
 
-## Project Team
+## Current limitations
 
-University of Illinois Chicago — IDS 560 Capstone, Group 4
+- Data are historical (2011–2016), and the deployed forecasts are precomputed, not generated by real-time inference.
+- Sales are an imperfect proxy for unconstrained customer demand, especially during out-of-stock periods.
+- Forecasting coverage is limited to the included sample; extrapolation to all products or current Walmart operations is not supported.
+- Inventory is simulated or user-uploaded; observed stockouts, supplier lead times, inbound orders, and actual procurement costs are unavailable.
+- Default cost and price assumptions are illustrative. **Actual procurement cost is unknown; historical M5 selling prices are not procurement costs.**
+- Daily P10/P90 scenarios should not be interpreted as validated seven-day prediction intervals when summed across days.
+- Positive forecast gaps, stockout dates, suggested order quantities, and cost estimates have not been operationally validated.
+- RAG evidence may be broader than a specific item or location; retrieved similarity does not establish causality. Gemini explanations can be mistaken and must be verified against the calculated tables and original sources.
+- The prototype does not autonomously order, change stock, or connect to Walmart's operational systems.
 
-**Industry Sponsor:** Walmart Anjali Garg
+## Status and next review
 
-**Academic Supervisor:** Professor Fatemeh Sarayloo
+The current code supports store/department comparisons, product forecasts, inventory inputs and overrides, stock-runway views, and forecast-aware Gemini + RAG explanations. Next changes will be considered **after sponsor and professor feedback**, particularly concerning historical prices, assumed cost values, and decision-support validation.
 
----
-
-*This project uses publicly available data and is developed for academic research and demonstration purposes. It is not an official Walmart production system.*
+See **`PROJECT_UPDATE_2026-10-27.md`** for the current handoff notes and verification checklist.
