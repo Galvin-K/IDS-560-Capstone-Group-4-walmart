@@ -23,7 +23,6 @@ The earlier update described an assistant that could retrieve historical evidenc
 - **Dashboard presentation:** Updated the header with the Walmart logo and simplified the title to "Demand & Inventory Planner." Removed the technical subtitle and footer, replaced several references to simulated inventory with estimated inventory, and added an expandable "About the Forecast & Data" section. The dashboard now uses cleaner KPI cards, structured comparison tables, shorter Gemini explanations, and collapsible historical evidence.
 
 
-- **Walmart logo:** Added the Walmart logo beside the "Demand & Inventory Planner" title to improve the dashboard's appearance and make it more consistent with Walmart's branding.
 
 ## Confirmed manual demonstration checks
 
