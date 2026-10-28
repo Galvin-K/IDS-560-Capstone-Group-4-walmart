@@ -652,34 +652,44 @@ with overview:
 
     st.subheader("Top Priorities")
 
-    urgent = (
-        inv_items[inv_items["gap"] > 0]
-        .sort_values(
-            ["first_shortage", "gap"],
-            ascending=[True, False]
-        )
-        .head(5)
+    priority_count = st.selectbox(
+        "Number of priorities to display",
+        options=[5, 10, 20, 50],
+        index=1,
+        key="executive_top_priorities_count",
     )
 
+    urgent = (
+        inv_items[inv_items["gap"] > 0]
+        .sort_values(["first_shortage", "gap"], ascending=[True, False])
+        .head(priority_count)
+        .copy()
+    )
     if urgent.empty:
-        st.success(
-            "No point-forecast shortages in this selection."
-        )
+        st.success("No point-forecast shortages in this selection.")
     else:
+        # Match the assumed unit cost used in the simulated order-list KPIs.
+        urgent["estimated_order_cost"] = (
+            urgent["units_to_cover"].astype(int) * inv_cost
+        ).round(2)
+        priorities_display = urgent[
+            ["item_id", "dept_id", "gap", "units_to_cover", "estimated_order_cost"]
+        ].rename(columns={
+            "item_id": "Product",
+            "dept_id": "Department",
+            "gap": "Demand Gap (Units)",
+            "units_to_cover": "Units to Order (Simulated)",
+            "estimated_order_cost": "Est. Order Cost ($)",
+        }).round(2)
         st.dataframe(
-            urgent[
-                ["item_id", "dept_id", "gap", "units_to_cover"]
-            ].rename(columns={
-                "item_id": "Product",
-                "dept_id": "Department",
-                "gap": "Demand Gap (Units)",
-                "units_to_cover": "Units to Order (Simulated)"
-            }).round(2),
+            priorities_display,
             hide_index=True,
-            use_container_width=True
+            use_container_width=True,
         )
 
     st.caption(
+        "Estimated order costs use the same assumed unit cost as the simulated "
+        "order list; these are illustrative, not validated purchase orders. "
         "Full inventory and order lists are in Inventory Planning."
     )
 
