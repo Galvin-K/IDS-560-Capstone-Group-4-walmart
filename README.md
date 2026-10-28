@@ -290,7 +290,8 @@ The **Automatic** scope selector uses rules based on question wording; it is not
 - `Which stores have the largest predicted inventory shortages over the next seven days?`
 - `Which departments have the highest predicted inventory gaps across all stores?`
 - `What is the forecast and starting stock for this selected product?`
-- `What historical evidence could help explain Foods demand in Wisconsin?`
+- `What historical evidence could help explain Foods demand in Wisconsin?
+- Compare the predicted inventory shortages between WI_3 and CA_4 over the next 7 days.`
 
 For the first two examples, the team manually checked that Gemini's displayed rankings aligned with the Python-generated numerical tables. That is **limited UI verification**, not comprehensive system validation.
 
