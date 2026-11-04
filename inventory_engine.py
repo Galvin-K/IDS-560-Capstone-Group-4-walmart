@@ -104,3 +104,41 @@ def repeat_week_scenario(seven_day_forecast: Sequence[float]) -> np.ndarray:
     if len(values) != 7 or not np.isfinite(values).all() or (values < 0).any():
         raise ValueError("Exactly seven finite nonnegative forecast values required")
     return np.tile(values, 2)
+
+
+def apply_precomputed_policy(row, on_hand: float, on_order: float = 0) -> dict:
+    """Recalculate order quantities from stock-independent v4 offline targets.
+
+    The original policy was evaluated at a fixed decision date; changing stock
+    affects only inventory position and order quantity, not forecasts/flags.
+    Held items remain on hold, regardless of starting inventory.
+    """
+    from math import ceil, isfinite
+    if any(not isfinite(float(x)) or float(x) < 0 for x in (on_hand, on_order)):
+        raise ValueError("On-hand and on-order quantities must be nonnegative and finite")
+    target = float(row["order_up_to"])
+    if not isfinite(target) or target < 0:
+        raise ValueError("Missing or invalid precomputed order-up-to target")
+    raw_hold = row["hold"]
+    if isinstance(raw_hold, bool):
+        held = raw_hold
+    else:
+        held = str(raw_hold).strip().lower() in {"true", "1", "yes"}
+    computed = max(0, ceil(target - float(on_hand) - float(on_order)))
+    alt_target = row.get("new_item_if_confirmed_target", None)
+    if alt_target is not None and str(alt_target).strip().lower() not in {"", "nan", "none", "<na>"}:
+        alternative = float(alt_target)
+        if not isfinite(alternative) or alternative < 0:
+            raise ValueError("Invalid new-item conditional target")
+        conditional = max(0, ceil(alternative - float(on_hand) - float(on_order)))
+    else:
+        conditional = computed
+    return {
+        "on_hand": float(on_hand),
+        "on_order": float(on_order),
+        "inventory_position": float(on_hand) + float(on_order),
+        "computed_order_qty": computed,
+        "order_qty": 0 if held else computed,
+        "hold": held,
+        "if_confirmed_order_qty": conditional if held else None,
+    }
