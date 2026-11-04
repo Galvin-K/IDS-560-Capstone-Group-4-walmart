@@ -1,0 +1,5 @@
+{
+ "RELEVANCE_MIN": 0.0153,
+ "NEW_ITEM_STRATEGY": "cascade",
+ "NEW_ITEM_BLEND": true
+}
