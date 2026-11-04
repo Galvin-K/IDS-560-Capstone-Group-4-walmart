@@ -9,6 +9,7 @@ import streamlit as st
 import inspect
 from pathlib import Path
 from inventory_bridge import apply_inventory, forecast_inventory_answer
+from inventory_engine import protection_period_order, repeat_week_scenario
 from analysis_scope import SCOPES, resolve_question, scope_summary
 
 
@@ -1340,6 +1341,61 @@ with planning:
             "7-Day Predicted Demand",
             f"{predicted_total:,.2f} units"
         )
+
+    # INDEPENDENT PROTECTION-PERIOD PLANNING SCENARIO
+    # This is NOT the v4 notebook's full ordering rule until the real 14-day
+    # forecast cube, historical error series, and validated hold flags arrive.
+    with st.expander("14-Day Ordering & Safety Stock — planning scenario", expanded=False):
+        st.info(
+            "Scenario only: the deployed file contains seven forecast days. "
+            "For illustration, days 8–14 repeat days 1–7. This is not a "
+            "validated 14-day LightGBM forecast or the full v4 agent policy."
+        )
+        plan_cols = st.columns(3)
+        pp_lead = plan_cols[0].number_input(
+            "Replenishment lead time (days)", min_value=1, max_value=13,
+            value=7, step=1, key="pp_lead_days"
+        )
+        pp_review = plan_cols[1].number_input(
+            "Review period (days)", min_value=1, max_value=14 - int(pp_lead),
+            value=min(7, 14 - int(pp_lead)), step=1, key="pp_review_days"
+        )
+        pp_on_order = plan_cols[2].number_input(
+            "Already on order (units)", min_value=0, value=0, step=1,
+            key=f"pp_on_order_{store}_{item}"
+        )
+        pp_buffer = st.number_input(
+            "Assumed safety stock (units — manually entered)",
+            min_value=0, value=0, step=1, key=f"pp_buffer_{store}_{item}",
+            help="A user-entered buffer, NOT the v4 historical-error 95th percentile."
+        )
+        try:
+            scenario_forecast = repeat_week_scenario(
+                item_data.sort_values("date")["forecast"].fillna(0).clip(lower=0).tolist()
+            )
+            scenario_plan = protection_period_order(
+                scenario_forecast,
+                on_hand=on_hand,
+                on_order=pp_on_order,
+                lead_days=int(pp_lead), review_days=int(pp_review),
+                manual_safety_stock=float(pp_buffer),
+                confidence="Not evaluated — historical checks unavailable",
+                forecast_source="Seven-day forecast repeated for scenario only",
+            )
+            summary_cols = st.columns(4)
+            summary_cols[0].metric("Protection-period demand", f"{scenario_plan.expected_demand:,.1f}")
+            summary_cols[1].metric("Assumed safety buffer", f"{scenario_plan.safety_stock:,.0f}")
+            summary_cols[2].metric("Inventory position", f"{scenario_plan.inventory_position:,.0f}")
+            summary_cols[3].metric("Illustrative order quantity", f"{scenario_plan.computed_order_qty:,}")
+            st.caption(
+                "Order-up-to = expected demand over lead time + review period + "
+                "assumed safety buffer. Order quantity = max(0, ceil(order-up-to "
+                "minus inventory position)). This scenario does not include "
+                "validated NEW_ITEM, POSSIBLE_STOCKOUT, or discontinuation holds. "
+                "Forecast confidence: not evaluated. Do not use as a purchase order."
+            )
+        except (ValueError, TypeError) as exc:
+            st.warning(f"Unable to calculate the planning scenario: {exc}")
 
     # Simulated inventory runway
     # Assumes no deliveries during the forecast period
