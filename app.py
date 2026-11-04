@@ -2210,10 +2210,9 @@ with assistant:
                                 st.write(passage["text"])
 
                         st.info(
-                            "These are retrieved evidence passages, "
-                            "not yet an AI-generated explanation. "
-                            "Evidence may describe state or category "
-                            "trends rather than this specific product."
+                            "These passages provide historical context for the AI Assistant. "
+                            "They may describe broader state or category trends rather than "
+                            "a specific product and do not establish causality."
                         )
             except Exception as error:
                 st.error(
@@ -2221,13 +2220,19 @@ with assistant:
                     f"{type(error).__name__}: {error}"
                 )
 
-    with st.expander("v4 research findings and deployment status", expanded=False):
-        st.caption("Offline evaluations reported in the five v4 development notebooks; these are not live dashboard results.")
+    with st.expander("RAG Performance & Research Findings", expanded=False):
+        st.caption("Research benchmarks below come from the five v4 development notebooks; they are not live dashboard performance measurements.")
+        current_retrieval_description = (
+            "Official v4 hybrid candidate search and cross-encoder reranking are active. "
+            "Evidence is filtered by decision date, location, category, and a provisional "
+            "relevance threshold. Retrieved passages provide context, not proof of causality. "
+            "The relevance threshold does not guarantee reliable no-answer detection."
+            if v4_retrieval_available else
+            "The dashboard is using the hybrid-v3 fallback. Official v4 reranking is not active. "
+            "Ranking scores are not validated relevance probabilities."
+        )
         st.markdown(
-            "**Next retrieval priority:** Replace fixed Top-K dense retrieval with the "
-            "v4 hybrid candidate search and validated reranker, returning only "
-            "passages that meet an empirically tested relevance criterion. "
-            "Keep a no-evidence response when none qualifies.\n\n"
+            f"**Current retrieval:** {current_retrieval_description}\n\n"
             "**Retrieval benchmark:** The v4 hybrid + reranker method reported "
             "precision@5 of **0.376** and hit@5 of **0.848**; the v3-style dense baseline "
             "reported **0.315** and **0.758**, respectively. "
@@ -2241,10 +2246,10 @@ with assistant:
             "**New products and confidence:** The v4 notebooks contain cold-start strategy "
             "comparisons, forecast-confidence checks, and hold/review flags. "
             "These have **not yet been connected** to the live 7-day forecast file.\n\n"
-            "**Full v4 integration requirements:** a tested v4 retrieval backend, "
-            "matching chunk/index/settings artifacts and reranker dependencies, plus "
-            "compatible 14-day forecast outputs. The four dashboard tabs still use "
-            "the existing seven-day forecast dataset until separately updated."
+            "**Inventory integration status:** The dashboard continues to use its existing "
+            "seven-day forecast dataset. The validated 14-day ordering policy, item-level "
+            "historical-error safety stock, and confidence/hold flags are not yet connected "
+            "to the live inventory planning calculations."
         )
 
     st.caption(
