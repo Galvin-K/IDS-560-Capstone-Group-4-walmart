@@ -37,10 +37,25 @@ def _tokens(s):
     return {t for t in _TOKEN.findall(str(s).lower()) if len(t) > 2 and t not in _STOP}
 
 
+def _v4_requested():
+    """Read Streamlit Secrets when available, otherwise use process environment.
+
+    Import is delayed so retrieval tests and command-line use don't require
+    Streamlit or a valid secrets.toml file.
+    """
+    default = os.getenv('RAG_USE_V4', '0')
+    try:
+        import streamlit as st
+        value = st.secrets.get('RAG_USE_V4', default)
+    except Exception:
+        value = default
+    return str(value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 @lru_cache(maxsize=1)
 def _v4():
     """Load official v4 only when operator opts in and dependencies exist."""
-    if os.getenv('RAG_USE_V4', '0') != '1':
+    if not _v4_requested():
         raise RuntimeError('v4 not enabled; set RAG_USE_V4=1 after deployment and testing')
     if not (RAG_DIR / 'rag_common.py').is_file() and not (ROOT / 'rag_common.py').is_file():
         raise FileNotFoundError('rag_common.py is missing')
@@ -53,18 +68,20 @@ def _v4():
     rc.setup(m5=False, forecasts=False, library=True)
     if not callable(getattr(rc, 'retrieve', None)):
         raise RuntimeError('rag_common.retrieve unavailable')
+    if getattr(rc, 'RERANKER', None) is None:
+        raise RuntimeError('Official v4 reranker failed to initialize; using v3 fallback')
     return rc
 
 
 def retrieval_status():
     """Truthful active mode; missing/invalid v4 never silently passes as deployed."""
-    if os.getenv('RAG_USE_V4', '0') != '1':
+    if not _v4_requested():
         return {'mode': 'hybrid-v3', 'v4': False,
                 'message': 'Dense + keyword ranking on v3 evidence; official v4 reranker is not active.'}
     try:
         _v4()
         return {'mode': 'official-v4', 'v4': True,
-                'message': 'Official v4 retrieval module initialized; verify evaluations and configuration.'}
+                'message': 'Official v4 hybrid retrieval + cross-encoder reranker active; provisional relevance cutoff is not a validated no-answer detector.'}
     except Exception as exc:
         return {'mode': 'hybrid-v3', 'v4': False,
                 'message': f'Official v4 unavailable ({type(exc).__name__}: {exc}); using hybrid v3 fallback.'}
@@ -185,19 +202,33 @@ def retrieve(query, as_of, state=None, k=5, category=None,
         rc = _v4()
         # Method choices are documented by the team's retrieval notebook.
         v4_method = method if method in ('dense','dense+category','hybrid+category','full') else 'full'
-        res = rc.retrieve(str(query), as_of, state, k=int(k),
-                          category=category if category_filter else None, method=v4_method)
+        # Ask the official method for enough candidates to preserve useful
+        # evidence after filtering; the UI-requested limit is applied last.
+        candidate_count = max(int(k), 30) if v4_method == 'full' else int(k)
+        res = rc.retrieve(str(query), as_of, state, k=candidate_count,
+                          category=category if category_filter else None,
+                          method=v4_method)
         if not isinstance(res, pd.DataFrame):
             raise TypeError('v4 retrieve() must return a DataFrame')
-        if not res.empty and 'published' in res:
+        res = res.copy()
+        if not res.empty:
+            if 'published' not in res:
+                raise ValueError('v4 evidence is missing publication dates')
             dates = pd.to_datetime(res['published'], errors='coerce')
             res = res.loc[dates.notna() & (dates <= pd.Timestamp(as_of))].copy()
-        res = res.copy()
         res['retrieval_method'] = 'official-v4'
-        if 'relevance' in res.columns:
+        if v4_method == 'full':
+            if 'relevance' not in res.columns:
+                raise RuntimeError('v4 reranker returned no relevance column')
+            relevance = pd.to_numeric(res['relevance'], errors='coerce')
+            cutoff = float(getattr(rc, 'RELEVANCE_MIN', 0.0153))
+            # This is the notebook's provisional selection cutoff, NOT a
+            # calibrated no-answer guarantee. Return zero passages if none pass.
+            res = res.loc[relevance.notna() & (relevance >= cutoff)].copy()
             res['score'] = pd.to_numeric(res['relevance'], errors='coerce')
-        elif 'score' not in res:
+            res = res.sort_values('score', ascending=False)
+        elif 'score' not in res.columns:
             res['score'] = np.nan
-        return res
+        return res.head(max(1, int(k))).copy()
     return _retrieve_fallback(query, as_of, state, k, category,
                               min_similarity, category_filter, method)
