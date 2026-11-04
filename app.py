@@ -193,7 +193,7 @@ with overview:
     item_data = filtered[filtered["item_id"] == item].sort_values("date").copy()
 
     st.write(
-        "Summary of predicted demand across all departments at the selected store."
+        "Seven-day demand visibility and a separate 14-day replenishment summary for the selected store."
     )
 
     total_demand = float(filtered["forecast"].sum())
@@ -216,7 +216,7 @@ with overview:
     # Seven-day forecast-based inventory simulation
     import math
 
-    st.subheader("Inventory Action Overview")
+    st.subheader("7-Day Demand & Stock Gap Overview")
     st.caption(
         "Forecast period: January 1–7, 2016. Product stock and costs "
         "are assumptions. No replenishment is modeled."
@@ -464,10 +464,10 @@ with overview:
     )
 
     inv_labels = [
-        "Items needing action",
-        "Units to order",
-        "Estimated order cost",
-        "Sales at risk, lead time",
+        "Items with 7-day gap",
+        "7-day gap units",
+        "7-day gap cost (assumed)",
+        "Sales at risk (assumed)",
         "Items fully covered",
         "Overstock items"
     ]
@@ -496,6 +496,53 @@ with overview:
         "scenarios, not calibrated weekly P90 values."
     )
 
+    # PHASE4: Separate the evaluated 14-day inventory policy from seven-day gaps.
+    # This panel only reads a compact precomputed table: it never starts M5
+    # loading, a model or the RAG reranker. Incoming orders assumed zero.
+    st.subheader("14-Day Replenishment Summary")
+    st.caption(
+        "January 1–14, 2016 | LightGBM forecasts and historical-error safety stock. "
+        "Uses the same estimated/manually adjusted starting stock as the seven-day view. "
+        "Figures are historical planning recommendations, not actual Walmart orders."
+    )
+    policy_ready, policy_note = offline_policy_status()
+    if not policy_ready:
+        st.info("14-day policy table unavailable. The seven-day demand-gap summary above remains usable.")
+    else:
+        try:
+            policy_for_store = load_offline_policy()
+            policy_for_store = policy_for_store[
+                policy_for_store["store_id"].eq(str(store))
+            ].reset_index(drop=True)
+            stock_for_policy = policy_for_store.merge(
+                inv_items[["store_id", "item_id", "starting_stock"]],
+                on=["store_id", "item_id"], how="inner", validate="one_to_one"
+            )
+            if stock_for_policy.empty:
+                st.info("No overlapping 14-day policy and inventory records for this store.")
+            else:
+                decisions = [
+                    apply_precomputed_policy(record, on_hand=float(record["starting_stock"]))
+                    for _, record in stock_for_policy.iterrows()
+                ]
+                held_items = sum(bool(r["hold"]) for r in decisions)
+                to_order_items = sum(int(r["order_qty"]) > 0 for r in decisions)
+                to_order_units = sum(int(r["order_qty"]) for r in decisions)
+                forecasts_14d = float(stock_for_policy["demand_14d"].sum())
+                kpis14 = st.columns(4)
+                kpis14[0].metric("14-day predicted demand", f"{forecasts_14d:,.0f} units")
+                kpis14[1].metric("Items recommended to order", f"{to_order_items:,}")
+                kpis14[2].metric("14-day order units", f"{to_order_units:,}")
+                kpis14[3].metric("Items on review hold", f"{held_items:,}")
+                st.caption(
+                    f"{len(stock_for_policy):,} sampled products in this store | "
+                    "Held products contribute zero recommended order units. "
+                    "Already-on-order units are assumed zero in this store-wide summary. "
+                    "For per-product incoming orders and hold reasons, open Inventory Planning."
+                )
+        except (ValueError, KeyError, TypeError, FileNotFoundError, ImportError) as exc:
+            st.warning(f"14-day summary unavailable: {type(exc).__name__}: {exc}")
+
     # Prioritized inventory action list
 
     # STORE_COMPARISON_V1
@@ -503,8 +550,8 @@ with overview:
     st.subheader("Compare Stores")
 
     st.caption(
-        "Compare all available stores using the same "
-        "seven-day forecast horizon, inventory estimation "
+        "Compare stores using the seven-day demand-gap view, "
+        "inventory estimation "
         "rules, and assumed unit cost. Select a store "
         "to update the entire dashboard."
     )
@@ -668,10 +715,10 @@ with overview:
                             f"**{action_count:,} / {item_count:,}**"
                         )
 
-                        st.caption("Items needing action")
+                        st.caption("7-day gap items")
 
                         st.markdown(
-                            f"**{order_units:,}** units to order"
+                            f"**{order_units:,}** gap units"
                         )
 
                         st.caption(
@@ -688,7 +735,7 @@ with overview:
 
     st.divider()
 
-    st.subheader("Top Priorities")
+    st.subheader("7-Day Demand-Gap Priorities")
 
     priority_count = st.selectbox(
         "Number of priorities to display",
@@ -716,8 +763,8 @@ with overview:
             "item_id": "Product",
             "dept_id": "Department",
             "gap": "Demand Gap (Units)",
-            "units_to_cover": "Estimated Units to Order",
-            "estimated_order_cost": "Est. Order Cost ($)",
+            "units_to_cover": "7-Day Gap Units",
+            "estimated_order_cost": "7-Day Gap Cost ($)",
         }).round(2)
         st.dataframe(
             priorities_display,
@@ -726,9 +773,9 @@ with overview:
         )
 
     st.caption(
-        "Estimated order costs use the same assumed unit cost as the estimated "
-        "order list; these are illustrative, not validated purchase orders. "
-        "Full inventory and order lists are in Inventory Planning."
+        "Seven-day gap costs use an assumed unit cost and do not include safety stock; "
+        "they are not purchase recommendations. "
+        "Find the 14-day replenishment decisions and detailed order lists in Inventory Planning."
     )
 
 # ============================================================
@@ -1339,11 +1386,11 @@ with planning:
     # REAL 14-DAY POLICY — precomputed using the team's v4 LightGBM model,
     # M5 history, safety stock, confidence and hold/review rules. The only
     # live arithmetic is stock-dependent ordering; do NOT initialize M5 here.
-    st.subheader("14-Day Ordering & Safety Stock")
+    st.divider()
+    st.subheader("14-Day Replenishment Planning")
     st.caption(
-        "Historical decision date: December 31, 2015; forecast dates: January 1–14, 2016. "
-        "The v4 policy was calculated offline using M5 history and actual 14-day "
-        "LightGBM forecasts. Inventory quantities remain estimates or manual entries."
+        "January 1–14, 2016 | Precomputed LightGBM forecast, historical-error safety stock "
+        "and manager-review checks. The starting-stock inputs remain estimated or manually entered."
     )
     offline_available, offline_message = offline_policy_status()
     if not offline_available:
@@ -1464,7 +1511,7 @@ with planning:
 
     st.divider()
 
-    st.subheader("Projected Inventory KPIs")
+    st.subheader("7-Day Stock Projection (No Replenishment)")
 
     k1, k2, k3 = st.columns(3)
 
@@ -1474,18 +1521,18 @@ with planning:
     )
 
     k2.metric(
-        "Illustrative Demand Shortfall",
+        "7-Day Demand Shortfall",
         f"{shortfall:,.1f} units"
     )
 
     k3.metric(
-        "Projected Stockout Date",
+        "7-Day Projected Stockout",
         stockout_date
     )
 
     st.caption(
-        "Stockout estimates are based on expected demand "
-        "and assume no replenishment during the forecast."
+        "This seven-day stock projection uses the original demand forecast and assumes "
+        "no replenishment; it is separate from the 14-day ordering policy above."
     )
 
     st.divider()
