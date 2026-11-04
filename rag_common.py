@@ -1159,22 +1159,27 @@ TESTS = [
 ]
 NO_DATA_CARDS = {"ref:data_limits", "ref:stores"}      # a no-answer question is handled if one of these comes first
 def set_paths(project_dir, m5_dir=None):
-    """Configure project paths for Streamlit or local Python."""
     global PROJECT_DIR, M5_DIR, RAG_DIR, RAW_DIR
     global FORECAST_DIR, CUBE_FILE, SEGMENTS_FILE
     global SEG_ERROR_FILE, SETTINGS_FILE
 
     PROJECT_DIR = str(Path(project_dir).resolve()) + "/"
-    M5_DIR = str(Path(m5_dir).resolve()) + "/" if m5_dir else PROJECT_DIR + "M5/datasets/"
+
+    M5_DIR = (
+        str(Path(m5_dir).resolve()) + "/"
+        if m5_dir
+        else PROJECT_DIR + "M5/datasets/"
+    )
+
     RAG_DIR = PROJECT_DIR + "RAG/"
     RAW_DIR = RAG_DIR + "raw/"
+
     FORECAST_DIR = PROJECT_DIR + "forecasting/"
 
     CUBE_FILE = FORECAST_DIR + "forecast_cube_lightgbm_50.npz"
     SEGMENTS_FILE = FORECAST_DIR + "series_segments_50.csv"
     SEG_ERROR_FILE = FORECAST_DIR + "lightgbm_error_by_segment_50.csv"
-    SETTINGS_FILE = RAG_DIR + f"settings_{RUN_TAG}.json"
-    SEG_ERROR_FILE = FORECAST_DIR + "lightgbm_error_by_segment_50.csv"
+
     SETTINGS_FILE = RAG_DIR + f"settings_{RUN_TAG}.json"
 
 def setup(m5=True, library=True, forecasts=True, reranker=True):
