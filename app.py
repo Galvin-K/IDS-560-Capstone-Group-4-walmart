@@ -10,6 +10,7 @@ import inspect
 from pathlib import Path
 from inventory_bridge import apply_inventory, forecast_inventory_answer
 from inventory_engine import protection_period_order, repeat_week_scenario
+from v4_policy_bridge import policy_status, v4_recommendation
 from analysis_scope import SCOPES, resolve_question, scope_summary
 
 
@@ -17,37 +18,28 @@ from analysis_scope import SCOPES, resolve_question, scope_summary
 # v3 supports semantic evidence scores; a v4 backend exposes method="full"
 # for hybrid retrieval and reranking. Do not switch pickle filenames alone.
 def get_retrieval_interface():
-    from rag_backend import retrieve
+    """Report the retrieval engine actually initialized, not just its signature."""
+    from rag_backend import retrieve, retrieval_status
     supported = inspect.signature(retrieve).parameters
-    is_v4 = "method" in supported
-    return retrieve, supported, is_v4
+    status = retrieval_status()
+    return retrieve, supported, bool(status["v4"])
 
 
 def retrieve_dashboard_evidence(question, cutoff, state, category, max_passages,
                                 category_filter=True, min_similarity=None):
-    """Pass only supported arguments to the deployed retrieval backend.
-
-    This adapts the dashboard to a future v4 retrieval function while keeping
-    the v3 production implementation usable. It does NOT implement v4 search.
-    """
+    """Retrieve date-safe historical passages from the active backend."""
     retrieve, parameters, is_v4 = get_retrieval_interface()
     arguments = {
-        "query": question,
-        "as_of": cutoff,
-        "state": state,
-        "k": max_passages,
-        "category": category if category_filter else None,
+        "query": question, "as_of": cutoff, "state": state,
+        "k": max_passages, "category": category if category_filter else None,
+        "category_filter": category_filter,
+        "method": "full",  # official v4 if ready, hybrid v3 otherwise
+        "min_similarity": min_similarity if not is_v4 else None,
     }
-    if is_v4:
-        arguments["method"] = "full"
-    else:
-        arguments["category_filter"] = category_filter
-        arguments["min_similarity"] = min_similarity
-    kwargs = {k: v for k, v in arguments.items() if k in parameters}
+    kwargs = {key: value for key, value in arguments.items() if key in parameters}
     evidence = retrieve(**kwargs)
     if not isinstance(evidence, pd.DataFrame):
         raise TypeError("RAG backend must return a pandas DataFrame of evidence.")
-    # Enforce the decision-date boundary even for newly integrated backends.
     if "published" in evidence.columns and not evidence.empty:
         dates = pd.to_datetime(evidence["published"], errors="coerce")
         evidence = evidence.loc[dates.notna() & (dates <= pd.Timestamp(cutoff))].copy()
@@ -1397,6 +1389,40 @@ with planning:
         except (ValueError, TypeError) as exc:
             st.warning(f"Unable to calculate the planning scenario: {exc}")
 
+    # OFFICIAL v4 POLICY (opt-in; requires rag_common.py, raw M5 arrays and
+    # the team's true 14-day forecast cube. Never substitute repeated forecasts.)
+    with st.expander("Validated v4 policy connector — optional", expanded=False):
+        v4_ready, v4_message = policy_status()
+        if not v4_ready:
+            st.info(v4_message)
+            st.caption("The scenario above remains illustrative. The official v4 "
+                       "confidence and hold/review rules are not yet live.")
+        else:
+            st.warning(
+                "The official policy may load large M5 arrays into server memory. "
+                "Check your hosting limits before running it."
+            )
+            if st.button("Calculate official v4 recommendation", key=f"official_v4_{store}_{item}"):
+                try:
+                    with st.spinner("Loading actual v4 forecasts and ordering rules..."):
+                        result = v4_recommendation(
+                            item=item, store=store,
+                            decision_date=pd.Timestamp(item_data["forecast_origin"].iloc[0]).date(),
+                            on_hand=on_hand,
+                        )
+                    decision = result["order"]
+                    columns = st.columns(3)
+                    columns[0].metric("Actual 14-day forecast", f"{result['forecast_14_days']:,.1f}")
+                    columns[1].metric("Computed order", str(decision.get("computed_order_qty", "N/A")))
+                    columns[2].metric("Recommended order", str(decision.get("order_qty", "N/A")))
+                    st.write("Hold for manager review:", bool(decision.get("hold", False)))
+                    st.write("Confidence:", result["confidence"])
+                    st.write("Review flags:", result["flags"])
+                    st.caption("These results come from the shared v4 policy module, "
+                               "not from the seven-day repeat scenario.")
+                except Exception as error:
+                    st.warning(f"Official v4 calculation unavailable: {type(error).__name__}: {error}")
+
     # Simulated inventory runway
     # Assumes no deliveries during the forecast period
 
@@ -1926,14 +1952,16 @@ with assistant:
                 "these results as validated."
             )
         else:
+            from rag_backend import retrieval_status
+            st.caption(retrieval_status()["message"])
             st.caption(
-                "Current live retrieval uses v3 embeddings with historical and "
-                "category restrictions. Uploading v4 files alone does not activate "
-                "hybrid search or reranking; its backend code must also be deployed."
+                "This fallback combines semantic and keyword ranking, but is NOT "
+                "the evaluated v4 reranker. Its ranking scores are not calibrated relevance probabilities."
             )
         evidence_k = st.select_slider(
             "Maximum evidence passages", options=[3, 5, 8], value=5,
-            help="Upper limit, not a guarantee: fewer or zero passages may qualify."
+            help="Upper limit; the retrieval engine may return fewer passages. "
+                 "A top result is not guaranteed relevant."
         )
         evidence_category_filter = st.checkbox(
             "Match evidence to the question's category", value=True,
@@ -2048,7 +2076,7 @@ with assistant:
                 if evidence.empty:
                     st.warning("No eligible historical evidence met the current date, location, category, and similarity filters. Forecast numbers remain available above; do not infer historical causes from absent evidence.")
                 else:
-                    st.success(f"Retrieved {len(evidence)} historical evidence passages (maximum requested: {evidence_k}).")
+                    st.success(f"Found {len(evidence)} candidate historical passages (maximum {evidence_k}); review relevance before drawing conclusions.")
                     if retrieved_with_v4 and "relevance" not in evidence.columns:
                         st.warning("v4 retrieval was requested, but no reranker relevance scores were returned; confirm backend configuration.")
 
@@ -2140,7 +2168,7 @@ with assistant:
                         st.caption(
                             "Historical background only. Scores represent "
                             + ("v4 reranker relevance" if retrieved_with_v4 and "relevance" in evidence.columns
-                               else "v3 semantic similarity")
+                               else "hybrid v3 ranking score (not a relevance threshold)")
                             + "; they do not validate inventory shortages or prove causality."
                         )
                         summary = evidence[
@@ -2174,7 +2202,7 @@ with assistant:
                                 )
                                 st.write(
                                     "Reranker relevance:" if retrieved_with_v4 and "relevance" in evidence.columns
-                                    else "Semantic similarity:",
+                                    else "Hybrid ranking score:",
                                     round(float(passage["score"]), 3)
                                 )
                                 if "url" in passage and pd.notna(passage["url"]) and str(passage["url"]).startswith(("https://", "http://")):
