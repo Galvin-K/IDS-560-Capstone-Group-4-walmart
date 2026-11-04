@@ -15,15 +15,17 @@ import requests
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # ============================================================== 1. Configuration
-PROJECT_DIR = "/content/drive/MyDrive/IDS 560- Agentic AI & Inventory Project/"
-M5_DIR = PROJECT_DIR + "M5 EDA/datasets/"                            # calendar, sales, sell_prices, weather
-RAG_DIR = PROJECT_DIR + "RAG FILES/"                                 # everything the notebooks read and write
-RAW_DIR = RAG_DIR + "raw/"                                           # cached downloads
-FORECAST_DIR = PROJECT_DIR + "M5 Forecasting/M5_Forecasting_Outputs/"
-CUBE_FILE = FORECAST_DIR + "forecast_cube_lightgbm_50.npz"           # every weekly forecast of the M5 forecasting model
-SEGMENTS_FILE = FORECAST_DIR + "series_segments_50.csv"              # demand type and volume level of each series
-SEG_ERROR_FILE = FORECAST_DIR + "lightgbm_error_by_segment_50.csv"   # the model's weekly error by segment
+from pathlib import Path
 
+PROJECT_DIR = str(Path(__file__).resolve().parent) + "/"
+M5_DIR = PROJECT_DIR + "M5/datasets/"
+RAG_DIR = PROJECT_DIR + "RAG/"
+RAW_DIR = RAG_DIR + "raw/"
+FORECAST_DIR = PROJECT_DIR + "forecasting/"
+
+CUBE_FILE = FORECAST_DIR + "forecast_cube_lightgbm_50.npz"
+SEGMENTS_FILE = FORECAST_DIR + "series_segments_50.csv"
+SEG_ERROR_FILE = FORECAST_DIR + "lightgbm_error_by_segment_50.csv"
 WINDOW_START, WINDOW_END = "2011-01-01", "2016-06-30"
 STATES = {"CA": "CALIFORNIA", "TX": "TEXAS", "WI": "WISCONSIN"}
 STATE_NAMES = {"CA": "California", "TX": "Texas", "WI": "Wisconsin", "US": "United States"}
@@ -1153,18 +1155,22 @@ TESTS = [
     (56, "Which suppliers had the longest delivery delays last quarter?", "2015-09-16", None, None, [], "no_evidence", None),
 ]
 NO_DATA_CARDS = {"ref:data_limits", "ref:stores"}      # a no-answer question is handled if one of these comes first
-
-# ============================================================== 10. Setup
 def set_paths(project_dir, m5_dir=None):
-    """Point every path at another project folder (the defaults are the team's Google Drive)."""
-    global PROJECT_DIR, M5_DIR, RAG_DIR, RAW_DIR, FORECAST_DIR, CUBE_FILE, SEGMENTS_FILE, SEG_ERROR_FILE, SETTINGS_FILE
-    PROJECT_DIR = project_dir
-    M5_DIR = m5_dir or PROJECT_DIR + "M5 EDA/datasets/"
-    RAG_DIR = PROJECT_DIR + "RAG FILES/"
+    """Configure project paths for Streamlit or local Python."""
+    global PROJECT_DIR, M5_DIR, RAG_DIR, RAW_DIR
+    global FORECAST_DIR, CUBE_FILE, SEGMENTS_FILE
+    global SEG_ERROR_FILE, SETTINGS_FILE
+
+    PROJECT_DIR = str(Path(project_dir).resolve()) + "/"
+    M5_DIR = str(Path(m5_dir).resolve()) + "/" if m5_dir else PROJECT_DIR + "M5/datasets/"
+    RAG_DIR = PROJECT_DIR + "RAG/"
     RAW_DIR = RAG_DIR + "raw/"
-    FORECAST_DIR = PROJECT_DIR + "M5 Forecasting/M5_Forecasting_Outputs/"
+    FORECAST_DIR = PROJECT_DIR + "forecasting/"
+
     CUBE_FILE = FORECAST_DIR + "forecast_cube_lightgbm_50.npz"
     SEGMENTS_FILE = FORECAST_DIR + "series_segments_50.csv"
+    SEG_ERROR_FILE = FORECAST_DIR + "lightgbm_error_by_segment_50.csv"
+    SETTINGS_FILE = RAG_DIR + f"settings_{RUN_TAG}.json"
     SEG_ERROR_FILE = FORECAST_DIR + "lightgbm_error_by_segment_50.csv"
     SETTINGS_FILE = RAG_DIR + f"settings_{RUN_TAG}.json"
 
