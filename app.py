@@ -9,8 +9,9 @@ import streamlit as st
 import inspect
 from pathlib import Path
 from inventory_bridge import apply_inventory, forecast_inventory_answer
-from inventory_engine import protection_period_order, repeat_week_scenario
-from v4_policy_bridge import policy_status, v4_recommendation
+from inventory_engine import protection_period_order, repeat_week_scenario, apply_precomputed_policy
+from v4_policy_bridge import (offline_policy_status, load_offline_policy,
+                              offline_v4_recommendation)
 from analysis_scope import SCOPES, resolve_question, scope_summary
 
 
@@ -116,8 +117,9 @@ st.info(
 with st.expander("About the Forecast & Data", expanded=False):
     st.markdown(
         "**Forecast:** Seven-day LightGBM forecasts for January 1–7, 2016, based on "
-        "the historical Walmart M5 dataset. The dashboard uses precomputed forecasts "
-        "for a 50% sample of item–store series, not live forecasts.\n\n"
+        "historical Walmart M5 data, with a separately precomputed 14-day inventory "
+        "planning policy covering January 1–14, 2016. Both are historical outputs "
+        "for the model sample, not live forecasts.\n\n"
         "**Inventory:** Estimated starting stock uses predefined forecast-based "
         "assumptions; it is not observed Walmart inventory. Product-level manual "
         "stock overrides are available in Inventory Planning.\n\n"
@@ -1334,94 +1336,99 @@ with planning:
             f"{predicted_total:,.2f} units"
         )
 
-    # INDEPENDENT PROTECTION-PERIOD PLANNING SCENARIO
-    # This is NOT the v4 notebook's full ordering rule until the real 14-day
-    # forecast cube, historical error series, and validated hold flags arrive.
-    with st.expander("14-Day Ordering & Safety Stock — planning scenario", expanded=False):
-        st.info(
-            "Scenario only: the deployed file contains seven forecast days. "
-            "For illustration, days 8–14 repeat days 1–7. This is not a "
-            "validated 14-day LightGBM forecast or the full v4 agent policy."
-        )
-        plan_cols = st.columns(3)
-        pp_lead = plan_cols[0].number_input(
-            "Replenishment lead time (days)", min_value=1, max_value=13,
-            value=7, step=1, key="pp_lead_days"
-        )
-        pp_review = plan_cols[1].number_input(
-            "Review period (days)", min_value=1, max_value=14 - int(pp_lead),
-            value=min(7, 14 - int(pp_lead)), step=1, key="pp_review_days"
-        )
-        pp_on_order = plan_cols[2].number_input(
-            "Already on order (units)", min_value=0, value=0, step=1,
-            key=f"pp_on_order_{store}_{item}"
-        )
-        pp_buffer = st.number_input(
-            "Assumed safety stock (units — manually entered)",
-            min_value=0, value=0, step=1, key=f"pp_buffer_{store}_{item}",
-            help="A user-entered buffer, NOT the v4 historical-error 95th percentile."
-        )
+    # REAL 14-DAY POLICY — precomputed using the team's v4 LightGBM model,
+    # M5 history, safety stock, confidence and hold/review rules. The only
+    # live arithmetic is stock-dependent ordering; do NOT initialize M5 here.
+    st.subheader("14-Day Ordering & Safety Stock")
+    st.caption(
+        "Historical decision date: December 31, 2015; forecast dates: January 1–14, 2016. "
+        "The v4 policy was calculated offline using M5 history and actual 14-day "
+        "LightGBM forecasts. Inventory quantities remain estimates or manual entries."
+    )
+    offline_available, offline_message = offline_policy_status()
+    if not offline_available:
+        st.info(offline_message + ". Upload the generated CSV to forecasting/ to enable this section.")
+    else:
         try:
-            scenario_forecast = repeat_week_scenario(
-                item_data.sort_values("date")["forecast"].fillna(0).clip(lower=0).tolist()
+            policy_table = load_offline_policy()
+            policy_rows = policy_table[policy_table["store_id"].eq(str(store))]
+            st.caption(f"{len(policy_rows):,} item-store policy decisions available for {store}.")
+            ordering_cols = st.columns(2)
+            policy_on_order = ordering_cols[0].number_input(
+                "Already on order (units)", min_value=0, value=0, step=1,
+                key=f"v4_precomputed_on_order_{store}_{item}",
+                help="Units already ordered for the selected product, not included in current on-hand stock."
             )
-            scenario_plan = protection_period_order(
-                scenario_forecast,
-                on_hand=on_hand,
-                on_order=pp_on_order,
-                lead_days=int(pp_lead), review_days=int(pp_review),
-                manual_safety_stock=float(pp_buffer),
-                confidence="Not evaluated — historical checks unavailable",
-                forecast_source="Seven-day forecast repeated for scenario only",
+            ordering_cols[1].caption(
+                "Protection period is fixed at 14 days (7-day lead time + 7-day review). "
+                "Changing this duration requires recomputing the offline policy."
             )
-            summary_cols = st.columns(4)
-            summary_cols[0].metric("Protection-period demand", f"{scenario_plan.expected_demand:,.1f}")
-            summary_cols[1].metric("Assumed safety buffer", f"{scenario_plan.safety_stock:,.0f}")
-            summary_cols[2].metric("Inventory position", f"{scenario_plan.inventory_position:,.0f}")
-            summary_cols[3].metric("Illustrative order quantity", f"{scenario_plan.computed_order_qty:,}")
-            st.caption(
-                "Order-up-to = expected demand over lead time + review period + "
-                "assumed safety buffer. Order quantity = max(0, ceil(order-up-to "
-                "minus inventory position)). This scenario does not include "
-                "validated NEW_ITEM, POSSIBLE_STOCKOUT, or discontinuation holds. "
-                "Forecast confidence: not evaluated. Do not use as a purchase order."
-            )
-        except (ValueError, TypeError) as exc:
-            st.warning(f"Unable to calculate the planning scenario: {exc}")
+            try:
+                v4_selected = offline_v4_recommendation(
+                    item=item, store=store, on_hand=on_hand, on_order=int(policy_on_order)
+                )
+            except KeyError:
+                st.warning("This product is not available in the precomputed 14-day policy sample.")
+            else:
+                metric_cols = st.columns(4)
+                metric_cols[0].metric("14-Day Forecast", f"{v4_selected['demand_14d']:,.1f}")
+                metric_cols[1].metric("Historical Safety Stock", f"{v4_selected['safety_stock']:,.1f}")
+                metric_cols[2].metric("Order-up-to Target", f"{v4_selected['order_up_to']:,.1f}")
+                metric_cols[3].metric("Recommended Order", f"{v4_selected['order_qty']:,}")
+                if v4_selected['hold']:
+                    st.warning(
+                        "Hold for manager review: do not place an order until the item is checked. "
+                        f"If confirmed, conditional order quantity is "
+                        f"{v4_selected['if_confirmed_order_qty']:,} units."
+                    )
+                else:
+                    st.success("No automatic hold flag for this historical decision.")
+                st.write(f"**Forecast confidence:** {v4_selected['confidence']}")
+                if str(v4_selected.get('confidence_reasons','')).strip() not in ('','nan'):
+                    st.caption("Confidence basis: " + str(v4_selected['confidence_reasons']))
+                if str(v4_selected.get('flags','')).strip() not in ('','nan'):
+                    st.write("**Review flags:**", str(v4_selected['flags']))
+                if str(v4_selected.get('hold_reasons','')).strip() not in ('','nan'):
+                    st.write("**Hold reasons:**", str(v4_selected['hold_reasons']))
+                st.caption(
+                    f"Inventory position: {v4_selected['inventory_position']:,.0f} units "
+                    f"({on_hand:,} on hand + {int(policy_on_order):,} on order). "
+                    f"Safety stock method: {v4_selected.get('safety_stock_method','historical v4 policy')}. "
+                    "This is historical decision support, not a validated purchase order."
+                )
 
-    # OFFICIAL v4 POLICY (opt-in; requires rag_common.py, raw M5 arrays and
-    # the team's true 14-day forecast cube. Never substitute repeated forecasts.)
-    with st.expander("Validated v4 policy connector — optional", expanded=False):
-        v4_ready, v4_message = policy_status()
-        if not v4_ready:
-            st.info(v4_message)
-            st.caption("The scenario above remains illustrative. The official v4 "
-                       "confidence and hold/review rules are not yet live.")
-        else:
-            st.warning(
-                "The official policy may load large M5 arrays into server memory. "
-                "Check your hosting limits before running it."
-            )
-            if st.button("Calculate official v4 recommendation", key=f"official_v4_{store}_{item}"):
-                try:
-                    with st.spinner("Loading actual v4 forecasts and ordering rules..."):
-                        result = v4_recommendation(
-                            item=item, store=store,
-                            decision_date=pd.Timestamp(item_data["forecast_origin"].iloc[0]).date(),
-                            on_hand=on_hand,
-                        )
-                    decision = result["order"]
-                    columns = st.columns(3)
-                    columns[0].metric("Actual 14-day forecast", f"{result['forecast_14_days']:,.1f}")
-                    columns[1].metric("Computed order", str(decision.get("computed_order_qty", "N/A")))
-                    columns[2].metric("Recommended order", str(decision.get("order_qty", "N/A")))
-                    st.write("Hold for manager review:", bool(decision.get("hold", False)))
-                    st.write("Confidence:", result["confidence"])
-                    st.write("Review flags:", result["flags"])
-                    st.caption("These results come from the shared v4 policy module, "
-                               "not from the seven-day repeat scenario.")
-                except Exception as error:
-                    st.warning(f"Official v4 calculation unavailable: {type(error).__name__}: {error}")
+            with st.expander("Store-wide 14-day ordering priorities", expanded=False):
+                # Same estimated/manual stock figures used by the 7-day store panel.
+                store_policy = policy_rows.reset_index(drop=True).merge(
+                    inv_items[["item_id", "store_id", "starting_stock", "inventory_source"]],
+                    on=["item_id", "store_id"], how="inner", validate="one_to_one"
+                )
+                if not store_policy.empty:
+                    calculated = [apply_precomputed_policy(r, on_hand=float(r["starting_stock"]))
+                                  for _, r in store_policy.iterrows()]
+                    store_policy["recommended_order"] = [r["order_qty"] for r in calculated]
+                    store_policy["conditional_order_if_confirmed"] = [
+                        r["if_confirmed_order_qty"] if r["if_confirmed_order_qty"] is not None else 0
+                        for r in calculated
+                    ]
+                    display = store_policy[["item_id", "demand_14d", "starting_stock", "safety_stock",
+                                            "order_up_to", "recommended_order", "confidence",
+                                            "hold", "conditional_order_if_confirmed", "flags"]].copy()
+                    display = display.sort_values(
+                        ["recommended_order", "demand_14d"], ascending=[False, False]
+                    )
+                    st.dataframe(display, hide_index=True, use_container_width=True)
+                    st.download_button(
+                        "Download 14-day policy list", display.to_csv(index=False),
+                        file_name=f"v4_14_day_policy_{store}.csv", mime="text/csv",
+                        key=f"v4_policy_download_{store}"
+                    )
+                    st.caption("For this store-wide table, on-order quantities are assumed zero. "
+                               "Manual stock overrides are reflected when applied.")
+                else:
+                    st.info("No inventory rows match the store's offline policy table.")
+        except (ValueError, KeyError, FileNotFoundError, TypeError, ImportError) as exc:
+            st.error(f"Cannot load precomputed v4 inventory decisions: {type(exc).__name__}: {exc}")
 
     # Simulated inventory runway
     # Assumes no deliveries during the forecast period
@@ -2243,13 +2250,14 @@ with assistant:
             "compared with **65.5%** using forecast-only quantities. "
             "Higher coverage also comes with more leftover inventory in the benchmark. "
             "This simulation is **not** a validated operational ordering policy.\n\n"
-            "**New products and confidence:** The v4 notebooks contain cold-start strategy "
-            "comparisons, forecast-confidence checks, and hold/review flags. "
-            "These have **not yet been connected** to the live 7-day forecast file.\n\n"
-            "**Inventory integration status:** The dashboard continues to use its existing "
-            "seven-day forecast dataset. The validated 14-day ordering policy, item-level "
-            "historical-error safety stock, and confidence/hold flags are not yet connected "
-            "to the live inventory planning calculations."
+            "**New products and confidence:** The precomputed v4 inventory table includes "
+            "the notebook’s historical confidence scores, review/hold flags, and "
+            "new-item conditional quantities. These are available in Inventory Planning "
+            "when its offline policy CSV is installed.\n\n"
+            "**Inventory integration status:** The existing seven-day dashboard remains "
+            "available. The separate 14-day inventory panel reads offline LightGBM "
+            "results and recomputes quantities from estimated or manually entered stock. "
+            "These are historical planning outputs, not live operational orders."
         )
 
     st.caption(
