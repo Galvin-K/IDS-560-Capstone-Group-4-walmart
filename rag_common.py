@@ -18,14 +18,17 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 from pathlib import Path
 
 PROJECT_DIR = str(Path(__file__).resolve().parent) + "/"
+
 M5_DIR = PROJECT_DIR + "M5/datasets/"
 RAG_DIR = PROJECT_DIR + "RAG/"
 RAW_DIR = RAG_DIR + "raw/"
+
 FORECAST_DIR = PROJECT_DIR + "forecasting/"
 
 CUBE_FILE = FORECAST_DIR + "forecast_cube_lightgbm_50.npz"
 SEGMENTS_FILE = FORECAST_DIR + "series_segments_50.csv"
 SEG_ERROR_FILE = FORECAST_DIR + "lightgbm_error_by_segment_50.csv"
+
 WINDOW_START, WINDOW_END = "2011-01-01", "2016-06-30"
 STATES = {"CA": "CALIFORNIA", "TX": "TEXAS", "WI": "WISCONSIN"}
 STATE_NAMES = {"CA": "California", "TX": "Texas", "WI": "Wisconsin", "US": "United States"}
