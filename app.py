@@ -839,45 +839,46 @@ with overview:
 
 with forecasting:
     st.header("Demand Forecasting")
-    forecast_horizon = st.radio(
-        "Choose the forecast period",
-        [7, 14],
-        format_func=lambda days: f"Next {days} days",
-        horizontal=True,
-        key="forecast_chart_horizon",
-    )
-    daily_14_data = load_14day_daily_forecasts() if forecast_horizon == 14 else None
-    if forecast_horizon == 14 and daily_14_data is None:
-        st.warning("The 14-day daily forecast file is not uploaded yet. Showing the 7-day forecast.")
-        forecast_horizon = 7
-    forecast_view_df = (store_df if forecast_horizon == 7 else
-                        daily_14_data[daily_14_data["store_id"].eq(store)].copy())
-    forecast_end_day = 7 if forecast_horizon == 7 else 14
-    st.caption(
-        f"Store: {store} | January 1–{forecast_end_day}, 2016. "
-        f"All demand charts and tables below use {forecast_horizon} days. "
-        "The 14-day replenishment plan also includes safety stock and hold flags, "
-        "so its suggested orders are different from predicted demand."
-    )
-    if forecast_horizon == 14:
-        st.caption("The 14-day chart uses the separate historical LightGBM forecast cube. "
-                   "Its first seven daily predictions may differ from the dedicated seven-day view.")
-    st.subheader("Department-level forecast")
+    st.caption("Choose the forecast period in each section below. Changing one chart will not change the others or your replenishment plan.")
+    daily_14_data = load_14day_daily_forecasts()
+    forecast_14_store = (daily_14_data.loc[daily_14_data["store_id"].eq(store)].copy()
+                         if daily_14_data is not None else None)
+
+    def demand_section_period(label, key):
+        chosen = st.radio(label, [7, 14],
+                          format_func=lambda days: f"{days} days",
+                          horizontal=True, key=key)
+        if chosen == 14 and forecast_14_store is None:
+            st.warning("Add the 14-day daily forecast file to use this view; showing 7 days.")
+            return 7
+        return chosen
+
+    def demand_section_data(days):
+        return store_df if days == 7 else forecast_14_store
+
+    st.subheader("Demand by department")
+    dept_horizon = demand_section_period("Department comparison period", "dept_comparison_horizon")
+    forecast_view_df = demand_section_data(dept_horizon)
     dept_summary = (forecast_view_df.groupby("dept_id", as_index=False)
                     .agg(predicted_demand=("forecast", "sum"), products=("item_id", "nunique"))
                     .sort_values("predicted_demand", ascending=False))
-    st.dataframe(dept_summary.rename(columns={"dept_id":"Department", "predicted_demand":f"{forecast_horizon}-day predicted units", "products":"Products"}),
+    st.dataframe(dept_summary.rename(columns={"dept_id":"Department", "predicted_demand":f"{dept_horizon}-day predicted units", "products":"Products"}),
                  hide_index=True, use_container_width=True)
     fig_depts = go.Figure(go.Bar(x=dept_summary["dept_id"], y=dept_summary["predicted_demand"], marker_color="#0071ce"))
-    fig_depts.update_layout(title="Demand by department", xaxis_title="Department", yaxis_title=f"{forecast_horizon}-day predicted units", height=360)
+    fig_depts.update_layout(title="Demand by department", xaxis_title="Department", yaxis_title=f"{dept_horizon}-day predicted units", height=360)
     st.plotly_chart(fig_depts, use_container_width=True)
-    st.subheader("Select a product")
+    st.subheader("Product-level demand forecast")
+    product_horizon = demand_section_period("Product forecast period", "product_forecast_horizon")
+    product_view_df = demand_section_data(product_horizon)
     forecast_dept = st.selectbox("Department", dept_options, key="forecast_dept")
-    forecast_filtered = forecast_view_df[forecast_view_df["dept_id"] == forecast_dept].copy()
+    forecast_filtered = product_view_df[product_view_df["dept_id"] == forecast_dept].copy()
     forecast_item = st.selectbox("Product", sorted(forecast_filtered["item_id"].dropna().unique()), key="forecast_item")
     forecast_item_data = forecast_filtered[forecast_filtered["item_id"] == forecast_item].sort_values("date").copy()
+    if product_horizon == 14:
+        st.caption("This chart uses a separate 14-day LightGBM forecast. Its first seven predictions may differ from the seven-day forecast.")
     # Forecast page state is intentionally independent of Inventory Planning and AI scopes.
     dept, filtered, item, item_data = forecast_dept, forecast_filtered, forecast_item, forecast_item_data
+    forecast_horizon = product_horizon
     st.subheader("Product forecast KPIs")
 
     forecast_origin = (
@@ -1041,8 +1042,11 @@ with forecasting:
         "the selected department's included products."
     )
 
+    department_daily_horizon = demand_section_period("Department daily chart period", "department_daily_horizon")
+    department_daily_source = demand_section_data(department_daily_horizon)
+    daily_dept_filtered = department_daily_source[department_daily_source["dept_id"] == forecast_dept]
     daily = (
-        filtered.groupby("date", as_index=False)["forecast"]
+        daily_dept_filtered.groupby("date", as_index=False)["forecast"]
         .sum()
         .sort_values("date")
     )
@@ -1069,7 +1073,7 @@ with forecasting:
     )
 
     fig_overview.update_layout(
-        title=f"{forecast_horizon}-Day Predicted Demand",
+        title=f"{department_daily_horizon}-Day Predicted Demand",
         xaxis_title="Forecast Date",
         yaxis_title="Predicted Units per Day",
         xaxis_type="category",
@@ -1097,84 +1101,45 @@ with forecasting:
                    "model tends to overpredict or underpredict. MAE and RMSE summarize error sizes "
                    "in units. These test results cover a historical sample, not every product.")
 
-        # MODEL_EVALUATION_RESULTS_V1
+        st.markdown("**Historical test: comparing five forecast methods**")
+        st.caption("2016 held-out test, 50% item-store sample. These are aggregate results, not live product predictions. "
+                   "TSB and SES were exploratory comparisons; LightGBM remains our selected model.")
+        comparison_horizon = st.radio(
+            "Comparison period", [7, 14, 28],
+            format_func=lambda d: f"{d} days", horizontal=True,
+            key="historical_model_comparison_period")
+        historical_models = pd.DataFrame([
+            {"Model": "Recent sales average (7 days)", "Forecast error (%)": 74.58, "Bias (%)": -1.75, "RMSE (units)": 2.219, "Days": 7},
+            {"Model": "Recent sales average (28 days)", "Forecast error (%)": 73.91, "Bias (%)": -2.76, "RMSE (units)": 2.202, "Days": 7},
+            {"Model": "TSB (intermittent demand)", "Forecast error (%)": 72.816, "Bias (%)": -3.969, "RMSE (units)": 2.159, "Days": 7},
+            {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 72.846, "Bias (%)": -4.100, "RMSE (units)": 2.159, "Days": 7},
+            {"Model": "LightGBM (selected)", "Forecast error (%)": 71.62, "Bias (%)": -0.70, "RMSE (units)": 2.040, "Days": 7},
+            {"Model": "Recent sales average (7 days)", "Forecast error (%)": 75.77, "Bias (%)": -2.27, "RMSE (units)": 2.282, "Days": 14},
+            {"Model": "Recent sales average (28 days)", "Forecast error (%)": 74.65, "Bias (%)": -3.08, "RMSE (units)": 2.243, "Days": 14},
+            {"Model": "TSB (intermittent demand)", "Forecast error (%)": 73.729, "Bias (%)": -4.427, "RMSE (units)": 2.209, "Days": 14},
+            {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 73.763, "Bias (%)": -4.567, "RMSE (units)": 2.210, "Days": 14},
+            {"Model": "LightGBM (selected)", "Forecast error (%)": 72.55, "Bias (%)": -1.31, "RMSE (units)": 2.080, "Days": 14},
+            {"Model": "Recent sales average (7 days)", "Forecast error (%)": 77.25, "Bias (%)": -2.72, "RMSE (units)": 2.343, "Days": 28},
+            {"Model": "Recent sales average (28 days)", "Forecast error (%)": 75.94, "Bias (%)": -3.58, "RMSE (units)": 2.294, "Days": 28},
+            {"Model": "TSB (intermittent demand)", "Forecast error (%)": 75.060, "Bias (%)": -4.780, "RMSE (units)": 2.261, "Days": 28},
+            {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 75.104, "Bias (%)": -4.902, "RMSE (units)": 2.263, "Days": 28},
+            {"Model": "LightGBM (selected)", "Forecast error (%)": 73.94, "Bias (%)": -1.67, "RMSE (units)": 2.123, "Days": 28},
+        ])
+        selected_historical = historical_models.loc[historical_models["Days"] == comparison_horizon].copy()
+        st.dataframe(selected_historical.drop(columns="Days").round(2), hide_index=True, use_container_width=True)
+        compare_fig = go.Figure(go.Bar(
+            x=selected_historical["Model"], y=selected_historical["Forecast error (%)"],
+            marker_color=["#0071ce" if m == "LightGBM (selected)" else "#8497aa" for m in selected_historical["Model"]],
+            text=selected_historical["Forecast error (%)"].round(2), texttemplate="%{text:.2f}%", textposition="outside"))
+        compare_fig.update_layout(title=f"{comparison_horizon}-day historical forecast error (lower is better)",
+                                  yaxis_title="WAPE (%)", xaxis_title="", height=390,
+                                  xaxis_tickangle=-18, yaxis=dict(rangemode="tozero"))
+        st.plotly_chart(compare_fig, use_container_width=True)
+        st.caption("Sources: teammate's statistical exploration notebook (TSB/SES) and final LightGBM "
+                   "forecasting notebook (2016 holdout). Croston and SBA were also tested but did not qualify for held-out comparison. "
+                   "TSB/SES use the same evaluation design but are exploratory; no statistical method drives the live dashboard.")
 
-        files_found = list(
-            Path(__file__).resolve().parent.rglob(
-                "lightgbm_final_test_results.csv"
-            )
-        )
-
-        if not files_found:
-            st.warning(
-                "Model evaluation data not found. "
-                "Restore the forecasting outputs."
-            )
-
-        else:
-            evaluation_df = pd.read_csv(files_found[0])
-
-            evaluation_df = evaluation_df[
-                (evaluation_df["sample"].astype(str) == "50%")
-                & (evaluation_df["horizon"] == 7)
-                & (evaluation_df["segment"] == "All")
-                & (evaluation_df["model"].isin([
-                    "recent_mean_7",
-                    "lightgbm_final"
-                ]))
-            ].copy()
-
-            evaluation_df["Model"] = evaluation_df["model"].map({
-                "recent_mean_7": "Recent Mean (7-day)",
-                "lightgbm_final": "LightGBM (Final)"
-            })
-
-            if len(evaluation_df) != 2:
-                st.warning("Expected evaluation rows not found.")
-
-            else:
-                chart = go.Figure(go.Bar(
-                    x=evaluation_df["Model"],
-                    y=evaluation_df["WAPE_pct"],
-                    marker_color=[
-                        "#8497aa" if name == "recent_mean_7"
-                        else "#0071ce"
-                        for name in evaluation_df["model"]
-                    ],
-                    text=evaluation_df["WAPE_pct"].round(2),
-                    texttemplate="%{text:.2f}%",
-                    textposition="outside"
-                ))
-
-                chart.update_layout(
-                    title="Seven-Day Forecast Error (WAPE)",
-                    xaxis_title="Model",
-                    yaxis_title="WAPE (%)",
-                    yaxis=dict(rangemode="tozero"),
-                    height=350,
-                    showlegend=False
-                )
-
-                st.plotly_chart(
-                    chart,
-                    use_container_width=True
-                )
-
-                st.dataframe(
-                    evaluation_df[
-                        ["Model", "WAPE_pct", "Bias_pct", "MAE", "RMSE"]
-                    ].rename(columns={
-                        "WAPE_pct": "WAPE (%)",
-                        "Bias_pct": "Bias (%)"
-                    }).round(3),
-                    hide_index=True,
-                    use_container_width=True
-                )
-
-                st.caption(
-                    "Historical aggregate test performance on the "
-                    "50% sample. These are not item-level errors."
-                )
+        # The historical scorecard above is the supported comparison.
 
 # ============================================================
 # TAB 3: INVENTORY PLANNING
@@ -1571,64 +1536,42 @@ with planning:
         except (ValueError, KeyError, FileNotFoundError, TypeError, ImportError) as exc:
             st.error(f"Cannot load precomputed v4 inventory decisions: {type(exc).__name__}: {exc}")
 
-    # Simulated inventory runway
-    # Assumes no deliveries during the forecast period
-
-    projected = item_data[
-        ["date", "forecast"]
-    ].sort_values("date").copy()
-
-    projected["Cumulative Demand"] = (
-        projected["forecast"].cumsum()
-    )
-
-    projected["Projected Stock"] = (
-        on_hand - projected["Cumulative Demand"]
-    ).clip(lower=0)
-
-    shortfall = max(
-        0,
-        predicted_total - on_hand
-    )
-
-    stockout_rows = projected[
-        projected["Cumulative Demand"] > on_hand
-    ]
-
-    if not stockout_rows.empty:
-        stockout_date = (
-            stockout_rows["date"].iloc[0]
-            .strftime("%b %d, %Y")
-        )
-    else:
-        stockout_date = "Not within 7 days"
-
+    # A separate 7/14-day stock check for the main selected item.
+    # This control does not affect the later comparison map or the 14-day order.
     st.divider()
+    st.subheader("Stock Check | No New Deliveries")
+    stock_check_horizon = st.radio(
+        "Stock check period", [7, 14],
+        format_func=lambda days: f"{days} days", horizontal=True,
+        key="inventory_stock_check_horizon")
+    if stock_check_horizon == 14:
+        all_daily_stock = load_14day_daily_forecasts()
+        if all_daily_stock is None:
+            st.warning("The 14-day daily forecast file is missing; showing the seven-day stock check.")
+            stock_check_horizon = 7
+        else:
+            stock_check_daily = all_daily_stock.loc[
+                all_daily_stock["store_id"].eq(store) & all_daily_stock["item_id"].eq(item),
+                ["date", "forecast"]].sort_values("date").copy()
+            if len(stock_check_daily) != 14:
+                st.warning("This product lacks a full 14-day forecast; showing seven days.")
+                stock_check_horizon = 7
+    if stock_check_horizon == 7:
+        stock_check_daily = item_data[["date", "forecast"]].sort_values("date").copy()
 
-    st.subheader("7-Day Stock Check | No New Deliveries")
-
+    cumulative_stock_demand = stock_check_daily["forecast"].clip(lower=0).cumsum()
+    stock_check_demand = float(stock_check_daily["forecast"].clip(lower=0).sum())
+    stock_check_gap = max(0.0, stock_check_demand - float(on_hand))
+    stock_check_shortages = stock_check_daily.loc[cumulative_stock_demand.gt(float(on_hand))]
+    stock_check_date = (stock_check_shortages["date"].iloc[0].strftime("%b %d, %Y")
+                        if not stock_check_shortages.empty
+                        else f"Not within {stock_check_horizon} days")
     k1, k2, k3 = st.columns(3)
-
-    k1.metric(
-        "Starting Inventory",
-        f"{on_hand} units"
-    )
-
-    k2.metric(
-        "7-Day Demand Shortfall",
-        f"{shortfall:,.1f} units"
-    )
-
-    k3.metric(
-        "7-Day Projected Stockout",
-        stockout_date
-    )
-
-    st.caption(
-        "This seven-day stock projection uses the original demand forecast and assumes "
-        "no replenishment; it is separate from the 14-day ordering policy above."
-    )
-
+    k1.metric("Starting Inventory", f"{on_hand} units")
+    k2.metric(f"{stock_check_horizon}-Day Demand Shortfall", f"{stock_check_gap:,.1f} units")
+    k3.metric(f"{stock_check_horizon}-Day Projected Stockout", stock_check_date)
+    st.caption(f"We subtract predicted sales from your starting stock for {stock_check_horizon} days. "
+               "This check assumes no deliveries; it is different from the 14-day replenishment recommendation.")
     st.divider()
 
 
