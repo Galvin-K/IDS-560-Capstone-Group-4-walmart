@@ -1,71 +1,137 @@
-# Walmart IDS 560 Capstone — Development Update
+# Development Update — Walmart SmartStock AI Dashboard
 
-**Date:** November 4, 2026  
-**Phase:** Prototype functionality complete; targeted AI historical comparison test pending; broader validation deferred to weekend  
-**Scope:** Streamlit application, forecasting integration, offline inventory policy, RAG, usability and M5-price proxy
+**Project:** IDS 560 Capstone — Walmart Inventory Forecasting and Decision Support  
+**Reporting period:** October 28–November 4, 2026  
+**Focus:** Streamlit development, integration of teammates' forecasting and RAG work, inventory decision logic, manager usability, and deployment  
+**Application:** https://ids-560-capstone-group-4-walmart.streamlit.app/
 
-## Executive status
+## Overview
 
-The core historical decision-support prototype now runs as a five-tab Streamlit dashboard with independently selectable 7-day and 14-day chart views, actual precomputed 14-day LightGBM forecasts, a separate offline 14-day replenishment policy, a dedicated Model Insights tab, and official v4 RAG retrieval for Gemini explanations. The code remains an **academic/historical demonstration**, not a live Walmart inventory or purchasing application.
+This week, I focused on turning our Streamlit prototype into a more complete inventory decision-support dashboard. Rather than adding another isolated model, I connected our team's forecasting outputs, inventory policy calculations, and RAG research into one application that managers can use to review expected demand, identify stock gaps, and evaluate suggested replenishment quantities. I also incorporated feedback from the sponsor, who noted that several dashboard labels and explanations were too technical for store managers.
 
-The latest screenshots show the store-specific M5 price extract working in the Executive Overview after the file was committed under `forecasting/` and the dashboard refreshed. No additional major features are planned before final testing.
+The largest changes were the integration of **real 14-day LightGBM forecasts**, a **precomputed 14-day ordering policy**, **official v4 RAG retrieval with reranking**, **historical M5 selling prices**, independent **7-day/14-day selectors**, and a separate **Model Insights** tab. I also tested the deployed application repeatedly and fixed issues found during that process.
 
-## Implemented since the October 27 update
+## 1. Integrated our team's official v4 RAG pipeline
 
-| Workstream | Implementation | Current qualification |
-| --- | --- | --- |
-| Forecast horizons | Independent 7/14-day selections across demand forecasting and stock views; compact 14-day daily LightGBM export | Both views cover the historical December 31, 2015 forecast origin; charts may remain estimates |
-| Inventory policy | Offline policy computed for 15,245 sampled item–store series; 14-day demand, historical-error safety stock, order-up-to target, confidence, holds and flags | No live inventory; 14-day protection-period assumption |
-| Interactive ordering | Recompute suggested quantity from manual on-hand stock, on-order units and fixed policy target; held items show zero automatic order | Positive conditional order on a held item still needs edge-case testing |
-| Store-wide decisions | Downloadable 14-day priority table and prioritized 7/14-day stock-gap action list | Price and export calculations not fully regression-tested |
-| M5 pricing | Offline `export_m5_prices.py` joins M5 weekly selling prices to the decision date; compact file `forecasting/m5_prices_asof_2015_12_31.csv.gz` | Selling price used only as a value/procurement-cost proxy; not actual purchasing cost |
-| RAG | Official v4 hybrid candidate retrieval and cross-encoder reranking active in dashboard; Gemini receives Python numerical context | Qualitative context does not prove historical numeric retrieval; no-answer detection provisional |
-| Model Insights | Dedicated evaluation tab with historical model comparison (LightGBM, Recent Mean 7/28, TSB, SES), bias, demand-type and regional diagnostics, feature importance | Historical results from notebooks, not live production measurements |
-| Manager usability | Technical labels explained/replaced; 7-day demand gap separated from 14-day replenishment; technical detail moved to Model Insights | Sponsor should still review final clarity |
+Our earlier Streamlit application could answer questions using Gemini and retrieved context, but its retrieval logic was not the same as the team's final v4 RAG implementation. I worked on bringing the official v4 retrieval process into the deployed dashboard rather than relying on the earlier approximation.
 
-## Current configuration and key artifacts
+- Connected the dashboard to the team's v4 hybrid retrieval and cross-encoder reranking workflow.
+- Kept retrieved historical passages separate from the numerical forecast and inventory context that the application calculates in Python.
+- Added evidence displays so users can inspect which historical passages supported the AI response, together with relevance scores and source information.
+- Updated the dashboard's research/performance explanations to distinguish offline benchmark results from live application performance.
+- Tested the retrieval path locally against the project files and checked the AI Assistant after deployment.
 
-```text
-app.py
-inventory_engine.py
-v4_policy_bridge.py
-rag_backend.py
-export_m5_prices.py
-dashboard_forecasts.csv
-forecasting/dashboard_forecasts_14d_2015_12_31.csv.gz
-forecasting/v4_inventory_policy_2015_12_31.csv
-forecasting/m5_prices_asof_2015_12_31.csv.gz
+**Memory/deployment problem:** Running the full v4 retrieval system and the full v4 inventory policy in the same Streamlit process was too memory-intensive. The locally tested combined path peaked at approximately **3.8 GiB** of process memory, making it risky for Streamlit Cloud. I therefore kept the official v4 retrieval enabled but moved inventory-policy calculations into a separate offline precomputation step.
+
+The deployed setup uses:
+
+```toml
+RAG_USE_V4 = "1"
+V4_POLICY_ENABLED = "0"
 ```
 
-Streamlit Secrets: `RAG_USE_V4 = "1"`, `V4_POLICY_ENABLED = "0"`; the latter disables the heavy *online* v4 inventory process while retaining the *offline* policy table and 14-day calculations.
+The second setting disables the expensive *online* inventory-policy initialization, not the offline ordering recommendations displayed in the application.
 
-## Focused AI test (only test before weekend)
+## 2. Added real 14-day LightGBM forecasting to Streamlit
 
-**Question to paste into the AI Assistant:**
+The original dashboard mainly used seven-day daily forecast outputs. At the same time, our inventory research was moving toward a 14-day protection period. I addressed that mismatch by integrating the team's existing 14-day LightGBM forecast outputs into the application.
 
-> For the Foods category in store CA_1, compare actual units sold from January 1–7, 2014, with January 1–7, 2015. What were the total units sold in each period, and what was the percentage change? Use historical M5 sales data, not forecasted demand. If you cannot retrieve those exact figures, explain what data is missing rather than estimating them.
+- Used the LightGBM forecast cube generated by the forecasting workstream, with the historical decision date **December 31, 2015** and forecast dates **January 1–14, 2016**.
+- Produced a compact, compressed daily forecast extract (`dashboard_forecasts_14d_2015_12_31.csv.gz`) covering **15,245 item–store series × 14 days = 213,430 rows**.
+- Kept the large original forecast cube out of the normal Streamlit chart-loading path to reduce memory and startup overhead.
+- Extended the Demand Forecasting charts to support both 7-day and 14-day views using actual forecast values instead of repeating seven-day estimates.
+- Extended inventory projections and related comparisons to show either period where the required daily forecasts were available.
 
-**Pass criteria:** The answer gives verifiable figures for both historical periods and correct arithmetic, or transparently states that the historical raw sales aggregates are unavailable. Claiming numerical retrieval without supporting data fails. **Status: Not yet run or verified as of this update.** This test checks an existing concern: retrieval supplies historical *context*, but may not provide a queryable M5 numerical time series.
+**Interface adjustment:** I originally added a shared forecast-period control, but realized that it changed too many sections simultaneously. I revised the dashboard so department comparisons, product forecasts, daily charts, stock checks, stock projections, and the prioritized action list can use their **own 7-day/14-day controls**. This makes it easier for managers to compare short-term demand with the longer replenishment horizon without changing the entire page.
 
-## Observed checks (not full regression tests)
+## 3. Converted the v4 inventory policy into an offline, interactive ordering system
 
-- Streamlit previously displayed non-held order-up-to calculations with manual stock and on-order changes (e.g., a 22-unit target, 11 on hand, and 0 versus 10 on order led to 11 versus 1 suggested units).
-- A held item displayed the hold warning and zero recommended units, but its initial stock already exceeded its target; this does not prove the hold condition alone forced zero.
-- The 14-day store-wide policy table, policy figures and RAG findings panel appeared in screenshots.
-- M5 price values appeared in the overview after refreshing the deployed application.
+This was one of the most substantial integration tasks. The inventory policy depends on historical forecast errors, safety-stock calculations, confidence assignments, and review/hold rules. Running all of that from the raw M5 data whenever someone opened Streamlit was unnecessarily expensive.
 
-## Deferred validation for weekend
+I connected the team's inventory-policy logic to an offline preprocessing workflow and integrated the generated results into the dashboard:
 
-Do **not** describe these as completed tests: inspect positive conditional order under a manager hold; switch all independent period selectors; compare dashboard and exported CSVs with the source files; test cross-store/item navigation and manual overrides; reconcile 7-day gaps versus 14-day policy results; check price-as-of coverage, missing-price handling, dollar calculations and labeling; confirm dates, scope, RAG responses and safe failure behavior; rehearse the manager workflow.
+- Tested a **five-series smoke run**, then ran the full precomputation across **15,245 item–store series**; the run reported **zero errors**.
+- Saved the policy output to `forecasting/v4_inventory_policy_2015_12_31.csv`.
+- Added a 14-day replenishment section that displays expected demand, historical-error safety stock, order-up-to targets, confidence levels, hold warnings, and review flags.
+- Added a store-wide ordering-priority table and CSV download.
+- Kept the historical forecasts, safety-stock values, confidence levels, and hold flags fixed for the decision date, while allowing the **recommended quantity** to respond to user-entered inventory.
 
-## Decisions and limitations
+For non-held items, the ordering calculation uses the policy target minus current stock and units already on order, with negative results floored at zero. For held items, the dashboard shows zero recommended units until a manager reviews the item; it also distinguishes a conditional quantity from an approved order.
 
-- **No additional major feature development** before the deferred validation session unless a blocker appears.
-- Price-based figures use historical M5 **selling prices**, not verified procurement costs, revenues or profits.
-- The assistant does **not** directly query arbitrary historical M5 sales aggregations unless an explicitly validated data-access function is implemented.
-- Seven-day stock-gap indicators are not the same as 14-day suggested order quantities.
-- The app uses estimated stock, historical forecasts and offline research, not operational data or autonomous purchasing.
+**One interactive check:** For a displayed target of **22 units**, changing units already on order from **0 to 10**, while holding starting stock at **11**, changed the recommendation from **11 to 1 unit**. This demonstrated that changing inventory inputs updates the recommendation without re-running the expensive forecast and historical policy calculations.
 
-## Source notebooks
+**Important assumptions:** We do not have live Walmart stock-on-hand records, supplier lead times, or procurement costs in M5. Starting stock is therefore estimated or entered manually. The 14-day protection period uses the team's **7-day lead time + 7-day review period** assumption. The recommendations are historical decision-support outputs, not live purchase orders.
 
-`forecasting/03_M5_Statistical_Model_Exploration.ipynb` and `forecasting/04_M5_LightGBM_Final_Forecasting.ipynb` provide model comparisons; the five `RAG/M5_RAG_*_v4.ipynb` notebooks contain retrieval and policy research. See the root `README.md` for more context.
+## 4. Reworked the dashboard based on sponsor usability feedback
+
+The sponsor pointed out that managers would struggle with terms such as **P10/P90**, **stock runway**, and detailed model-evaluation measures. I spent time improving the language and page structure instead of continuing to add technical information to the manager-facing screens.
+
+Changes included:
+
+- Replaced or explained technical terms with action-oriented language such as **Expected Daily Demand**, **Extra Safety Stock**, **Target Stock Level**, and **When Could Each Product Run Out?**
+- Rewrote short descriptions in a more direct, active style and reduced generic, technical-sounding explanations.
+- Made the difference between **7-day demand/stock-gap checks** and **14-day replenishment decisions** more visible in the overview and inventory pages.
+- Clarified that a seven-day demand gap is **not** a final purchasing recommendation and that 14-day ordering includes a separate safety-stock and review process.
+- Moved detailed forecasting evaluation out of Demand Forecasting and into a dedicated **Model Insights** tab.
+- Kept deeper technical definitions and evidence accessible in expandable sections for sponsors, analysts, and the project team.
+
+The resulting app has five main tabs: **Executive Overview**, **Demand Forecasting**, **Inventory Planning**, **Model Insights**, and **AI Assistant**. The aim is to let a manager find the relevant action first and inspect the technical reasoning only when needed.
+
+## 5. Incorporated the updated statistical-model research into Model Insights
+
+Our teammates also completed further exploration of statistical forecasting methods. I reviewed `03_M5_Statistical_Model_Exploration.ipynb` and `04_M5_LightGBM_Final_Forecasting.ipynb` and incorporated their relevant evaluation outputs into the dashboard.
+
+- Added a model comparison across **LightGBM**, **recent seven-day and 28-day averages**, **TSB**, and **simple exponential smoothing (SES)**.
+- Added a selector for the **7-day, 14-day, and 28-day** historical evaluation horizons.
+- Included forecast-error and bias comparisons and additional breakdowns by demand pattern and state/product category.
+- Added explanations of a **held-out test** and of the evaluation metrics, including WAPE, bias, and RMSE.
+- Used the **actual notebook filenames** in the source notes rather than a generic reference to a teammate's notebook.
+
+The statistical exploration also considered Croston and SBA. I did **not** replace the deployed LightGBM forecasts with these exploratory methods: the notebooks did not establish all the required selection checks for an alternative production model, and the dashboard's daily operational forecast files remain LightGBM outputs. This distinction is important when presenting the evaluation results.
+
+## 6. Replaced assumed prices with historical M5 selling prices
+
+The earlier prototype used shared placeholder values, including a fixed assumed unit cost and selling price. We had agreed to use M5 prices instead, so I revised the implementation.
+
+- Added `export_m5_prices.py` to extract product/store-specific historical prices from M5's weekly `sell_prices.csv`, using the decision-date calendar mapping.
+- Generated the compact `forecasting/m5_prices_asof_2015_12_31.csv.gz` file for Streamlit.
+- Updated the dashboard's dollar-value cards to use historical product/store-specific prices instead of a single assumed price for all products.
+- Clarified the labels: these are **M5-price-based estimates**, not Walmart supplier costs, profit, or actual procurement spending.
+
+During deployment, the dashboard initially showed **“Price file needed”** even though the file appeared in GitHub. After refreshing/restarting the application, the price-based cards populated. A subsequent screenshot for **TX_2** showed a seven-day gap value of **$8,782** and estimated sales value at risk of **$181**. Those values confirm that the file is being read, but the underlying dollar formulas and their differences still need final validation.
+
+## 7. Deployment, integration checks, and a focused AI limitation test
+
+I deployed the updates through the project's GitHub repository and checked the live Streamlit application after major changes. The screenshots confirm the new ordering section, manager-review warnings, confidence explanations, store-wide policy table, price cards, model-comparison views, and selected forecast-horizon controls appeared in the app.
+
+A focused AI test on November 4 asked Gemini to compare **actual Foods units sold at CA_1 during January 1–7, 2014 and January 1–7, 2015** and calculate the year-over-year percentage change. The assistant retrieved **five historical context passages**, but correctly said it could not access the exact historical sales aggregates required for the calculation. It did not invent totals.
+
+This test established a clear distinction:
+
+- **Working:** RAG retrieves historical explanatory context and the AI Assistant can use dashboard-generated numerical context.
+- **Not yet implemented:** A structured historical query function that computes arbitrary store/category/date sales totals directly from raw or pre-aggregated M5 sales records.
+
+For future work, a small structured historical sales table plus Python/SQL aggregation would support reliable numerical comparisons. This is a capability gap, not evidence that the current RAG retrieval itself failed.
+
+## 8. Files I added or updated this week
+
+| File | Why it matters |
+| --- | --- |
+| `app.py` | Integrated forecast horizons, inventory decisions, manager-facing labels, Model Insights, M5 pricing, and RAG views |
+| `inventory_engine.py` | Supports inventory calculations and interactive ordering logic |
+| `v4_policy_bridge.py` | Connects the dashboard to compact offline v4 policy output without loading the large raw dataset |
+| `forecasting/v4_inventory_policy_2015_12_31.csv` | Precomputed 14-day ordering targets, safety stock, confidence, and hold flags |
+| `forecasting/dashboard_forecasts_14d_2015_12_31.csv.gz` | Compact real daily 14-day LightGBM predictions for charts |
+| `export_m5_prices.py` | Creates the M5 decision-date price extract |
+| `forecasting/m5_prices_asof_2015_12_31.csv.gz` | Provides product/store-specific historical prices for dollar-value displays |
+| `README.md` | Documents the final dashboard architecture, assumptions, and remaining limitations |
+
+The app also continues to use existing RAG files and the team's forecasting notebooks. The forecasting models and the core v4 retrieval research were team outputs; my work this week centered on **application integration, interface design, deployment, and verification**.
+
+## Next steps — weekend validation
+
+I am postponing broader testing until the weekend rather than starting another feature-development cycle. The remaining checks are to verify all independent 7/14-day controls, validate exported CSVs against dashboard figures, test held products with **positive** conditional quantities, confirm manual inventory overrides across stores, reconcile M5-price value calculations, and check how the seven-day stock-gap views relate to the 14-day replenishment policy. I will also continue checking the clarity of the manager workflow and prepare a reliable demonstration.
+
+## Current status
+
+The **core dashboard implementation is substantially complete**, including the key integrations and sponsor-driven UI changes. What remains is final regression testing, clearer documentation of known limitations, and presentation readiness. The application is still a **historical M5 research prototype**; it does not use live Walmart inventory or automatically place orders.
