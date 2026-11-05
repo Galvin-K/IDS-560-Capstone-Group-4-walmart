@@ -109,10 +109,37 @@ st.markdown(
 )
 
 st.info(
-    "Demand forecasts come from a LightGBM model trained on historical Walmart M5 sales data. "
-    "Starting inventory is either entered by the user or estimated from forecast-based assumptions. "
-    "The dashboard combines these inputs to assess possible stock gaps and support planning."
+    "Use the 7-day views to spot upcoming demand and possible stock gaps. "
+    "Use the 14-day replenishment plan to decide how much stock to order after accounting for "
+    "a safety buffer and items that need manager review. We estimate starting stock unless you enter your own numbers."
 )
+
+st.markdown("**Two planning views — two different decisions**")
+guide_7, guide_14 = st.columns(2)
+with guide_7:
+    st.markdown("**7 DAYS | Demand & stock check**")
+    st.caption("January 1–7, 2016. See how much customers may buy and which items may run short. "
+               "The graphs, store comparisons and stock projections use this seven-day view.")
+with guide_14:
+    st.markdown("**14 DAYS | Replenishment plan**")
+    st.caption("January 1–14, 2016. See suggested order amounts with safety stock and manager-review flags. "
+               "Only the 14-day replenishment sections use this longer period.")
+with st.expander("What do these dashboard terms mean?", expanded=False):
+    st.markdown(
+        "**Predicted demand:** How many units we expect customers to buy.\n\n"
+        "**Stock gap:** The amount predicted demand exceeds available starting stock. "
+        "A gap is not automatically a purchase recommendation.\n\n"
+        "**Safety stock:** Extra units we plan to keep in case demand is higher than expected.\n\n"
+        "**Order-up-to target:** The amount of stock we want available for the 14-day planning period, "
+        "including the safety buffer.\n\n"
+        "**On order:** Units we have already ordered but have not received.\n\n"
+        "**Manager review / hold:** A warning to check an item before approving a new order.\n\n"
+        "**Forecast range (P10–P90):** A lower-to-upper demand estimate from the model, "
+        "not a guaranteed minimum or maximum.\n\n"
+        "**Forecast error (WAPE):** How far past predictions were from actual sales overall. "
+        "Lower is better; an error of 72% means the sum of absolute forecast errors "
+        "was about 72% of the total actual sales in the historical test."
+    )
 
 with st.expander("About the Forecast & Data", expanded=False):
     st.markdown(
@@ -193,7 +220,8 @@ with overview:
     item_data = filtered[filtered["item_id"] == item].sort_values("date").copy()
 
     st.write(
-        "Seven-day demand visibility and a separate 14-day replenishment summary for the selected store."
+        "Start with the seven-day demand check below. Then use the 14-day replenishment summary "
+        "to review suggested orders and items that need approval."
     )
 
     total_demand = float(filtered["forecast"].sum())
@@ -218,8 +246,8 @@ with overview:
 
     st.subheader("7-Day Demand & Stock Gap Overview")
     st.caption(
-        "Forecast period: January 1–7, 2016. Product stock and costs "
-        "are assumptions. No replenishment is modeled."
+        "January 1–7, 2016 | This section shows potential stock gaps, not final purchase orders. "
+        "We estimate stock and costs because the M5 data does not include live inventory or supplier costs."
     )
 
     with st.expander("Inventory assumptions", expanded=False):
@@ -467,9 +495,9 @@ with overview:
         "Items with 7-day gap",
         "7-day gap units",
         "7-day gap cost (assumed)",
-        "Sales at risk (assumed)",
-        "Items fully covered",
-        "Overstock items"
+        "Sales value at risk (estimate)",
+        "Items with enough stock",
+        "Possible excess stock"
     ]
 
     inv_values = [
@@ -487,23 +515,26 @@ with overview:
         inv_col.metric(inv_label, inv_value)
 
     st.caption(
-        "Action means predicted seven-day demand exceeds "
-        "assumed stock. Units to order are rounded-up seven-day gaps, "
-        "not validated order recommendations. Estimated costs "
-        "use the entered assumed unit cost for every item. "
-        "Possible excess means at least twice the seven-day "
-        "predicted demand. Daily P90 sums are illustrative "
-        "scenarios, not calibrated weekly P90 values."
+        "A seven-day gap means we expect demand to exceed starting stock. "
+        "These figures help you spot issues; use the 14-day plan below for ordering decisions. "
+        "We estimate costs using the unit cost you enter."
     )
+    with st.expander("How we calculate these seven-day indicators", expanded=False):
+        st.write(
+            "We subtract estimated starting stock from seven-day predicted demand for each product. "
+            "We round positive gaps up to whole units. We label stock as possible excess when it is "
+            "at least twice the predicted demand. The upper forecast scenarios add daily P90 figures; "
+            "they are not validated seven-day uncertainty limits."
+        )
 
     # PHASE4: Separate the evaluated 14-day inventory policy from seven-day gaps.
     # This panel only reads a compact precomputed table: it never starts M5
     # loading, a model or the RAG reranker. Incoming orders assumed zero.
     st.subheader("14-Day Replenishment Summary")
     st.caption(
-        "January 1–14, 2016 | LightGBM forecasts and historical-error safety stock. "
-        "Uses the same estimated/manually adjusted starting stock as the seven-day view. "
-        "Figures are historical planning recommendations, not actual Walmart orders."
+        "January 1–14, 2016 | Unlike the seven-day stock-gap charts, this plan includes extra "
+        "safety stock and checks whether a manager should review an item before ordering. "
+        "We calculate suggested quantities from estimated or manually entered stock."
     )
     policy_ready, policy_note = offline_policy_status()
     if not policy_ready:
@@ -783,8 +814,9 @@ with overview:
 # ============================================================
 
 with forecasting:
-    st.header("Demand Forecasting")
-    st.caption(f"Store: {store} | Historical seven-day forecast, not current demand")
+    st.header("Demand Forecasting | Next 7 Days")
+    st.caption(f"Store: {store} | January 1–7, 2016. Every chart and table on this page uses the "
+               "seven-day forecast. For purchasing decisions, use the separate 14-day plan in Inventory Planning.")
     st.subheader("Department-level forecast")
     dept_summary = (store_df.groupby("dept_id", as_index=False)
                     .agg(predicted_demand=("forecast", "sum"), products=("item_id", "nunique"))
@@ -844,8 +876,8 @@ with forecasting:
             "date": "Forecast Date",
             "lead": "Days Ahead",
             "forecast": "Predicted Units",
-            "p10": "P10 Lower Bound",
-            "p90": "P90 Upper Bound"
+            "p10": "Lower Demand Estimate (P10)",
+            "p90": "Upper Demand Estimate (P90)"
         }
     )
 
@@ -867,8 +899,8 @@ with forecasting:
     st.subheader("Daily product forecast chart")
 
     st.write(
-        "The blue line represents the LightGBM point forecast. "
-        "The shaded region shows the P10–P90 prediction bounds."
+        "The blue line shows our expected daily sales. The shaded area shows a range of "
+        "lower and higher sales estimates, so you can see where demand may vary."
     )
 
     plot_data = item_data.sort_values("date").copy()
@@ -886,7 +918,7 @@ with forecasting:
             x=plot_data["date_label"],
             y=plot_data["p90"],
             mode="lines",
-            name="P90 Upper Bound",
+            name="Higher demand estimate (P90)",
             line=dict(
                 color="rgba(0,113,206,0.3)",
                 width=1
@@ -901,7 +933,7 @@ with forecasting:
             x=plot_data["date_label"],
             y=plot_data["p10"],
             mode="lines",
-            name="P10 Lower Bound",
+            name="Lower demand estimate (P10)",
             fill="tonexty",
             fillcolor="rgba(0,113,206,0.15)",
             line=dict(
@@ -918,7 +950,7 @@ with forecasting:
             x=plot_data["date_label"],
             y=plot_data["forecast"],
             mode="lines+markers",
-            name="LightGBM Forecast",
+            name="Expected daily demand",
             line=dict(
                 color="#0071ce",
                 width=3
@@ -946,11 +978,12 @@ with forecasting:
         use_container_width=True
     )
 
-    st.caption(
-        "P10 and P90 are model-based uncertainty bounds. "
-        "They are not guaranteed minimum or maximum sales. "
-        "The displayed intervals use the Pooled method."
-    )
+    with st.expander("What does the shaded forecast range mean?", expanded=False):
+        st.write(
+            "P10 is a lower demand estimate and P90 is a higher one. They describe uncertainty, "
+            "not guaranteed sales limits. We use the model's pooled prediction ranges; "
+            "these are daily forecasts rather than a validated 14-day range."
+        )
 
     st.divider()
 
@@ -1009,91 +1042,94 @@ with forecasting:
 
     st.divider()
 
-    st.subheader("Model Evaluation")
-
+    st.markdown("**How reliable were these forecasts?**")
     st.write(
-        "LightGBM was compared with the Recent Mean "
-        "baseline using measures such as WAPE and bias."
+        "We tested our forecasting model against a simple approach that repeats recent sales patterns. "
+        "The model had lower historical forecasting error, but it can still miss demand changes."
     )
+    with st.expander("View technical model evaluation (for analysts)", expanded=False):
+        st.caption("WAPE measures overall forecast error; lower is better. Bias shows whether the "
+                   "model tends to overpredict or underpredict. MAE and RMSE summarize error sizes "
+                   "in units. These test results cover a historical sample, not every product.")
 
-    # MODEL_EVALUATION_RESULTS_V1
+        # MODEL_EVALUATION_RESULTS_V1
 
-    files_found = list(
-        Path(__file__).resolve().parent.rglob(
-            "lightgbm_final_test_results.csv"
-        )
-    )
-
-    if not files_found:
-        st.warning(
-            "Model evaluation data not found. "
-            "Restore the forecasting outputs."
+        files_found = list(
+            Path(__file__).resolve().parent.rglob(
+                "lightgbm_final_test_results.csv"
+            )
         )
 
-    else:
-        evaluation_df = pd.read_csv(files_found[0])
-
-        evaluation_df = evaluation_df[
-            (evaluation_df["sample"].astype(str) == "50%")
-            & (evaluation_df["horizon"] == 7)
-            & (evaluation_df["segment"] == "All")
-            & (evaluation_df["model"].isin([
-                "recent_mean_7",
-                "lightgbm_final"
-            ]))
-        ].copy()
-
-        evaluation_df["Model"] = evaluation_df["model"].map({
-            "recent_mean_7": "Recent Mean (7-day)",
-            "lightgbm_final": "LightGBM (Final)"
-        })
-
-        if len(evaluation_df) != 2:
-            st.warning("Expected evaluation rows not found.")
+        if not files_found:
+            st.warning(
+                "Model evaluation data not found. "
+                "Restore the forecasting outputs."
+            )
 
         else:
-            chart = go.Figure(go.Bar(
-                x=evaluation_df["Model"],
-                y=evaluation_df["WAPE_pct"],
-                marker_color=[
-                    "#8497aa" if name == "recent_mean_7"
-                    else "#0071ce"
-                    for name in evaluation_df["model"]
-                ],
-                text=evaluation_df["WAPE_pct"].round(2),
-                texttemplate="%{text:.2f}%",
-                textposition="outside"
-            ))
+            evaluation_df = pd.read_csv(files_found[0])
 
-            chart.update_layout(
-                title="Seven-Day Forecast Error (WAPE)",
-                xaxis_title="Model",
-                yaxis_title="WAPE (%)",
-                yaxis=dict(rangemode="tozero"),
-                height=350,
-                showlegend=False
-            )
+            evaluation_df = evaluation_df[
+                (evaluation_df["sample"].astype(str) == "50%")
+                & (evaluation_df["horizon"] == 7)
+                & (evaluation_df["segment"] == "All")
+                & (evaluation_df["model"].isin([
+                    "recent_mean_7",
+                    "lightgbm_final"
+                ]))
+            ].copy()
 
-            st.plotly_chart(
-                chart,
-                use_container_width=True
-            )
+            evaluation_df["Model"] = evaluation_df["model"].map({
+                "recent_mean_7": "Recent Mean (7-day)",
+                "lightgbm_final": "LightGBM (Final)"
+            })
 
-            st.dataframe(
-                evaluation_df[
-                    ["Model", "WAPE_pct", "Bias_pct", "MAE", "RMSE"]
-                ].rename(columns={
-                    "WAPE_pct": "WAPE (%)",
-                    "Bias_pct": "Bias (%)"
-                }).round(3),
-                hide_index=True,
-                use_container_width=True
-            )
+            if len(evaluation_df) != 2:
+                st.warning("Expected evaluation rows not found.")
 
-            st.caption(
-                "Historical aggregate test performance on the "
-                "50% sample. These are not item-level errors."
-            )
+            else:
+                chart = go.Figure(go.Bar(
+                    x=evaluation_df["Model"],
+                    y=evaluation_df["WAPE_pct"],
+                    marker_color=[
+                        "#8497aa" if name == "recent_mean_7"
+                        else "#0071ce"
+                        for name in evaluation_df["model"]
+                    ],
+                    text=evaluation_df["WAPE_pct"].round(2),
+                    texttemplate="%{text:.2f}%",
+                    textposition="outside"
+                ))
+
+                chart.update_layout(
+                    title="Seven-Day Forecast Error (WAPE)",
+                    xaxis_title="Model",
+                    yaxis_title="WAPE (%)",
+                    yaxis=dict(rangemode="tozero"),
+                    height=350,
+                    showlegend=False
+                )
+
+                st.plotly_chart(
+                    chart,
+                    use_container_width=True
+                )
+
+                st.dataframe(
+                    evaluation_df[
+                        ["Model", "WAPE_pct", "Bias_pct", "MAE", "RMSE"]
+                    ].rename(columns={
+                        "WAPE_pct": "WAPE (%)",
+                        "Bias_pct": "Bias (%)"
+                    }).round(3),
+                    hide_index=True,
+                    use_container_width=True
+                )
+
+                st.caption(
+                    "Historical aggregate test performance on the "
+                    "50% sample. These are not item-level errors."
+                )
 
 # ============================================================
 # TAB 3: INVENTORY PLANNING
@@ -1102,9 +1138,14 @@ with forecasting:
 with planning:
 
     st.header("Inventory Planning")
-
-    st.write("Explore forecast demand using assumption-based inventory estimates and manual stock adjustments.")
-    st.warning("M5 does not include inventory-on-hand, supplier lead times, or observed stockouts. Estimated quantities follow forecast-based assumptions; manual stock adjustments are user inputs.")
+    st.write(
+        "Use the seven-day stock check to see which products might run short. "
+        "Use the 14-day replenishment plan to review suggested orders, safety stock, and manager holds."
+    )
+    st.caption(
+        "Our historical M5 data does not include actual stock on hand or supplier lead times. "
+        "We start with estimates and let you enter a different stock level for any product."
+    )
 
     st.subheader("Prioritized Inventory Action List")
 
@@ -1387,10 +1428,11 @@ with planning:
     # M5 history, safety stock, confidence and hold/review rules. The only
     # live arithmetic is stock-dependent ordering; do NOT initialize M5 here.
     st.divider()
-    st.subheader("14-Day Replenishment Planning")
-    st.caption(
-        "January 1–14, 2016 | Precomputed LightGBM forecast, historical-error safety stock "
-        "and manager-review checks. The starting-stock inputs remain estimated or manually entered."
+    st.subheader("14-Day Replenishment | Suggested Orders")
+    st.write(
+        "**January 1–14, 2016.** This is the ordering view. We combine expected demand "
+        "with a safety buffer, subtract stock already available or on order, and flag items "
+        "that need a manager's review. The rest of the inventory charts use seven days."
     )
     offline_available, offline_message = offline_policy_status()
     if not offline_available:
@@ -1407,8 +1449,8 @@ with planning:
                 help="Units already ordered for the selected product, not included in current on-hand stock."
             )
             ordering_cols[1].caption(
-                "Protection period is fixed at 14 days (7-day lead time + 7-day review). "
-                "Changing this duration requires recomputing the offline policy."
+                "We plan for 14 days: seven days for a delivery and seven days until the next "
+                "stock review. We need to recalculate the plan to change that period."
             )
             try:
                 v4_selected = offline_v4_recommendation(
@@ -1418,10 +1460,14 @@ with planning:
                 st.warning("This product is not available in the precomputed 14-day policy sample.")
             else:
                 metric_cols = st.columns(4)
-                metric_cols[0].metric("14-Day Forecast", f"{v4_selected['demand_14d']:,.1f}")
-                metric_cols[1].metric("Historical Safety Stock", f"{v4_selected['safety_stock']:,.1f}")
-                metric_cols[2].metric("Order-up-to Target", f"{v4_selected['order_up_to']:,.1f}")
-                metric_cols[3].metric("Recommended Order", f"{v4_selected['order_qty']:,}")
+                metric_cols[0].metric("Expected 14-day sales", f"{v4_selected['demand_14d']:,.1f}",
+                                      help="Units we expect customers to buy during January 1–14.")
+                metric_cols[1].metric("Extra safety stock", f"{v4_selected['safety_stock']:,.1f}",
+                                      help="Additional inventory to help cover unexpectedly high demand.")
+                metric_cols[2].metric("Target stock level", f"{v4_selected['order_up_to']:,.1f}",
+                                      help="Expected 14-day demand plus safety stock.")
+                metric_cols[3].metric("Suggested units to order", f"{v4_selected['order_qty']:,}",
+                                      help="Target minus stock on hand and stock already on order; zero for held items.")
                 if v4_selected['hold']:
                     st.warning(
                         "Hold for manager review: do not place an order until the item is checked. "
@@ -1430,7 +1476,7 @@ with planning:
                     )
                 else:
                     st.success("No automatic hold flag for this historical decision.")
-                st.write(f"**Forecast confidence:** {v4_selected['confidence']}")
+                st.write(f"**How confident are we in the forecast?** {v4_selected['confidence']}")
                 if str(v4_selected.get('confidence_reasons','')).strip() not in ('','nan'):
                     st.caption("Confidence basis: " + str(v4_selected['confidence_reasons']))
                 if str(v4_selected.get('flags','')).strip() not in ('','nan'):
@@ -1444,7 +1490,10 @@ with planning:
                     "This is historical decision support, not a validated purchase order."
                 )
 
-            with st.expander("Store-wide 14-day ordering priorities", expanded=False):
+            with st.expander("Store-wide 14-day suggested orders (all products)", expanded=False):
+                st.caption("This list ranks products by suggested order quantity. A hold means a manager "
+                           "must review the product before placing an order. The conditional amount is "
+                           "what we would order after that hold clears.")
                 # Same estimated/manual stock figures used by the 7-day store panel.
                 store_policy = policy_rows.reset_index(drop=True).merge(
                     inv_items[["item_id", "store_id", "starting_stock", "inventory_source"]],
@@ -1511,7 +1560,7 @@ with planning:
 
     st.divider()
 
-    st.subheader("7-Day Stock Projection (No Replenishment)")
+    st.subheader("7-Day Stock Check | No New Deliveries")
 
     k1, k2, k3 = st.columns(3)
 
@@ -1542,12 +1591,11 @@ with planning:
 
     # MULTI_ITEM_RUNWAY_V3
 
-    st.subheader("Stock Runway — Next 7 Days")
-
-    st.caption(
-        "Product-specific inventory uses estimated "
-        "source consistently across the dashboard. Stockout projections "
-        "are estimates, not observed Walmart stockouts."
+    st.subheader("When Could Each Product Run Out? | Next 7 Days")
+    st.write(
+        "Choose products to see how their estimated inventory may change day by day. "
+        "A line reaching zero means predicted sales could use up that product's starting stock. "
+        "This chart does not include deliveries or the separate 14-day replenishment plan."
     )
 
     import math
@@ -1556,7 +1604,7 @@ with planning:
     runway_controls = st.columns(2)
 
     runway_products = runway_controls[0].multiselect(
-        "Products to display in stock runway",
+        "Products to compare",
         options=sorted(inv_items["item_id"].unique().tolist()),
         default=[item] if item in inv_items["item_id"].values else [],
         key="runway_selected_products",
@@ -1970,7 +2018,9 @@ with planning:
 # AI ASSISTANT
 
 with assistant:
-    st.subheader("AI Inventory Assistant")
+    st.subheader("Ask about demand and inventory")
+    st.caption("Ask a question about stores, products, or past sales patterns. "
+               "The assistant checks forecast data and historical references; it does not change orders.")
 
     with st.expander("Forecast uncertainty notes"):
         st.write(
