@@ -87,6 +87,30 @@ if not DATA_FILE.exists():
 
 df = load_forecasts()
 
+# The 14-day daily forecast is pre-exported from the actual LightGBM cube
+# (forecast origin: 2015-12-31). Keep the original 7-day CSV unchanged.
+DAILY_14_FILE = Path(__file__).resolve().parent / "forecasting" / "dashboard_forecasts_14d_2015_12_31.csv.gz"
+
+@st.cache_data(show_spinner=False)
+def load_14day_daily_forecasts():
+    if not DAILY_14_FILE.is_file():
+        return None
+    forecast_14 = pd.read_csv(DAILY_14_FILE, parse_dates=["date", "forecast_origin"])
+    required = {"store_id", "item_id", "dept_id", "date", "lead", "forecast", "p10", "p90"}
+    missing = required - set(forecast_14.columns)
+    if missing:
+        raise ValueError(f"14-day daily forecast file is missing: {sorted(missing)}")
+    for col in ("forecast", "p10", "p90"):
+        forecast_14[col] = pd.to_numeric(forecast_14[col], errors="coerce")
+    if not forecast_14["lead"].between(1, 14).all() or forecast_14[list(required - {"date", "forecast_origin"})].isna().any().any():
+        raise ValueError("14-day daily forecast contains missing or invalid values")
+    if forecast_14.duplicated(["store_id", "item_id", "date"]).any():
+        raise ValueError("14-day forecast includes duplicate item-store-day rows")
+    if not (forecast_14["forecast_origin"].dt.strftime("%Y-%m-%d") == "2015-12-31").all():
+        raise ValueError("14-day forecast origin must be 2015-12-31")
+    return forecast_14
+
+
 # 3. HEADER
 
 # DASHBOARD_STYLE_V1
@@ -119,11 +143,11 @@ guide_7, guide_14 = st.columns(2)
 with guide_7:
     st.markdown("**7 DAYS | Demand & stock check**")
     st.caption("January 1–7, 2016. See how much customers may buy and which items may run short. "
-               "The graphs, store comparisons and stock projections use this seven-day view.")
+               "Seven days is the default for graphs and store comparisons; selected product charts can also show 14 days.")
 with guide_14:
     st.markdown("**14 DAYS | Replenishment plan**")
     st.caption("January 1–14, 2016. See suggested order amounts with safety stock and manager-review flags. "
-               "Only the 14-day replenishment sections use this longer period.")
+               "Replenishment decisions use 14 days; product forecast and stock charts can also show this horizon.")
 with st.expander("What do these dashboard terms mean?", expanded=False):
     st.markdown(
         "**Predicted demand:** How many units we expect customers to buy.\n\n"
@@ -144,7 +168,7 @@ with st.expander("What do these dashboard terms mean?", expanded=False):
 with st.expander("About the Forecast & Data", expanded=False):
     st.markdown(
         "**Forecast:** Seven-day LightGBM forecasts for January 1–7, 2016, based on "
-        "historical Walmart M5 data, with a separately precomputed 14-day inventory "
+        "historical Walmart M5 data, with separate daily 14-day forecasts and a precomputed 14-day inventory "
         "planning policy covering January 1–14, 2016. Both are historical outputs "
         "for the model sample, not live forecasts.\n\n"
         "**Inventory:** Estimated starting stock uses predefined forecast-based "
@@ -814,21 +838,42 @@ with overview:
 # ============================================================
 
 with forecasting:
-    st.header("Demand Forecasting | Next 7 Days")
-    st.caption(f"Store: {store} | January 1–7, 2016. Every chart and table on this page uses the "
-               "seven-day forecast. For purchasing decisions, use the separate 14-day plan in Inventory Planning.")
+    st.header("Demand Forecasting")
+    forecast_horizon = st.radio(
+        "Choose the forecast period",
+        [7, 14],
+        format_func=lambda days: f"Next {days} days",
+        horizontal=True,
+        key="forecast_chart_horizon",
+    )
+    daily_14_data = load_14day_daily_forecasts() if forecast_horizon == 14 else None
+    if forecast_horizon == 14 and daily_14_data is None:
+        st.warning("The 14-day daily forecast file is not uploaded yet. Showing the 7-day forecast.")
+        forecast_horizon = 7
+    forecast_view_df = (store_df if forecast_horizon == 7 else
+                        daily_14_data[daily_14_data["store_id"].eq(store)].copy())
+    forecast_end_day = 7 if forecast_horizon == 7 else 14
+    st.caption(
+        f"Store: {store} | January 1–{forecast_end_day}, 2016. "
+        f"All demand charts and tables below use {forecast_horizon} days. "
+        "The 14-day replenishment plan also includes safety stock and hold flags, "
+        "so its suggested orders are different from predicted demand."
+    )
+    if forecast_horizon == 14:
+        st.caption("The 14-day chart uses the separate historical LightGBM forecast cube. "
+                   "Its first seven daily predictions may differ from the dedicated seven-day view.")
     st.subheader("Department-level forecast")
-    dept_summary = (store_df.groupby("dept_id", as_index=False)
+    dept_summary = (forecast_view_df.groupby("dept_id", as_index=False)
                     .agg(predicted_demand=("forecast", "sum"), products=("item_id", "nunique"))
                     .sort_values("predicted_demand", ascending=False))
-    st.dataframe(dept_summary.rename(columns={"dept_id":"Department", "predicted_demand":"7-day predicted units", "products":"Products"}),
+    st.dataframe(dept_summary.rename(columns={"dept_id":"Department", "predicted_demand":f"{forecast_horizon}-day predicted units", "products":"Products"}),
                  hide_index=True, use_container_width=True)
     fig_depts = go.Figure(go.Bar(x=dept_summary["dept_id"], y=dept_summary["predicted_demand"], marker_color="#0071ce"))
-    fig_depts.update_layout(title="Demand by department", xaxis_title="Department", yaxis_title="7-day predicted units", height=360)
+    fig_depts.update_layout(title="Demand by department", xaxis_title="Department", yaxis_title=f"{forecast_horizon}-day predicted units", height=360)
     st.plotly_chart(fig_depts, use_container_width=True)
     st.subheader("Select a product")
     forecast_dept = st.selectbox("Department", dept_options, key="forecast_dept")
-    forecast_filtered = store_df[store_df["dept_id"] == forecast_dept].copy()
+    forecast_filtered = forecast_view_df[forecast_view_df["dept_id"] == forecast_dept].copy()
     forecast_item = st.selectbox("Product", sorted(forecast_filtered["item_id"].dropna().unique()), key="forecast_item")
     forecast_item_data = forecast_filtered[forecast_filtered["item_id"] == forecast_item].sort_values("date").copy()
     # Forecast page state is intentionally independent of Inventory Planning and AI scopes.
@@ -849,7 +894,7 @@ with forecasting:
     c1, c2, c3 = st.columns(3)
 
     c1.metric(
-        "7-Day Predicted Units",
+        f"{forecast_horizon}-Day Predicted Units",
         f"{predicted_total:,.2f}"
     )
 
@@ -918,7 +963,7 @@ with forecasting:
             x=plot_data["date_label"],
             y=plot_data["p90"],
             mode="lines",
-            name="Higher demand estimate (P90)",
+            name="Higher demand estimate",
             line=dict(
                 color="rgba(0,113,206,0.3)",
                 width=1
@@ -933,7 +978,7 @@ with forecasting:
             x=plot_data["date_label"],
             y=plot_data["p10"],
             mode="lines",
-            name="Lower demand estimate (P10)",
+            name="Lower demand estimate",
             fill="tonexty",
             fillcolor="rgba(0,113,206,0.15)",
             line=dict(
@@ -960,7 +1005,7 @@ with forecasting:
     )
 
     fig_forecast.update_layout(
-        title=f"Demand Forecast — {item}",
+        title=f"{forecast_horizon}-Day Demand Forecast — {item}",
         xaxis_title="Forecast Date",
         yaxis_title="Predicted Units per Day",
         xaxis_type="category",
@@ -982,7 +1027,7 @@ with forecasting:
         st.write(
             "P10 is a lower demand estimate and P90 is a higher one. They describe uncertainty, "
             "not guaranteed sales limits. We use the model's pooled prediction ranges; "
-            "these are daily forecasts rather than a validated 14-day range."
+            "these are individual daily estimates, not a calibrated range for total 14-day demand."
         )
 
     st.divider()
@@ -1024,7 +1069,7 @@ with forecasting:
     )
 
     fig_overview.update_layout(
-        title="7-Day Predicted Demand",
+        title=f"{forecast_horizon}-Day Predicted Demand",
         xaxis_title="Forecast Date",
         yaxis_title="Predicted Units per Day",
         xaxis_type="category",
@@ -1591,11 +1636,22 @@ with planning:
 
     # MULTI_ITEM_RUNWAY_V3
 
-    st.subheader("When Could Each Product Run Out? | Next 7 Days")
+    st.subheader("When Could Each Product Run Out?")
+    runway_horizon = st.radio(
+        "Choose the stock projection period",
+        [7, 14],
+        format_func=lambda days: f"Next {days} days",
+        horizontal=True,
+        key="inventory_chart_horizon",
+    )
+    runway_14_data = load_14day_daily_forecasts() if runway_horizon == 14 else None
+    if runway_horizon == 14 and runway_14_data is None:
+        st.warning("Upload the compact 14-day daily forecast to enable longer stock projections.")
+        runway_horizon = 7
     st.write(
-        "Choose products to see how their estimated inventory may change day by day. "
-        "A line reaching zero means predicted sales could use up that product's starting stock. "
-        "This chart does not include deliveries or the separate 14-day replenishment plan."
+        f"See when your estimated starting stock could run out over the next {runway_horizon} days. "
+        "We subtract each day's expected sales. This projection assumes no deliveries. "
+        "The 14-day replenishment recommendation above is a separate decision that adds safety stock and review rules."
     )
 
     import math
@@ -1614,16 +1670,22 @@ with planning:
     runway_day = runway_controls[1].slider(
         "Inspect forecast day",
         min_value=1,
-        max_value=7,
-        value=7,
-        key="runway_scaled_day"
+        max_value=runway_horizon,
+        value=runway_horizon,
+        key=f"runway_scaled_day_{runway_horizon}"
     )
 
-    # Summarize each product's seven-day forecast
+    if runway_horizon == 14:
+        st.caption("The 14-day stock chart uses a separate historical forecast output and keeps "
+                   "starting stock fixed. It does not apply the replenishment order or assume a delivery.")
 
-    runway_source = inv_data[
-        ["item_id", "date", "forecast", "p90"]
-    ].copy()
+    # Daily stock graphs (not purchase recommendations) use the selected horizon.
+    runway_source = (
+        inv_data[["item_id", "date", "forecast", "p90"]].copy()
+        if runway_horizon == 7 else
+        runway_14_data.loc[runway_14_data["store_id"].eq(store),
+                           ["item_id", "date", "forecast", "p90"]].copy()
+    )
 
     runway_source["date"] = pd.to_datetime(
         runway_source["date"]
@@ -1730,7 +1792,7 @@ with planning:
             values="risk"
         ).reindex(
             index=product_order,
-            columns=range(1, 8)
+            columns=range(1, runway_horizon + 1)
         )
 
         heatmap_labels = runway.pivot(
@@ -1739,7 +1801,7 @@ with planning:
             values="status"
         ).reindex(
             index=product_order,
-            columns=range(1, 8)
+            columns=range(1, runway_horizon + 1)
         )
 
         dates = (
@@ -1800,7 +1862,7 @@ with planning:
         st.caption(
             "Colors reflect estimated stock levels and cumulative "
             "demand. Summed daily P90 values are illustrative, "
-            "not calibrated seven-day prediction intervals."
+            "not calibrated multi-day prediction intervals."
         )
 
         with product_inspection_slot:
@@ -1891,10 +1953,10 @@ with planning:
             )
 
             stock_chart.update_layout(
-                title=f"7-Day Stock Projection — {selected_product}",
+                title=f"{runway_horizon}-Day Stock Projection — {selected_product}",
                 xaxis_title="Forecast Day",
                 yaxis_title="Projected Remaining Stock (Units)",
-                xaxis=dict(dtick=1, range=[0, 7]),
+                xaxis=dict(dtick=1, range=[0, runway_horizon]),
                 yaxis=dict(rangemode="tozero"),
                 height=370,
                 margin=dict(t=65, b=40),
@@ -2026,7 +2088,7 @@ with assistant:
         st.write(
             "Daily P10/P90 values are model uncertainty estimates. "
             "Their sums across seven days are illustrative scenarios, "
-            "not calibrated seven-day prediction intervals."
+            "not calibrated multi-day prediction intervals."
         )
 
     st.write(
