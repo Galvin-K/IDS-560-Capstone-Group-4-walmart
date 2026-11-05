@@ -111,6 +111,43 @@ def load_14day_daily_forecasts():
     return forecast_14
 
 
+# Compact, date-safe selling-price extract from M5. The dashboard never loads
+# the large original sell_prices.csv on Streamlit Cloud.
+PRICE_FILE = Path(__file__).resolve().parent / "forecasting" / "m5_prices_asof_2015_12_31.csv.gz"
+
+@st.cache_data(show_spinner=False)
+def load_m5_prices():
+    if not PRICE_FILE.is_file():
+        return None
+    prices = pd.read_csv(PRICE_FILE)
+    required = {"store_id", "item_id", "sell_price"}
+    if not required.issubset(prices.columns):
+        raise ValueError(f"M5 price extract needs {sorted(required)}")
+    prices = prices[["store_id", "item_id", "sell_price"]].copy()
+    prices["sell_price"] = pd.to_numeric(prices["sell_price"], errors="coerce")
+    if prices.duplicated(["store_id", "item_id"]).any():
+        raise ValueError("M5 price extract has duplicate store-item rows")
+    prices.loc[prices["sell_price"] <= 0, "sell_price"] = float("nan")
+    return prices
+
+
+def add_m5_prices(frame):
+    """Attach observed M5 selling prices; never substitute an arbitrary price."""
+    out = frame.drop(columns=["sell_price"], errors="ignore").copy()
+    prices = load_m5_prices()
+    if prices is None:
+        out["sell_price"] = float("nan")
+    else:
+        out = out.merge(prices, on=["store_id", "item_id"], how="left", validate="many_to_one")
+    return out
+
+
+def m5_price_value(units, prices):
+    """Value only rows with an observed positive M5 selling price."""
+    return float((pd.to_numeric(units, errors="coerce") *
+                  pd.to_numeric(prices, errors="coerce")).sum(min_count=1))
+
+
 # 3. HEADER
 
 # DASHBOARD_STYLE_V1
@@ -272,43 +309,22 @@ with overview:
     st.subheader("7-Day Demand & Stock Gap Overview")
     st.caption(
         "January 1–7, 2016 | This section shows potential stock gaps, not final purchase orders. "
-        "We estimate stock and costs because the M5 data does not include live inventory or supplier costs."
+        "We estimate stock because M5 does not include live inventory. Dollar values use M5's historical selling prices, not supplier costs."
     )
 
     with st.expander("Inventory assumptions", expanded=False):
         inv_scope = "All departments"
 
-        inv_controls = st.columns(2)
-
-        inv_controls[0].caption(
-            "Starting stock uses estimated "
-            "inventory source, with manual overrides when enabled."
+        st.caption(
+            "We value units using each product's M5 selling price as of December 31, 2015. "
+            "This is a historical retail-price proxy, not a supplier purchase cost."
         )
-
-        inv_cost = inv_controls[1].number_input(
-            "Assumed unit cost ($)",
-            min_value=0.0,
-            value=5.0,
-            step=0.5,
-            key="inv_overview_cost"
-        )
-
-        inv_extra_controls = st.columns(2)
-
-        inv_lead_days = inv_extra_controls[0].selectbox(
+        inv_lead_days = st.selectbox(
             "Assumed lead time (days)",
-            options=list(range(1, 8)),
-            index=1,
+            options=list(range(1, 8)), index=1,
             key="inv_overview_lead_days"
         )
 
-        inv_sale_price = inv_extra_controls[1].number_input(
-            "Assumed selling price ($ per unit)",
-            min_value=0.0,
-            value=8.0,
-            step=0.5,
-            key="inv_overview_sale_price"
-        )
 
     inv_data = (
         store_df if inv_scope == "All departments" else filtered
@@ -353,6 +369,8 @@ with overview:
         inv_items, uploaded_inventory, effective_inventory_mode,
         st.session_state["inventory_overrides"], missing_policy=missing_inventory_policy
     )
+
+    inv_items = add_m5_prices(inv_items)
 
     inv_items["gap"] = (
         inv_items["demand"]
@@ -474,9 +492,9 @@ with overview:
         - inv_lead_demand["starting_stock"]
     ).clip(lower=0)
 
-    inv_sales_at_risk = float(
-        inv_lead_demand["simulated_lost_units"].sum()
-        * inv_sale_price
+    inv_lead_demand = add_m5_prices(inv_lead_demand.assign(store_id=store))
+    inv_sales_at_risk = m5_price_value(
+        inv_lead_demand["simulated_lost_units"], inv_lead_demand["sell_price"]
     )
 
     # Calculate inventory KPI values
@@ -519,8 +537,8 @@ with overview:
     inv_labels = [
         "Items with 7-day gap",
         "7-day gap units",
-        "7-day gap cost (assumed)",
-        "Sales value at risk (estimate)",
+        "7-day gap value (M5 prices)",
+        "Sales value at risk (M5 price)",
         "Items with enough stock",
         "Possible excess stock"
     ]
@@ -528,8 +546,9 @@ with overview:
     inv_values = [
         f"{inv_action:,} / {inv_total:,}",
         f"{inv_cover:,}",
-        f"${inv_cover * inv_cost:,.0f}",
-        f"${inv_sales_at_risk:,.0f}",
+        (f"${m5_price_value(inv_items['units_to_cover'], inv_items['sell_price']):,.0f}"
+         if inv_items['sell_price'].notna().any() else "Price file needed"),
+        (f"${inv_sales_at_risk:,.0f}" if pd.notna(inv_sales_at_risk) else "Price file needed"),
         f"{inv_covered:.1f}%",
         f"{inv_excess_count:,}"
     ]
@@ -539,10 +558,15 @@ with overview:
     ):
         inv_col.metric(inv_label, inv_value)
 
+    if load_m5_prices() is None:
+        st.info("To display product-specific dollar values, upload "
+                "forecasting/m5_prices_asof_2015_12_31.csv.gz (generated from M5 sell_prices.csv).")
+
     st.caption(
         "A seven-day gap means we expect demand to exceed starting stock. "
         "These figures help you spot issues; use the 14-day plan below for ordering decisions. "
-        "We estimate costs using the unit cost you enter."
+        "Dollar values use M5 historical selling prices, not actual purchase costs. "
+        "If some products lack prices, dollar totals only include priced products."
     )
     with st.expander("How we calculate these seven-day indicators", expanded=False):
         st.write(
@@ -608,7 +632,7 @@ with overview:
     st.caption(
         "Compare stores using the seven-day demand-gap view, "
         "inventory estimation "
-        "rules, and assumed unit cost. Select a store "
+        "rules, and historical M5 selling prices. Select a store "
         "to update the entire dashboard."
     )
 
@@ -714,10 +738,17 @@ with overview:
         )
     )
 
-    comparison_summary["estimated_order_cost"] = (
-        comparison_summary["units_to_order"]
-        * inv_cost
+    comparison_items = add_m5_prices(comparison_items)
+    comparison_items["m5_gap_value"] = (
+        comparison_items["units_to_order"] * comparison_items["sell_price"]
     )
+    comparison_costs = comparison_items.groupby("store_id", as_index=False).agg(
+        estimated_order_cost=("m5_gap_value", "sum"),
+        missing_price_rows=("sell_price", lambda s: int(s.isna().sum()))
+    )
+    comparison_summary = comparison_summary.merge(comparison_costs, on="store_id", how="left")
+    comparison_summary.loc[comparison_summary["missing_price_rows"].eq(
+        comparison_summary["included_items"]), "estimated_order_cost"] = float("nan")
 
     comparison_summary = (
         comparison_summary.sort_values("store_id")
@@ -778,7 +809,8 @@ with overview:
                         )
 
                         st.caption(
-                            f"Est. cost: ${order_cost:,.0f}"
+                            (f"M5 price value: ${order_cost:,.0f}" if pd.notna(order_cost)
+                             else "M5 prices not uploaded")
                         )
 
     st.caption(
@@ -786,7 +818,7 @@ with overview:
         "otherwise estimated values. Units to order cover "
         "point-forecast gaps, not validated purchase orders. "
         "Figures exclude products outside the forecasting "
-        "sample and use an assumed common unit cost."
+        "sample. Dollar values use historical M5 selling prices, not supplier costs."
     )
 
     st.divider()
@@ -809,9 +841,8 @@ with overview:
     if urgent.empty:
         st.success("No point-forecast shortages in this selection.")
     else:
-        # Match the assumed unit cost used in the simulated order-list KPIs.
         urgent["estimated_order_cost"] = (
-            urgent["units_to_cover"].astype(int) * inv_cost
+            urgent["units_to_cover"].astype(int) * urgent["sell_price"]
         ).round(2)
         priorities_display = urgent[
             ["item_id", "dept_id", "gap", "units_to_cover", "estimated_order_cost"]
@@ -820,7 +851,7 @@ with overview:
             "dept_id": "Department",
             "gap": "Demand Gap (Units)",
             "units_to_cover": "7-Day Gap Units",
-            "estimated_order_cost": "7-Day Gap Cost ($)",
+            "estimated_order_cost": "7-Day Gap Value at M5 Price ($)",
         }).round(2)
         st.dataframe(
             priorities_display,
@@ -829,7 +860,7 @@ with overview:
         )
 
     st.caption(
-        "Seven-day gap costs use an assumed unit cost and do not include safety stock; "
+        "Seven-day gap values use M5 selling prices (not wholesale costs) and do not include safety stock; "
         "they are not purchase recommendations. "
         "Find the 14-day replenishment decisions and detailed order lists in Inventory Planning."
     )
@@ -1302,89 +1333,103 @@ with planning:
     )
 
     st.subheader("Prioritized Inventory Action List")
-
+    action_horizon = st.radio(
+        "Action list forecast period", [7, 14], horizontal=True,
+        format_func=lambda days: f"{days} days", key="action_list_horizon",
+    )
+    st.caption(
+        f"{action_horizon}-day stock-gap check (no new deliveries). This list highlights "
+        "potential shortages; use the separate 14-day replenishment plan for ordering "
+        "recommendations that include safety stock and review holds."
+    )
     inv_only = st.checkbox(
         "Show shortages and high-demand monitoring only",
-        value=True,
-        key="inv_overview_only"
+        value=True, key="inv_overview_only"
     )
+    inv_search = st.text_input("Search product ID", key="inv_overview_search")
 
-    inv_search = st.text_input(
-        "Search product ID",
-        key="inv_overview_search"
-    )
+    if action_horizon == 7:
+        inv_list = inv_items.copy()
+    else:
+        action_daily = load_14day_daily_forecasts()
+        if action_daily is None:
+            st.error("The 14-day daily forecast file is missing from forecasting/.")
+            st.stop()
+        action_daily = action_daily.loc[action_daily["store_id"].eq(store)].copy()
+        action_daily["forecast"] = action_daily["forecast"].fillna(0).clip(lower=0)
+        action_daily["p90"] = action_daily["p90"].fillna(0).clip(lower=0)
+        inv_list = action_daily.groupby(
+            ["store_id", "item_id", "dept_id"], as_index=False
+        ).agg(demand=("forecast", "sum"), daily_p90_sum=("p90", "sum"))
+        inv_list = inv_list.merge(
+            inv_items[["store_id", "item_id", "starting_stock"]],
+            on=["store_id", "item_id"], how="left", validate="one_to_one"
+        )
+        if inv_list["starting_stock"].isna().any():
+            st.warning("Some products do not have estimated starting stock; showing available products only.")
+            inv_list = inv_list.dropna(subset=["starting_stock"]).copy()
+        inv_list["gap"] = (inv_list["demand"] - inv_list["starting_stock"]).clip(lower=0)
+        inv_list["units_to_cover"] = inv_list["gap"].apply(math.ceil)
+        inv_list["high_demand_gap"] = (
+            inv_list["daily_p90_sum"] - inv_list["starting_stock"]
+        ).clip(lower=0)
+        inv_list["Status"] = "Covered"
+        shortfall = inv_list["gap"] > 0
+        monitor = ~shortfall & inv_list["high_demand_gap"].gt(0)
+        excess = (~shortfall & ~monitor & inv_list["starting_stock"].gt(0)
+                  & inv_list["starting_stock"].ge(2 * inv_list["demand"]))
+        inv_list.loc[excess, "Status"] = "Possible excess"
+        inv_list.loc[monitor, "Status"] = "Monitor high demand"
+        inv_list.loc[shortfall, "Status"] = "Point-forecast shortage"
+        inv_list["priority"] = 3
+        inv_list.loc[excess, "priority"] = 2
+        inv_list.loc[monitor, "priority"] = 1
+        inv_list.loc[shortfall, "priority"] = 0
+        daily_stock = action_daily.merge(
+            inv_list[["item_id", "starting_stock"]], on="item_id",
+            how="inner", validate="many_to_one"
+        ).sort_values(["item_id", "date"])
+        daily_stock["running_demand"] = daily_stock.groupby("item_id")["forecast"].cumsum()
+        breach = daily_stock.loc[
+            daily_stock["running_demand"].gt(daily_stock["starting_stock"])
+        ].groupby("item_id", as_index=False).agg(first_shortage=("date", "min"))
+        inv_list = inv_list.merge(breach, how="left", on="item_id", validate="one_to_one")
 
-    inv_list = inv_items.sort_values(
-        [
-            "priority",
-            "first_shortage",
-            "gap",
-            "item_id"
-        ],
-        ascending=[True, True, False, True],
-        na_position="last"
+    inv_list = inv_list.sort_values(
+        ["priority", "first_shortage", "gap", "item_id"],
+        ascending=[True, True, False, True], na_position="last"
     ).copy()
-
     if inv_only:
-        inv_list = inv_list[
-            inv_list["priority"] <= 1
-        ]
-
+        inv_list = inv_list.loc[inv_list["priority"].le(1)].copy()
     if inv_search.strip():
-        inv_list = inv_list[
-            inv_list["item_id"].str.contains(
-                inv_search.strip(),
-                case=False,
-                regex=False
-            )
-        ]
-
+        inv_list = inv_list.loc[inv_list["item_id"].str.contains(
+            inv_search.strip(), case=False, regex=False
+        )].copy()
     inv_list["Stockout date"] = (
-        inv_list["first_shortage"]
-        .dt.strftime("%b %d")
-        .fillna("—")
+        pd.to_datetime(inv_list["first_shortage"]).dt.strftime("%b %d").fillna("—")
     )
-
     inv_columns = {
-        "item_id": "Product",
-        "dept_id": "Department",
-        "Status": "Status",
-        "demand": "7-Day Demand",
-        "daily_p90_sum": "Sum of Daily P90",
-        "gap": "Demand Gap",
-        "units_to_cover": "Units to Cover",
-        "Stockout date": "Stockout Date"
+        "item_id": "Product", "dept_id": "Department", "Status": "Status",
+        "demand": f"{action_horizon}-Day Demand",
+        "daily_p90_sum": "High-demand scenario*", "gap": "Demand Gap",
+        "units_to_cover": "Units to Cover", "Stockout date": "Stockout Date",
     }
-
-    inv_display = (
-        inv_list[list(inv_columns)]
-        .rename(columns=inv_columns)
-    )
-
+    inv_display = inv_list[list(inv_columns)].rename(columns=inv_columns)
     inv_display = inv_display.round({
-        "7-Day Demand": 2,
-        "Sum of Daily P90": 2,
-        "Demand Gap": 2
+        f"{action_horizon}-Day Demand": 2, "High-demand scenario*": 2,
+        "Demand Gap": 2,
     })
-
-    st.dataframe(
-        inv_display,
-        hide_index=True,
-        use_container_width=True
-    )
-
+    st.dataframe(inv_display, hide_index=True, use_container_width=True)
     st.download_button(
-        "Download Action List CSV",
+        f"Download {action_horizon}-Day Action List CSV",
         inv_display.to_csv(index=False),
-        file_name="estimated_inventory_actions.csv",
-        mime="text/csv",
-        key="inv_overview_download"
+        file_name=f"estimated_inventory_actions_{action_horizon}d.csv",
+        mime="text/csv", key=f"inv_overview_download_{action_horizon}"
     )
-
     st.caption(
-        "Only products in the forecasting sample are included. "
-        "To inspect an individual stock runway, use the product controls "
-        "below in Inventory Planning."
+        "*High-demand scenario sums individual daily upper estimates; it is not "
+        "a calibrated 7- or 14-day prediction interval. Starting stock remains "
+        "the same estimate or manual override in both views."
     )
 
     # ORDER_LIST_V2
@@ -1394,7 +1439,7 @@ with planning:
     st.caption(
         "Historical planning example as of December 31, 2015. "
         "Order quantities cover the seven-day point-forecast gap. "
-        "Stock, lead time, and prices are assumed."
+        "Stock and lead time are estimated. Dollar values use historical M5 selling prices."
     )
 
     inv_show_orders_only = st.checkbox(
@@ -1458,8 +1503,8 @@ with planning:
         inv_orders["units_to_cover"].astype(int)
     )
 
-    inv_orders["Est. cost"] = (
-        inv_orders["Order qty"] * inv_cost
+    inv_orders["M5 price value"] = (
+        inv_orders["Order qty"] * inv_orders["sell_price"]
     ).round(2)
 
     inv_order_table = inv_orders[
@@ -1471,7 +1516,7 @@ with planning:
             "Runs out",
             "Order by",
             "Order qty",
-            "Est. cost"
+            "M5 price value"
         ]
     ].rename(
         columns={
@@ -1485,8 +1530,8 @@ with planning:
         hide_index=True,
         use_container_width=True,
         column_config={
-            "Est. cost": st.column_config.NumberColumn(
-                "Est. cost",
+            "M5 price value": st.column_config.NumberColumn(
+                "M5 price value",
                 format="$%.2f"
             )
         }
@@ -1507,7 +1552,7 @@ with planning:
         "earlier attention. Order quantities and costs are "
         "illustrative, not validated replenishment decisions. "
         "Sales at risk is based on predicted lead-time shortfall "
-        "multiplied by the assumed selling price."
+        "valued at each product's M5 selling price. Dollar values do not represent supplier costs."
     )
 
     st.divider()
