@@ -311,13 +311,8 @@ The AI Assistant currently retrieves relevant historical *summaries*, not arbitr
 - Gemini can miss evidence or generate unsupported figures; retrieved passages do not guarantee exact historical aggregations.
 - The application is research decision support, not a connected enterprise ordering service.
 
-## 11. Next work — deferred to weekend review
 
-**No additional feature build or broad regression test is scheduled for this documentation update.** The next testing session should cover: implementation of structured historical-sales comparisons (optional future work); 7/14-day controls and independent section state; store/product scope changes; held-item positive conditional quantities; stock overrides; downloadable action/order CSVs; M5 price coverage and currency calculations; and consistency among overview, action list, stock chart and policy table.
-
-Documentation and a manager demonstration should keep the **7-day demand-gap** and **14-day replenishment recommendation** conceptually distinct.
-
-## 12. Research sources and documentation
+## 11. Research sources and documentation
 
 - `forecasting/01_M5_Data_Preparation.ipynb` — preparation and sampling.
 - `forecasting/02_Baseline_Forecasting_and_Error_Analysis.ipynb` — baseline forecasts and error analysis.
