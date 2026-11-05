@@ -224,10 +224,11 @@ if "inventory_overrides" not in st.session_state:
 
 # 5. NAVIGATION
 
-overview, forecasting, planning, assistant = st.tabs([
+overview, forecasting, planning, insights, assistant = st.tabs([
     "Executive Overview",
     "Demand Forecasting",
     "Inventory Planning",
+    "Model Insights",
     "AI Assistant"
 ])
 
@@ -1091,55 +1092,198 @@ with forecasting:
 
     st.divider()
 
-    st.markdown("**How reliable were these forecasts?**")
-    st.write(
-        "We tested our forecasting model against a simple approach that repeats recent sales patterns. "
-        "The model had lower historical forecasting error, but it can still miss demand changes."
+    st.info(
+        "Want to know how well the models performed? Open **Model Insights** to compare "
+        "historical forecast errors, demand patterns and regional differences."
     )
-    with st.expander("View technical model evaluation (for analysts)", expanded=False):
-        st.caption("WAPE measures overall forecast error; lower is better. Bias shows whether the "
-                   "model tends to overpredict or underpredict. MAE and RMSE summarize error sizes "
-                   "in units. These test results cover a historical sample, not every product.")
 
-        st.markdown("**Historical test: comparing five forecast methods**")
-        st.caption("2016 held-out test, 50% item-store sample. These are aggregate results, not live product predictions. "
-                   "TSB and SES were exploratory comparisons; LightGBM remains our selected model.")
-        comparison_horizon = st.radio(
-            "Comparison period", [7, 14, 28],
-            format_func=lambda d: f"{d} days", horizontal=True,
-            key="historical_model_comparison_period")
-        historical_models = pd.DataFrame([
-            {"Model": "Recent sales average (7 days)", "Forecast error (%)": 74.58, "Bias (%)": -1.75, "RMSE (units)": 2.219, "Days": 7},
-            {"Model": "Recent sales average (28 days)", "Forecast error (%)": 73.91, "Bias (%)": -2.76, "RMSE (units)": 2.202, "Days": 7},
-            {"Model": "TSB (intermittent demand)", "Forecast error (%)": 72.816, "Bias (%)": -3.969, "RMSE (units)": 2.159, "Days": 7},
-            {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 72.846, "Bias (%)": -4.100, "RMSE (units)": 2.159, "Days": 7},
-            {"Model": "LightGBM (selected)", "Forecast error (%)": 71.62, "Bias (%)": -0.70, "RMSE (units)": 2.040, "Days": 7},
-            {"Model": "Recent sales average (7 days)", "Forecast error (%)": 75.77, "Bias (%)": -2.27, "RMSE (units)": 2.282, "Days": 14},
-            {"Model": "Recent sales average (28 days)", "Forecast error (%)": 74.65, "Bias (%)": -3.08, "RMSE (units)": 2.243, "Days": 14},
-            {"Model": "TSB (intermittent demand)", "Forecast error (%)": 73.729, "Bias (%)": -4.427, "RMSE (units)": 2.209, "Days": 14},
-            {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 73.763, "Bias (%)": -4.567, "RMSE (units)": 2.210, "Days": 14},
-            {"Model": "LightGBM (selected)", "Forecast error (%)": 72.55, "Bias (%)": -1.31, "RMSE (units)": 2.080, "Days": 14},
-            {"Model": "Recent sales average (7 days)", "Forecast error (%)": 77.25, "Bias (%)": -2.72, "RMSE (units)": 2.343, "Days": 28},
-            {"Model": "Recent sales average (28 days)", "Forecast error (%)": 75.94, "Bias (%)": -3.58, "RMSE (units)": 2.294, "Days": 28},
-            {"Model": "TSB (intermittent demand)", "Forecast error (%)": 75.060, "Bias (%)": -4.780, "RMSE (units)": 2.261, "Days": 28},
-            {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 75.104, "Bias (%)": -4.902, "RMSE (units)": 2.263, "Days": 28},
-            {"Model": "LightGBM (selected)", "Forecast error (%)": 73.94, "Bias (%)": -1.67, "RMSE (units)": 2.123, "Days": 28},
-        ])
-        selected_historical = historical_models.loc[historical_models["Days"] == comparison_horizon].copy()
-        st.dataframe(selected_historical.drop(columns="Days").round(2), hide_index=True, use_container_width=True)
-        compare_fig = go.Figure(go.Bar(
-            x=selected_historical["Model"], y=selected_historical["Forecast error (%)"],
-            marker_color=["#0071ce" if m == "LightGBM (selected)" else "#8497aa" for m in selected_historical["Model"]],
-            text=selected_historical["Forecast error (%)"].round(2), texttemplate="%{text:.2f}%", textposition="outside"))
-        compare_fig.update_layout(title=f"{comparison_horizon}-day historical forecast error (lower is better)",
-                                  yaxis_title="WAPE (%)", xaxis_title="", height=390,
-                                  xaxis_tickangle=-18, yaxis=dict(rangemode="tozero"))
-        st.plotly_chart(compare_fig, use_container_width=True)
-        st.caption("Sources: teammate's statistical exploration notebook (TSB/SES) and final LightGBM "
-                   "forecasting notebook (2016 holdout). Croston and SBA were also tested but did not qualify for held-out comparison. "
-                   "TSB/SES use the same evaluation design but are exploratory; no statistical method drives the live dashboard.")
+# ============================================================
+# TAB 4: MODEL INSIGHTS
+# Historical evidence, separate from manager-facing decision tabs.
+# ============================================================
 
-        # The historical scorecard above is the supported comparison.
+with insights:
+    st.header("Model Insights")
+    st.write(
+        "We compared several methods against sales they had not seen during training. "
+        "Use these results to understand where forecasts work well, where they miss demand, "
+        "and why managers should review uncertain orders."
+    )
+    st.info(
+        "**What does held-out test mean?** We trained using historical sales through 2014, "
+        "used 2015 to tune and choose the models, then checked their frozen forecasts "
+        "against actual sales from January 1 to May 22, 2016. "
+        "This gives us a more realistic test than scoring the data used to train the models. "
+        "The results below cover a 50% sample of item-store combinations (15,245 series), "
+        "not every Walmart item or a live sales period."
+    )
+    st.caption(
+        "**Forecast error (WAPE):** Lower is better; it measures total absolute forecast error "
+        "relative to total actual sales. **Bias:** Negative means we predicted too little "
+        "overall, while positive means we predicted too much. **RMSE:** Measures forecast "
+        "error in units and places more weight on large misses. These metrics do not "
+        "measure real procurement costs or store-level profit."
+    )
+    st.subheader("1. Which forecasting method performed best?")
+    st.markdown("**Historical test: comparing five forecast methods**")
+    st.caption("2016 held-out test, 50% item-store sample. These are aggregate results, not live product predictions. "
+               "TSB and SES were exploratory comparisons; LightGBM remains our selected model.")
+    comparison_horizon = st.radio(
+        "Comparison period", [7, 14, 28],
+        format_func=lambda d: f"{d} days", horizontal=True,
+        key="historical_model_comparison_period")
+    historical_models = pd.DataFrame([
+        {"Model": "Recent sales average (7 days)", "Forecast error (%)": 74.58, "Bias (%)": -1.75, "RMSE (units)": 2.219, "Days": 7},
+        {"Model": "Recent sales average (28 days)", "Forecast error (%)": 73.91, "Bias (%)": -2.76, "RMSE (units)": 2.202, "Days": 7},
+        {"Model": "TSB (intermittent demand)", "Forecast error (%)": 72.816, "Bias (%)": -3.969, "RMSE (units)": 2.159, "Days": 7},
+        {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 72.846, "Bias (%)": -4.100, "RMSE (units)": 2.159, "Days": 7},
+        {"Model": "LightGBM (selected)", "Forecast error (%)": 71.62, "Bias (%)": -0.70, "RMSE (units)": 2.040, "Days": 7},
+        {"Model": "Recent sales average (7 days)", "Forecast error (%)": 75.77, "Bias (%)": -2.27, "RMSE (units)": 2.282, "Days": 14},
+        {"Model": "Recent sales average (28 days)", "Forecast error (%)": 74.65, "Bias (%)": -3.08, "RMSE (units)": 2.243, "Days": 14},
+        {"Model": "TSB (intermittent demand)", "Forecast error (%)": 73.729, "Bias (%)": -4.427, "RMSE (units)": 2.209, "Days": 14},
+        {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 73.763, "Bias (%)": -4.567, "RMSE (units)": 2.210, "Days": 14},
+        {"Model": "LightGBM (selected)", "Forecast error (%)": 72.55, "Bias (%)": -1.31, "RMSE (units)": 2.080, "Days": 14},
+        {"Model": "Recent sales average (7 days)", "Forecast error (%)": 77.25, "Bias (%)": -2.72, "RMSE (units)": 2.343, "Days": 28},
+        {"Model": "Recent sales average (28 days)", "Forecast error (%)": 75.94, "Bias (%)": -3.58, "RMSE (units)": 2.294, "Days": 28},
+        {"Model": "TSB (intermittent demand)", "Forecast error (%)": 75.060, "Bias (%)": -4.780, "RMSE (units)": 2.261, "Days": 28},
+        {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 75.104, "Bias (%)": -4.902, "RMSE (units)": 2.263, "Days": 28},
+        {"Model": "LightGBM (selected)", "Forecast error (%)": 73.94, "Bias (%)": -1.67, "RMSE (units)": 2.123, "Days": 28},
+    ])
+    selected_historical = historical_models.loc[historical_models["Days"] == comparison_horizon].copy()
+    st.dataframe(selected_historical.drop(columns="Days").round(2), hide_index=True, use_container_width=True)
+    compare_fig = go.Figure(go.Bar(
+        x=selected_historical["Model"], y=selected_historical["Forecast error (%)"],
+        marker_color=["#0071ce" if m == "LightGBM (selected)" else "#8497aa" for m in selected_historical["Model"]],
+        text=selected_historical["Forecast error (%)"].round(2), texttemplate="%{text:.2f}%", textposition="outside"))
+    compare_fig.update_layout(title=f"{comparison_horizon}-day historical forecast error (lower is better)",
+                              yaxis_title="WAPE (%)", xaxis_title="", height=390,
+                              xaxis_tickangle=-18, yaxis=dict(rangemode="tozero"))
+    st.plotly_chart(compare_fig, use_container_width=True)
+
+    st.caption(
+        "**Historical sources:** `03_M5_Statistical_Model_Exploration.ipynb` "
+        "(TSB, SES and statistical screening) and "
+        "`04_M5_LightGBM_Final_Forecasting.ipynb` (LightGBM, recent-mean "
+        "baselines, and 2016 holdout). Croston and SBA were evaluated during validation "
+        "but were not selected for confirmatory held-out testing. "
+        "TSB and SES are exploratory comparisons, not live dashboard models."
+    )
+
+    st.subheader("2. Did the models forecast too much or too little?")
+    st.write(
+        "A negative value means the method underestimated total demand. "
+        "For inventory teams, consistently underestimating demand can increase stockout risk."
+    )
+    bias_fig = go.Figure(go.Bar(
+        x=selected_historical["Model"],
+        y=selected_historical["Bias (%)"],
+        marker_color=["#0071ce" if m == "LightGBM (selected)" else "#8497aa"
+                      for m in selected_historical["Model"]],
+        text=selected_historical["Bias (%)"].round(2),
+        texttemplate="%{text:.2f}%", textposition="outside"
+    ))
+    bias_fig.add_hline(y=0, line_color="#303030", line_width=1)
+    bias_fig.update_layout(
+        title=f"{comparison_horizon}-day forecast bias — 2016 test",
+        xaxis_title="", yaxis_title="Signed bias (%)",
+        xaxis_tickangle=-18, height=390,
+    )
+    st.plotly_chart(bias_fig, use_container_width=True)
+
+    st.subheader("3. Which types of products are harder to forecast?")
+    st.write(
+        "We grouped items by how regularly customers bought them. The seven-day results "
+        "show that products with sporadic sales are harder to predict than products with steady sales."
+    )
+    by_pattern = pd.DataFrame({
+        "Demand pattern": ["Smooth", "Erratic", "Intermittent", "Lumpy", "No sales"],
+        "Recent 7-day average": [48.205, 58.448, 89.424, 83.773, 88.806],
+        "LightGBM": [44.625, 55.447, 86.927, 80.331, 89.532],
+    })
+    pattern_fig = go.Figure()
+    for model_name, color in [("Recent 7-day average", "#8497aa"), ("LightGBM", "#0071ce")]:
+        pattern_fig.add_trace(go.Bar(
+            x=by_pattern["Demand pattern"], y=by_pattern[model_name],
+            name=model_name, marker_color=color,
+        ))
+    pattern_fig.update_layout(
+        title="7-day forecast error by demand pattern — 2016 test",
+        yaxis_title="WAPE (%) — lower is better", xaxis_title="",
+        barmode="group", height=420,
+    )
+    st.plotly_chart(pattern_fig, use_container_width=True)
+    st.caption(
+        "This chart compares LightGBM with the recent seven-day average on the same "
+        "2016 held-out 50% sample. For products with no sales, WAPE is aggregated at "
+        "the group level; it is not an individual product's percentage error. "
+        "Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 10.2."
+    )
+
+    st.subheader("4. Where might the model overestimate or underestimate demand?")
+    st.write(
+        "This historical chart highlights groups where the model systematically "
+        "forecast too high or too low. Negative numbers mean underforecasting. "
+        "For example, Wisconsin food items had a -3.53% bias in this test."
+    )
+    bias_map = pd.DataFrame(
+        [[-0.588, 2.082, 0.205], [-0.248, 1.659, 2.433], [-3.528, 0.232, -0.721]],
+        index=["California", "Texas", "Wisconsin"],
+        columns=["Foods", "Hobbies", "Household"]
+    )
+    location_fig = go.Figure(go.Heatmap(
+        z=bias_map.values, x=list(bias_map.columns), y=list(bias_map.index),
+        colorscale="RdBu_r", zmid=0,
+        colorbar=dict(title="Bias (%)"),
+        text=[[f"{v:+.2f}%" for v in row] for row in bias_map.values],
+        texttemplate="%{text}", textfont=dict(size=13),
+    ))
+    location_fig.update_layout(
+        title="LightGBM 7-day forecast bias by state and category — 2016 test",
+        height=380, xaxis_title="Category", yaxis_title="State",
+    )
+    st.plotly_chart(location_fig, use_container_width=True)
+    st.caption(
+        "Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 10.1. "
+        "Group-level historical estimates; they do not predict the bias of a specific product."
+    )
+
+    with st.expander("What information does LightGBM use most?", expanded=False):
+        st.write(
+            "The model relies mostly on recent sales patterns. These percentages measure "
+            "how much each group contributed to splits in the fitted model; "
+            "they do not prove that changing one input causes sales to change."
+        )
+        feature_groups = pd.DataFrame({
+            "Input": ["Recent sales patterns", "Price", "Item and store type",
+                      "Calendar and events", "Same weekday history", "Forecast lead time"],
+            "Share of model gain (%)": [89.3, 5.1, 3.3, 1.2, 0.7, 0.3]
+        })
+        gain_fig = go.Figure(go.Bar(
+            x=feature_groups["Share of model gain (%)"],
+            y=feature_groups["Input"], orientation="h",
+            marker_color="#0071ce",
+        ))
+        gain_fig.update_layout(
+            title="Feature groups by model gain", xaxis_title="Share of model gain (%)",
+            yaxis_title="", yaxis=dict(autorange="reversed"), height=340,
+        )
+        st.plotly_chart(gain_fig, use_container_width=True)
+        st.caption("Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 11.3.")
+
+    with st.expander("How reliable is the forecast range?", expanded=False):
+        st.write(
+            "We also tested how often actual daily sales landed between our lower and "
+            "higher demand estimates. Demand-type-specific ranges covered **77.7%** of "
+            "observations, compared with a nominal **80%** target. We use this result "
+            "to communicate uncertainty, not to promise that every future day falls in range."
+        )
+        st.caption("Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 11.2.")
+
+    st.caption(
+        "**Notebook filenames:** `03_M5_Statistical_Model_Exploration.ipynb`; "
+        "`04_M5_LightGBM_Final_Forecasting.ipynb`. "
+        "All charts above report historical research results, not live accuracy or order costs."
+    )
 
 # ============================================================
 # TAB 3: INVENTORY PLANNING
