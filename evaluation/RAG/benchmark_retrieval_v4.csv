@@ -1,0 +1,6 @@
+,precision@5,recall@10,hit@5,MRR,nDCG@10
+random,0.073,0.084,0.303,0.141,0.073
+keyword only,0.285,0.333,0.576,0.524,0.363
+meaning only (v1-v2),0.315,0.391,0.758,0.677,0.424
+hybrid + category,0.352,0.386,0.758,0.644,0.421
+hybrid + reranker (ours),0.376,0.439,0.848,0.813,0.495

@@ -1,0 +1,6 @@
+,coverage,fill rate,leftover days
+naive: last 14 days,0.563,0.835,2.386
+forecast only,0.656,0.867,2.244
+ours 90%,0.948,0.977,8.42
+ours 95% (current),0.973,0.988,10.945
+ours 98%,0.986,0.994,13.672

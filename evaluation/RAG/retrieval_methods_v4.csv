@@ -1,0 +1,5 @@
+method,hit_tests_passed_%,MRR,no_answer_caught,future_passages
+dense,76.0,0.69,1 of 10,0
+dense+category,76.0,0.69,1 of 10,0
+hybrid+category,76.0,0.66,2 of 10,0
+full,85.0,0.83,3 of 10,0

@@ -1,0 +1,57 @@
+test,kind,passed,rank,future_chunks,top_relevance,top_result
+1,hit,False,,0,0.665,"Price, sales and revenue: Hobbies in Wisconsin (data to 2013-12-31)"
+2,hit,True,1.0,0,0.028,"Excessive Heat: Texas, Jun 01, 2011"
+3,hit,True,1.0,0,0.288,"Weather effect on sales, California (data to 2014-12-31)"
+4,hit,True,1.0,0,0.498,Event effect: Christmas (data to 2013-12-31)
+5,hit,True,1.0,0,0.21,Event effect: Christmas (data to 2013-12-31)
+6,hit,True,1.0,0,0.959,Seasonal pattern: Sales in United States by weekday and month (data to 2013-12-31)
+7,hit,True,1.0,0,0.657,SNAP benefit issue schedule by state
+8,hit,True,1.0,0,0.773,"Beige Book January 14, 2015: National summary"
+9,hit,True,1.0,0,0.284,How predictable item demand is: demand types (data to 2014-12-31)
+10,hit,True,1.0,0,0.994,Zero sales and missing price weeks
+11,hit,False,,0,0.203,"Walmart 10-Q filed December 06, 2013: management's discussion"
+12,hit,True,1.0,0,0.454,"Winter Weather: Wisconsin, Jan 08, 2015"
+13,no_future,True,1.0,0,0.018,"Winter Storm: Wisconsin, May 01, 2013"
+14,fresh,True,1.0,0,0.904,"Beige Book February 29, 2012: San Francisco District"
+15,no_evidence,True,1.0,0,0.003,"Beige Book April 13, 2016: National summary"
+16,hit,False,,0,0.058,"Heavy Rain: California, May 05, 2016"
+17,hit,True,1.0,0,0.962,"Forecast accuracy by category, state and demand type (forecasts scored by 2015-08-26)"
+18,hit,True,1.0,0,0.973,Seasonal pattern: Foods sales in Wisconsin by weekday and month (data to 2014-12-31)
+19,hit,True,1.0,0,0.858,"Price, sales and revenue: Foods in California (data to 2014-12-31)"
+20,hit,True,1.0,0,0.307,Unexpected demand spikes: Foods in Wisconsin (12 months to 2014-12-31)
+21,hit,True,1.0,0,0.844,Forecast horizon: 7-day forecasts for a 14-day order
+22,hit,True,1.0,0,0.999,Why items with the same expected sales need different safety stock
+23,hit,True,1.0,0,0.077,"Walmart 10-Q filed December 01, 2014: management's discussion"
+24,hit,True,1.0,0,0.997,"Lead time, review period and safety stock"
+25,no_evidence,True,1.0,0,0.008,What the M5 data does not contain
+26,hit,False,,0,0.003,"Beige Book July 16, 2014: Dallas District"
+27,hit,True,2.0,0,0.027,"Year-over-year sales trend, Wisconsin (year to 2014-12-31)"
+28,hit,True,1.0,0,0.031,Event effect: Labor Day (data to 2014-12-31)
+29,hit,True,1.0,0,0.021,"Beige Book December 02, 2015: National summary"
+30,hit,True,1.0,0,0.141,"Price, sales and revenue: Household in California (data to 2014-12-31)"
+31,hit,True,1.0,0,0.216,"Forecast accuracy by category, state and demand type (forecasts scored by 2015-08-26)"
+32,hit,True,1.0,0,0.043,Revenue concentration and ordering priority: store CA_1 (52 weeks to 2014-12-31)
+33,hit,True,1.0,0,0.001,"Lead time, review period and safety stock"
+34,hit,True,1.0,0,0.467,"Drought: Texas, Aug 31, 2015"
+35,no_evidence,False,1.0,0,0.493,Unexpected demand spikes: Hobbies in California (12 months to 2015-12-31)
+36,no_evidence,False,1.0,0,0.016,"Year-over-year sales trend, Wisconsin (year to 2015-12-31)"
+37,data,,,0,,(forecast-data question: checked in notebook 3)
+38,data,,,0,,(forecast-data question: checked in notebook 3)
+39,data,,,0,,(forecast-data question: checked in notebook 3)
+40,data,,,0,,(forecast-data question: checked in notebook 3)
+41,data,,,0,,(forecast-data question: checked in notebook 3)
+42,data,,,0,,(forecast-data question: checked in notebook 3)
+43,data,,,0,,(forecast-data question: checked in notebook 3)
+44,data,,,0,,(forecast-data question: checked in notebook 3)
+45,data,,,0,,(forecast-data question: checked in notebook 3)
+46,data,,,0,,(forecast-data question: checked in notebook 3)
+47,data,,,0,,(forecast-data question: checked in notebook 3)
+48,data,,,0,,(forecast-data question: checked in notebook 3)
+49,hit,False,,0,0.365,Unexpected demand spikes: Hobbies in California (12 months to 2014-12-31)
+50,hit,True,1.0,0,0.827,How predictable item demand is: demand types (data to 2014-12-31)
+51,no_evidence,False,1.0,0,0.372,"Walmart 10-Q filed December 02, 2015: management's discussion"
+52,no_evidence,False,1.0,0,0.022,"Beige Book September 02, 2015: Minneapolis District"
+53,no_evidence,False,1.0,0,0.071,"Walmart 10-Q filed June 05, 2015: management's discussion"
+54,no_evidence,False,1.0,0,0.054,"Walmart 10-Q filed September 09, 2015: management's discussion"
+55,no_evidence,False,1.0,0,0.112,"Walmart 10-Q filed December 02, 2015: management's discussion"
+56,no_evidence,True,1.0,0,0.015,"Lead time, review period and safety stock"

@@ -1,0 +1,11 @@
+scenario,item,store,as_of,forecast,recommended_qty,hold,if_confirmed_qty,flags,forecast_confidence,seconds,error,answered,quantity_correct,citations_valid,no_future_sources,reasons_cited,names_state_category,flags_reported,no_unsupported_claims,numbers_verified,confidence_stated,cited_share,passages_cited,source_types,unverified_numbers,words,explanation_confidence
+top,HOBBIES_1_268,WI_2,2015-01-07,"LightGBM, the M5 forecasting model",70,False,,,High,170.2,,True,True,True,True,True,True,,True,True,True,1.0,5,3,,202,High
+top,FOODS_3_586,TX_1,2015-08-05,"LightGBM, the M5 forecasting model",626,False,,,High,59.6,,True,True,True,True,True,True,,True,True,True,1.0,6,3,,227,High
+top,FOODS_3_377,TX_3,2015-05-27,"LightGBM, the M5 forecasting model",416,False,,,High,99.1,,True,True,True,True,True,True,,True,True,True,1.0,8,3,,250,High
+top,FOODS_3_586,CA_1,2015-11-18,"LightGBM, the M5 forecasting model",429,False,,,High,54.4,,True,True,True,True,True,True,,True,True,True,1.0,4,2,,167,High
+top,FOODS_3_586,CA_1,2015-12-16,"LightGBM, the M5 forecasting model",431,False,,,High,76.3,,True,True,True,True,True,True,,True,True,True,1.0,6,3,,161,High
+intermittent,HOUSEHOLD_1_067,TX_2,2015-06-03,"LightGBM, the M5 forecasting model",0,True,2.0,POSSIBLY_DISCONTINUED,Low,66.3,,True,True,True,True,True,True,True,True,True,True,1.0,9,3,,278,High
+zero_run,HOUSEHOLD_1_131,WI_1,2015-09-02,"LightGBM, the M5 forecasting model",0,True,8.0,POSSIBLE_STOCKOUT,Low,52.5,,True,True,True,True,True,True,True,True,True,True,1.0,7,4,,228,High
+top,HOUSEHOLD_1_459,CA_2,2016-05-05,"LightGBM, the M5 forecasting model",112,False,,,High,57.4,,True,True,True,True,True,True,,True,True,True,1.0,4,2,,175,High
+new_item,FOODS_2_347,CA_2,2015-07-01,"LightGBM, the M5 forecasting model",0,True,14.0,NEW_ITEM,Low,52.6,,True,True,True,True,True,True,True,True,True,True,1.0,3,2,,219,High
+stopped,FOODS_3_574,TX_2,2015-09-30,"LightGBM, the M5 forecasting model",0,True,76.0,POSSIBLY_DISCONTINUED,Low,45.9,,True,True,True,True,True,True,True,True,True,True,1.0,6,3,,292,High

@@ -1,0 +1,21 @@
+,measure,value
+0,forecast-question accuracy,1.0
+1,citation precision,0.722
+2,questions: lookup_correct,1.0
+3,questions: answer_correct,1.0
+4,questions: states_assumption,1.0
+5,questions: citations_valid,1.0
+6,questions: no_future_sources,1.0
+7,questions: reasons_cited,0.8
+8,questions: no_unsupported_claims,0.95
+9,questions: numbers_verified,1.0
+10,questions: handles_missing,1.0
+11,orders: quantity_correct,1.0
+12,orders: citations_valid,1.0
+13,orders: no_future_sources,1.0
+14,orders: reasons_cited,1.0
+15,orders: names_state_category,1.0
+16,orders: flags_reported,1.0
+17,orders: no_unsupported_claims,1.0
+18,orders: numbers_verified,1.0
+19,orders: confidence_stated,1.0

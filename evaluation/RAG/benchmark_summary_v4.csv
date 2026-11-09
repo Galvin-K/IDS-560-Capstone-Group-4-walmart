@@ -1,0 +1,13 @@
+part,metric,ours,best_baseline,baseline,note
+1. Retrieval,precision@5,0.376,hybrid + category,0.352,
+1. Retrieval,recall@10,0.439,meaning only (v1-v2),0.391,
+1. Retrieval,MRR,0.813,meaning only (v1-v2),0.677,
+1. Retrieval,nDCG@10,0.495,meaning only (v1-v2),0.424,
+2. No-answer detection,F1,0.286,cut-off 0.2,0.571,"precision 0.50, recall 0.20"
+3. Agent answers,forecast-question accuracy,1.0,,,12 answered forecast questions
+3. Agent answers,citation precision,0.722,,,18 citations
+4. Flags,F1,0.58,v2 rule: 14+ zero days,0.575,"precision 0.57, recall 0.59"
+4. Flags,precision,0.573,v2 rule: 14+ zero days,0.475,
+5. Confidence,AUC,0.585,random score,0.5,"Low: precision 0.24, recall 0.90"
+6. Orders,coverage,0.973,forecast only,0.656,leftover days 10.9
+7. New-item forecast,WAPE (lower is better),0.613,order zero,1.0,bias -0.22

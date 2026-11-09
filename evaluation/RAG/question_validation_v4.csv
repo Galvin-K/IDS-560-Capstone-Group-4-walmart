@@ -1,0 +1,21 @@
+test,kind,question,as_of,state,retrieval_passed,seconds,error,answered,lookup_correct,answer_correct,states_assumption,citations_valid,no_future_sources,reasons_cited,no_unsupported_claims,numbers_verified,handles_missing,cited_share,passages_cited,unverified_numbers,routed_to,words,explanation_confidence
+37,data,Which products are expected to have the highest demand over the next 7 days?,2015-04-22,,,6.2,,True,True,True,,True,True,True,True,True,True,1.0,1,,top_items,103,High
+38,data,Which product category has the highest predicted demand across all stores?,2015-07-15,,,20.2,,True,True,True,,True,True,False,True,True,True,0.5,1,,by_category,80,Medium
+39,data,Which Walmart store has the highest predicted demand over the next 7 days?,2015-10-21,,,45.4,,True,True,True,,True,True,False,True,True,True,0.5,1,,by_store,107,Medium
+40,data,How does predicted demand change throughout the next 7 days?,2016-01-14,,,8.8,,True,True,True,,True,True,True,True,True,True,1.0,1,,daily_profile,81,High
+41,data,Which products show the largest differences in predicted demand across stores?,2015-02-11,,,22.9,,True,True,True,,True,True,True,True,True,True,1.0,1,,store_spread,107,High
+42,data,Which products have the greatest risk of running out of stock based on current inventory a,2015-04-22,,,13.5,,True,True,True,True,True,True,True,True,True,True,1.0,1,,stockout_risk,149,High
+43,data,How does the risk of stockouts change over the next 7 days?,2015-07-15,,,13.0,,True,True,True,True,True,True,False,True,True,True,0.5,1,,risk_by_day,113,Medium
+44,data,"Which products should we prioritize for replenishment, and why?",2015-10-21,,,24.3,,True,True,True,True,True,True,True,True,True,True,1.0,1,,replenish_items,131,High
+45,data,Which stores should receive additional inventory first if supply is limited?,2016-01-14,,,10.1,,True,True,True,True,True,True,False,True,True,True,0.5,1,,replenish_stores,87,Medium
+46,data,"Which departments are expected to have the largest inventory shortages, and what should ma",2016-03-10,,,20.1,,True,True,True,True,True,True,True,True,True,True,1.0,1,,dept_shortage,147,High
+47,data,Compare the predicted inventory shortages between WI_3 and CA_4 over the next 7 days.,2015-02-11,,,14.3,,True,True,True,True,True,True,True,True,True,True,0.67,1,,compare_stores,148,High
+48,data,Are there any products with excess inventory compared to their predicted demand?,2016-03-10,,,18.3,,True,True,True,True,True,True,True,True,True,True,1.0,1,,excess_items,120,High
+49,hit,Why might HOBBIES products have more unpredictable demand than FOODS products?,2015-07-15,,False,29.0,,True,,,,True,True,True,True,True,,0.67,3,,,141,High
+50,hit,"How do demand patterns differ between FOODS, HOUSEHOLD, and HOBBIES?",2015-10-21,,True,16.1,,True,,,,True,True,True,False,True,True,0.75,3,,,147,Medium
+51,no_evidence,Which Walmart store generated the most profit last year?,2016-01-14,,False,12.7,,True,,,,True,True,True,True,True,True,0.67,3,,,113,High
+52,no_evidence,Which products received the most customer complaints last month?,2015-10-21,,False,14.7,,True,,,,True,True,True,True,True,True,0.5,1,,,91,High
+53,no_evidence,Which Walmart store currently has the most employees working?,2015-07-15,,False,9.2,,True,,,,True,True,True,True,True,True,0.5,1,,,88,High
+54,no_evidence,Which products had the highest return rates last month?,2016-03-10,,False,29.0,,True,,,,True,True,True,True,True,True,0.5,2,,,88,High
+55,no_evidence,Which Walmart store had the highest customer satisfaction score this year?,2015-12-16,,False,13.5,,True,,,,True,True,True,True,True,True,0.67,4,,,115,High
+56,no_evidence,Which suppliers had the longest delivery delays last quarter?,2015-09-16,,True,4.7,,True,,,,True,True,True,True,True,True,0.0,0,,,84,High
