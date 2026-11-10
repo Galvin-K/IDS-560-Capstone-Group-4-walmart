@@ -345,8 +345,7 @@ with overview:
 
     st.subheader("7-Day Demand & Stock Gap Overview")
     st.caption(
-        "January 1–7, 2016 | This section shows potential stock gaps, not final purchase orders. "
-        "We estimate stock because M5 does not include live inventory. Dollar values use M5's historical selling prices, not supplier costs."
+        "Identify products that may run short based on expected demand and estimated inventory."
     )
 
     with st.expander("Inventory assumptions", expanded=False):
@@ -600,10 +599,8 @@ with overview:
                 "forecasting/m5_prices_asof_2015_12_31.csv.gz (generated from M5 sell_prices.csv).")
 
     st.caption(
-        "A seven-day gap means we expect demand to exceed starting stock. "
-        "These figures help you spot issues; use the 14-day plan below for ordering decisions. "
-        "Dollar values use M5 historical selling prices, not actual purchase costs. "
-        "If some products lack prices, dollar totals only include priced products."
+        "A stock gap occurs when expected demand exceeds starting inventory. "
+        "See Inventory Planning for suggested orders."
     )
     with st.expander("How we calculate these seven-day indicators", expanded=False):
         st.write(
@@ -618,9 +615,7 @@ with overview:
     # loading, a model or the RAG reranker. Incoming orders assumed zero.
     st.subheader("14-Day Replenishment Summary")
     st.caption(
-        "January 1–14, 2016 | Unlike the seven-day stock-gap charts, this plan includes extra "
-        "safety stock and checks whether a manager should review an item before ordering. "
-        "We calculate suggested quantities from estimated or manually entered stock."
+        "Review suggested order quantities, including safety stock and items that need manager approval."
     )
     policy_ready, policy_note = offline_policy_status()
     if not policy_ready:
@@ -652,10 +647,8 @@ with overview:
                 kpis14[2].metric("14-day order units", f"{to_order_units:,}")
                 kpis14[3].metric("Items on review hold", f"{held_items:,}")
                 st.caption(
-                    f"{len(stock_for_policy):,} sampled products in this store | "
-                    "Held products contribute zero recommended order units. "
-                    "Already-on-order units are assumed zero in this store-wide summary. "
-                    "For per-product incoming orders and hold reasons, open Inventory Planning."
+                    "Suggested orders include safety stock. Items on hold need manager review before ordering. "
+                    "For incoming orders and hold reasons, open Inventory Planning."
                 )
         except (ValueError, KeyError, TypeError, FileNotFoundError, ImportError) as exc:
             st.warning(f"14-day summary unavailable: {type(exc).__name__}: {exc}")
@@ -667,10 +660,7 @@ with overview:
     st.subheader("Compare Stores")
 
     st.caption(
-        "Compare stores using the seven-day demand-gap view, "
-        "inventory estimation "
-        "rules, and historical M5 selling prices. Select a store "
-        "to update the entire dashboard."
+        "Compare potential stock shortages across stores. Select a store to explore its results."
     )
 
     import hashlib
