@@ -13,17 +13,47 @@ from urllib.parse import urlparse
 
 import streamlit as st
 
-ASSET_DIR = Path(__file__).resolve().parents[1] / "assets" / "team"
+ASSET_DIR = Path(__file__).resolve().parents[1] / "Assets" / "Teams"
 GITHUB_URL = "https://github.com/Galvin-K/IDS-560-Capstone-Group-4-walmart/"
 ADVISOR_NAME = "Professor Fatemeh Sarayloo"
 ADVISOR_EMAIL = "fsaraylo@uic.edu"
 
 TEAM = [
-    {"name": "Keta Patel", "email": "kpate650@uic.edu", "photo": "keta.webp", "qr": "keta_qr.png", "linkedin": "https://www.linkedin.com/in/keta2002?fromQR=1"},
-    {"name": "Galvin Kao", "email": "hkao9@uic.edu", "photo": "galvin.webp", "qr": "galvin_qr.png", "linkedin": "https://www.linkedin.com/in/galvin-kao?fromQR=1"},
-    {"name": "Tyler Yuen", "email": "tcyuen2@uic.edu", "photo": "tyler.webp", "qr": "tyler_qr.png", "linkedin": ""},
-    {"name": "Fan Mengxi", "email": "mfan20@uic.edu", "photo": "mengxi.webp", "qr": "mengxi_qr.png", "linkedin": "https://www.linkedin.com/in/regina-fan-45a0b9146?fromQR=1"},
-    {"name": "Mengyi Wang", "email": "mwang233@uic.edu", "photo": "mengyi.webp", "qr": "mengyi_qr.png", "linkedin": "https://www.linkedin.com/in/carmen-wang-889334208?fromQR=1"},
+    {
+        "name": "Keta Patel",
+        "email": "kpate650@uic.edu",
+        "photo": "Keta Headshot.png",
+        "qr": "Keta_QR code.jpeg",
+        "linkedin": "https://www.linkedin.com/in/keta2002",
+    },
+    {
+        "name": "Galvin Kao",
+        "email": "hkao9@uic.edu",
+        "photo": "Galvin Headshot.jpeg",
+        "qr": "Galvin QR code.jpeg",
+        "linkedin": "https://www.linkedin.com/in/galvin-kao",
+    },
+    {
+        "name": "Tyler Yuen",
+        "email": "tcyuen2@uic.edu",
+        "photo": "Tyler Headshot.jpeg",
+        "qr": "Tyler QR Code.png",
+        "linkedin": "",
+    },
+    {
+        "name": "Fan Mengxi",
+        "email": "mfan20@uic.edu",
+        "photo": "Mengxi Headshot.jpeg",
+        "qr": "Mengxi QR code.jpeg",
+        "linkedin": "https://www.linkedin.com/in/regina-fan-45a0b9146",
+    },
+    {
+        "name": "Mengyi Wang",
+        "email": "mwang233@uic.edu",
+        "photo": "Mengyi Headshot.jpeg",
+        "qr": "Mengyi QR Code.jpeg",
+        "linkedin": "https://www.linkedin.com/in/carmen-wang-889334208",
+    },
 ]
 
 
