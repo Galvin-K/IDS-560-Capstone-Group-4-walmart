@@ -13,6 +13,7 @@ from inventory_engine import protection_period_order, repeat_week_scenario, appl
 from v4_policy_bridge import (offline_policy_status, load_offline_policy,
                               offline_v4_recommendation)
 from analysis_scope import SCOPES, resolve_question, scope_summary
+from Components.footer import render_footer
 
 
 # RAG retrieval interface. The production backend remains the source of truth.
@@ -1897,30 +1898,27 @@ with planning:
                     "Low": ("#B42332", "#FDEBEC", "#F3C4C9"),
                 }
                 confidence_fg, confidence_bg, confidence_border = confidence_design[confidence_label]
+                # Show only the current confidence level and one plain-language
+                # explanation; retain details under the existing expander.
+                confidence_description = {
+                    "High": "More reliable based on historical forecast performance.",
+                    "Medium": "Some uncertainty; review the forecast before ordering.",
+                    "Low": "Higher uncertainty; check the forecast and product details carefully.",
+                }[confidence_label]
                 st.markdown(
+                    '<div style="border:1px solid #DBE3EF;border-radius:10px;'
+                    'padding:12px 15px;margin-top:12px;margin-bottom:12px;max-width:720px">'
                     '<div style="display:flex;align-items:center;justify-content:space-between;'
-                    'gap:12px;max-width:500px;padding:11px 15px;margin-top:12px;'
-                    f'background:{confidence_bg};border:1px solid {confidence_border};border-radius:10px">'
+                    'gap:12px;flex-wrap:wrap">'
                     '<span style="font-weight:650;color:#041e42">Forecast confidence</span>'
-                    f'<span style="color:{confidence_fg};font-weight:750">'
-                    f'● &nbsp; {confidence_label}</span></div>',
+                    f'<span style="color:{confidence_fg};background:{confidence_bg};'
+                    f'border:1px solid {confidence_border};border-radius:999px;'
+                    'padding:3px 12px;font-weight:750">'
+                    f'● {confidence_label}</span></div>'
+                    f'<div style="color:#617189;font-size:0.85rem;margin-top:6px">'
+                    f'{confidence_description}</div></div>',
                     unsafe_allow_html=True,
                 )
-                st.caption("Confidence levels show how cautiously to use the forecast; they do not approve an order.")
-                legend_cols = st.columns(3)
-                for legend_col, (level, explanation) in zip(legend_cols, [
-                    ("High", "More reliable based on available evidence"),
-                    ("Medium", "Some uncertainty; review as needed"),
-                    ("Low", "Higher uncertainty; check before deciding"),
-                ]):
-                    fg, bg, border = confidence_design[level]
-                    legend_col.markdown(
-                        f'<div style="background:{bg};border:1px solid {border};'
-                        'border-radius:8px;padding:9px 11px;min-height:76px">'
-                        f'<div style="font-weight:700;color:{fg}">● {level}</div>'
-                        f'<div style="font-size:0.77rem;color:#364B63">{explanation}</div></div>',
-                        unsafe_allow_html=True,
-                    )
                 review_steps = manager_review_steps(
                     f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
                 )
@@ -2858,3 +2856,4 @@ with assistant:
             "Managers should verify suggested orders and review flagged items before acting."
         )
 
+render_footer()
