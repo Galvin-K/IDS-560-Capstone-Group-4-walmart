@@ -111,6 +111,41 @@ def load_14day_daily_forecasts():
     return forecast_14
 
 
+# The official currently deployed forecast cube has ONLY 14 lead days.
+# A 28-day demand view requires a separately exported, genuinely 28-lead
+# LightGBM forecast from the forecasting workstream. Never extend/repeat days.
+DAILY_28_FILE = Path(__file__).resolve().parent / "forecasting" / "dashboard_forecasts_28d_2015_12_31.csv.gz"
+
+@st.cache_data(show_spinner=False)
+def load_28day_daily_forecasts():
+    if not DAILY_28_FILE.is_file():
+        return None
+    data = pd.read_csv(DAILY_28_FILE, parse_dates=["date", "forecast_origin"])
+    required = {"store_id", "item_id", "dept_id", "date", "forecast_origin",
+                "lead", "forecast", "p10", "p90"}
+    missing = required - set(data.columns)
+    if missing:
+        raise ValueError(f"28-day daily forecast missing columns: {sorted(missing)}")
+    for col in ("forecast", "p10", "p90", "lead"):
+        data[col] = pd.to_numeric(data[col], errors="coerce")
+    if data[list(required - {"date", "forecast_origin"})].isna().any().any():
+        raise ValueError("28-day daily forecast has missing required values")
+    if not data["lead"].between(1, 28).all():
+        raise ValueError("28-day daily forecast lead must be within 1..28")
+    if (data.groupby(["store_id", "item_id"])["lead"].nunique() != 28).any():
+        raise ValueError("28-day forecast must include all 28 distinct lead days per item-store")
+    if data.duplicated(["store_id", "item_id", "date"]).any():
+        raise ValueError("28-day forecast contains duplicate item-store dates")
+    if not (data["forecast_origin"].dt.strftime("%Y-%m-%d") == "2015-12-31").all():
+        raise ValueError("28-day forecast must use the 2015-12-31 decision date")
+    expected_dates = data["forecast_origin"] + pd.to_timedelta(data["lead"], unit="D")
+    if not (data["date"] == expected_dates).all():
+        raise ValueError("28-day forecast dates are not aligned with origin and lead")
+    if (data["forecast"] < 0).any() or (data["p10"] < 0).any() or (data["p90"] < data["p10"]).any():
+        raise ValueError("28-day forecast has invalid demand bounds")
+    return data
+
+
 # Compact, date-safe selling-price extract from M5. The dashboard never loads
 # the large original sell_prices.csv on Streamlit Cloud.
 PRICE_FILE = Path(__file__).resolve().parent / "forecasting" / "m5_prices_asof_2015_12_31.csv.gz"
@@ -169,22 +204,29 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.info(
-    "Use the 7-day views to spot upcoming demand and possible stock gaps. "
-    "Use the 14-day replenishment plan to decide how much stock to order after accounting for "
-    "a safety buffer and items that need manager review. We estimate starting stock unless you enter your own numbers."
+st.markdown(
+    "**Plan inventory with fewer surprises.** Check expected sales, spot products that may run short, "
+    "and review suggested orders for your store. You can change starting stock when you know the actual quantity."
+)
+st.caption(
+    "Historical M5 demonstration: forecasts start January 1, 2016. "
+    "This is a planning prototype, not a connection to Walmart's current inventory."
 )
 
-st.markdown("**Two planning views — two different decisions**")
-guide_7, guide_14 = st.columns(2)
-with guide_7:
-    st.markdown("**7 DAYS | Demand & stock check**")
-    st.caption("January 1–7, 2016. See how much customers may buy and which items may run short. "
-               "Seven days is the default for graphs and store comparisons; selected product charts can also show 14 days.")
-with guide_14:
-    st.markdown("**14 DAYS | Replenishment plan**")
-    st.caption("January 1–14, 2016. See suggested order amounts with safety stock and manager-review flags. "
-               "Replenishment decisions use 14 days; product forecast and stock charts can also show this horizon.")
+with st.expander("Which planning period should I use?", expanded=False):
+    col_week, col_order = st.columns(2)
+    with col_week:
+        st.markdown("**7 days — Check this week's demand**")
+        st.write("Review expected sales and possible shortages. Some demand charts also offer 14 days.")
+    with col_order:
+        st.markdown("**14 days — Plan replenishment**")
+        st.write("Review how much to order, including extra safety stock and items needing a manager's check.")
+    st.caption(
+        "Model Insights also compares 28-day forecast accuracy. "
+        "A 28-day daily demand chart will appear when a verified 28-day forecast file is available. "
+        "The ordering policy stays fixed at 14 days."
+    )
+
 with st.expander("What do these dashboard terms mean?", expanded=False):
     st.markdown(
         "**Predicted demand:** How many units we expect customers to buy.\n\n"
@@ -875,9 +917,23 @@ with forecasting:
     daily_14_data = load_14day_daily_forecasts()
     forecast_14_store = (daily_14_data.loc[daily_14_data["store_id"].eq(store)].copy()
                          if daily_14_data is not None else None)
+    daily_28_data = load_28day_daily_forecasts()
+    forecast_28_store = (daily_28_data.loc[daily_28_data["store_id"].eq(store)].copy()
+                         if daily_28_data is not None else None)
+    available_horizons = [7, 14] + ([28] if forecast_28_store is not None else [])
+    if forecast_28_store is None:
+        st.caption(
+            "**28-day view:** Available in our historical model evaluation, but not yet as a daily chart. "
+            "The supplied LightGBM forecast cube contains only 14 days of daily predictions. "
+            "Once the forecasting team exports genuine 28-day daily predictions, "
+            "this tab will offer the 28-day option automatically."
+        )
 
     def demand_section_period(label, key):
-        chosen = st.radio(label, [7, 14],
+        # Keep session-state stable if a previously available data file is removed.
+        if key in st.session_state and st.session_state[key] not in available_horizons:
+            st.session_state[key] = 7
+        chosen = st.radio(label, available_horizons,
                           format_func=lambda days: f"{days} days",
                           horizontal=True, key=key)
         if chosen == 14 and forecast_14_store is None:
@@ -886,7 +942,11 @@ with forecasting:
         return chosen
 
     def demand_section_data(days):
-        return store_df if days == 7 else forecast_14_store
+        if days == 7:
+            return store_df
+        if days == 14:
+            return forecast_14_store
+        return forecast_28_store
 
     st.subheader("Demand by department")
     dept_horizon = demand_section_period("Department comparison period", "dept_comparison_horizon")
@@ -906,8 +966,11 @@ with forecasting:
     forecast_filtered = product_view_df[product_view_df["dept_id"] == forecast_dept].copy()
     forecast_item = st.selectbox("Product", sorted(forecast_filtered["item_id"].dropna().unique()), key="forecast_item")
     forecast_item_data = forecast_filtered[forecast_filtered["item_id"] == forecast_item].sort_values("date").copy()
-    if product_horizon == 14:
-        st.caption("This chart uses a separate 14-day LightGBM forecast. Its first seven predictions may differ from the seven-day forecast.")
+    if product_horizon in (14, 28):
+        st.caption(
+            f"This chart uses a separately exported {product_horizon}-day LightGBM forecast. "
+            "The first seven predictions may differ from the existing seven-day view."
+        )
     # Forecast page state is intentionally independent of Inventory Planning and AI scopes.
     dept, filtered, item, item_data = forecast_dept, forecast_filtered, forecast_item, forecast_item_data
     forecast_horizon = product_horizon
@@ -1060,7 +1123,7 @@ with forecasting:
         st.write(
             "P10 is a lower demand estimate and P90 is a higher one. They describe uncertainty, "
             "not guaranteed sales limits. We use the model's pooled prediction ranges; "
-            "these are individual daily estimates, not a calibrated range for total 14-day demand."
+            "these are individual daily estimates, not a calibrated range for total demand across the selected period."
         )
 
     st.divider()
@@ -1155,166 +1218,207 @@ with insights:
         "error in units and places more weight on large misses. These metrics do not "
         "measure real procurement costs or store-level profit."
     )
-    st.subheader("1. Which forecasting method performed best?")
-    st.markdown("**Historical test: comparing five forecast methods**")
-    st.caption("2016 held-out test, 50% item-store sample. These are aggregate results, not live product predictions. "
-               "TSB and SES were exploratory comparisons; LightGBM remains our selected model.")
-    comparison_horizon = st.radio(
-        "Comparison period", [7, 14, 28],
-        format_func=lambda d: f"{d} days", horizontal=True,
-        key="historical_model_comparison_period")
-    historical_models = pd.DataFrame([
-        {"Model": "Recent sales average (7 days)", "Forecast error (%)": 74.58, "Bias (%)": -1.75, "RMSE (units)": 2.219, "Days": 7},
-        {"Model": "Recent sales average (28 days)", "Forecast error (%)": 73.91, "Bias (%)": -2.76, "RMSE (units)": 2.202, "Days": 7},
-        {"Model": "TSB (intermittent demand)", "Forecast error (%)": 72.816, "Bias (%)": -3.969, "RMSE (units)": 2.159, "Days": 7},
-        {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 72.846, "Bias (%)": -4.100, "RMSE (units)": 2.159, "Days": 7},
-        {"Model": "LightGBM (selected)", "Forecast error (%)": 71.62, "Bias (%)": -0.70, "RMSE (units)": 2.040, "Days": 7},
-        {"Model": "Recent sales average (7 days)", "Forecast error (%)": 75.77, "Bias (%)": -2.27, "RMSE (units)": 2.282, "Days": 14},
-        {"Model": "Recent sales average (28 days)", "Forecast error (%)": 74.65, "Bias (%)": -3.08, "RMSE (units)": 2.243, "Days": 14},
-        {"Model": "TSB (intermittent demand)", "Forecast error (%)": 73.729, "Bias (%)": -4.427, "RMSE (units)": 2.209, "Days": 14},
-        {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 73.763, "Bias (%)": -4.567, "RMSE (units)": 2.210, "Days": 14},
-        {"Model": "LightGBM (selected)", "Forecast error (%)": 72.55, "Bias (%)": -1.31, "RMSE (units)": 2.080, "Days": 14},
-        {"Model": "Recent sales average (7 days)", "Forecast error (%)": 77.25, "Bias (%)": -2.72, "RMSE (units)": 2.343, "Days": 28},
-        {"Model": "Recent sales average (28 days)", "Forecast error (%)": 75.94, "Bias (%)": -3.58, "RMSE (units)": 2.294, "Days": 28},
-        {"Model": "TSB (intermittent demand)", "Forecast error (%)": 75.060, "Bias (%)": -4.780, "RMSE (units)": 2.261, "Days": 28},
-        {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 75.104, "Bias (%)": -4.902, "RMSE (units)": 2.263, "Days": 28},
-        {"Model": "LightGBM (selected)", "Forecast error (%)": 73.94, "Bias (%)": -1.67, "RMSE (units)": 2.123, "Days": 28},
-    ])
-    selected_historical = historical_models.loc[historical_models["Days"] == comparison_horizon].copy()
-    st.dataframe(selected_historical.drop(columns="Days").round(2), hide_index=True, use_container_width=True)
-    compare_fig = go.Figure(go.Bar(
-        x=selected_historical["Model"], y=selected_historical["Forecast error (%)"],
-        marker_color=["#0071ce" if m == "LightGBM (selected)" else "#8497aa" for m in selected_historical["Model"]],
-        text=selected_historical["Forecast error (%)"].round(2), texttemplate="%{text:.2f}%", textposition="outside"))
-    compare_fig.update_layout(title=f"{comparison_horizon}-day historical forecast error (lower is better)",
-                              yaxis_title="WAPE (%)", xaxis_title="", height=390,
-                              xaxis_tickangle=-18, yaxis=dict(rangemode="tozero"))
-    st.plotly_chart(compare_fig, use_container_width=True)
-
-    st.caption(
-        "**Historical sources:** `03_M5_Statistical_Model_Exploration.ipynb` "
-        "(TSB, SES and statistical screening) and "
-        "`04_M5_LightGBM_Final_Forecasting.ipynb` (LightGBM, recent-mean "
-        "baselines, and 2016 holdout). Croston and SBA were evaluated during validation "
-        "but were not selected for confirmatory held-out testing. "
-        "TSB and SES are exploratory comparisons, not live dashboard models."
-    )
-
-    st.subheader("2. Did the models forecast too much or too little?")
-    st.write(
-        "A negative value means the method underestimated total demand. "
-        "For inventory teams, consistently underestimating demand can increase stockout risk."
-    )
-    bias_fig = go.Figure(go.Bar(
-        x=selected_historical["Model"],
-        y=selected_historical["Bias (%)"],
-        marker_color=["#0071ce" if m == "LightGBM (selected)" else "#8497aa"
-                      for m in selected_historical["Model"]],
-        text=selected_historical["Bias (%)"].round(2),
-        texttemplate="%{text:.2f}%", textposition="outside"
-    ))
-    bias_fig.add_hline(y=0, line_color="#303030", line_width=1)
-    bias_fig.update_layout(
-        title=f"{comparison_horizon}-day forecast bias — 2016 test",
-        xaxis_title="", yaxis_title="Signed bias (%)",
-        xaxis_tickangle=-18, height=390,
-    )
-    st.plotly_chart(bias_fig, use_container_width=True)
-
-    st.subheader("3. Which types of products are harder to forecast?")
-    st.write(
-        "We grouped items by how regularly customers bought them. The seven-day results "
-        "show that products with sporadic sales are harder to predict than products with steady sales."
-    )
-    by_pattern = pd.DataFrame({
-        "Demand pattern": ["Smooth", "Erratic", "Intermittent", "Lumpy", "No sales"],
-        "Recent 7-day average": [48.205, 58.448, 89.424, 83.773, 88.806],
-        "LightGBM": [44.625, 55.447, 86.927, 80.331, 89.532],
+    # Poster-aligned summary from the team's 2016 held-out forecasting study.
+    st.subheader("LightGBM performance across 7, 14 and 28 days")
+    poster_horizons = pd.DataFrame({
+        "Horizon": ["7 days", "14 days", "28 days"],
+        "WAPE": [71.62, 72.55, 73.94],
+        "Bias": [-0.70, -1.31, -1.67],
     })
-    pattern_fig = go.Figure()
-    for model_name, color in [("Recent 7-day average", "#8497aa"), ("LightGBM", "#0071ce")]:
-        pattern_fig.add_trace(go.Bar(
-            x=by_pattern["Demand pattern"], y=by_pattern[model_name],
-            name=model_name, marker_color=color,
-        ))
-    pattern_fig.update_layout(
-        title="7-day forecast error by demand pattern — 2016 test",
-        yaxis_title="WAPE (%) — lower is better", xaxis_title="",
-        barmode="group", height=420,
-    )
-    st.plotly_chart(pattern_fig, use_container_width=True)
-    st.caption(
-        "This chart compares LightGBM with the recent seven-day average on the same "
-        "2016 held-out 50% sample. For products with no sales, WAPE is aggregated at "
-        "the group level; it is not an individual product's percentage error. "
-        "Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 10.2."
-    )
-
-    st.subheader("4. Where might the model overestimate or underestimate demand?")
-    st.write(
-        "This historical chart highlights groups where the model systematically "
-        "forecast too high or too low. Negative numbers mean underforecasting. "
-        "For example, Wisconsin food items had a -3.53% bias in this test."
-    )
-    bias_map = pd.DataFrame(
-        [[-0.588, 2.082, 0.205], [-0.248, 1.659, 2.433], [-3.528, 0.232, -0.721]],
-        index=["California", "Texas", "Wisconsin"],
-        columns=["Foods", "Hobbies", "Household"]
-    )
-    location_fig = go.Figure(go.Heatmap(
-        z=bias_map.values, x=list(bias_map.columns), y=list(bias_map.index),
-        colorscale="RdBu_r", zmid=0,
-        colorbar=dict(title="Bias (%)"),
-        text=[[f"{v:+.2f}%" for v in row] for row in bias_map.values],
-        texttemplate="%{text}", textfont=dict(size=13),
+    poster_fig = go.Figure(go.Bar(
+        x=poster_horizons["Horizon"], y=poster_horizons["WAPE"],
+        marker_color=["#0071ce", "#3188c9", "#77a9ce"],
+        text=[f"{v:.1f}%" for v in poster_horizons["WAPE"]],
+        textposition="outside",
     ))
-    location_fig.update_layout(
-        title="LightGBM 7-day forecast bias by state and category — 2016 test",
-        height=380, xaxis_title="Category", yaxis_title="State",
+    poster_fig.update_layout(
+        title="Forecast error by planning period — lower is better",
+        xaxis_title="Forecast horizon", yaxis_title="WAPE (%)",
+        yaxis=dict(range=[0, 90]), height=340, showlegend=False,
+        margin=dict(t=55, b=50),
     )
-    st.plotly_chart(location_fig, use_container_width=True)
+    st.plotly_chart(poster_fig, use_container_width=True)
     st.caption(
-        "Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 10.1. "
-        "Group-level historical estimates; they do not predict the bias of a specific product."
+        "The model performed best over 7 days. Error increased gradually for 14- and 28-day forecasts. "
+        "These are historical held-out results, not forecasts for the selected store."
+    )
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("7-day forecast error", "71.6%", help="WAPE: absolute forecast error divided by total actual units sold; lower is better.")
+    k2.metric("7-day forecast bias", "-0.7%", help="Negative bias means the model underestimated total sales slightly.")
+    k3.metric("7-day RMSE", "2.04 units", help="An error measure that gives extra weight to large mistakes.")
+    k4.metric("Prediction range coverage", "77.7%", help="Observed daily sales within P10-P90 bounds; target was 80%.")
+    st.caption(
+        "Poster source: `04_M5_LightGBM_Final_Forecasting.ipynb`, 2016 held-out test (50% item-store sample). "
+        "Bias across 7/14/28 days: -0.7%, -1.3%, and -1.7%. "
+        "The RMSE and coverage cards summarize the seven-day results."
+    )
+    st.markdown(
+        "**What this means:** LightGBM forecasts support a quick weekly demand check, "
+        "while our replenishment policy uses a separate 14-day forecast plus safety stock. "
+        "The 28-day results show how the model performs farther ahead; they do not change the 14-day ordering rule."
     )
 
-    with st.expander("What information does LightGBM use most?", expanded=False):
-        st.write(
-            "The model relies mostly on recent sales patterns. These percentages measure "
-            "how much each group contributed to splits in the fitted model; "
-            "they do not prove that changing one input causes sales to change."
+    with st.expander("Detailed model comparisons, demand patterns, and regional results", expanded=False):
+        st.subheader("1. Which forecasting method performed best?")
+        st.markdown("**Historical test: comparing five forecast methods**")
+        st.caption("2016 held-out test, 50% item-store sample. These are aggregate results, not live product predictions. "
+                   "TSB and SES were exploratory comparisons; LightGBM remains our selected model.")
+        comparison_horizon = st.radio(
+            "Comparison period", [7, 14, 28],
+            format_func=lambda d: f"{d} days", horizontal=True,
+            key="historical_model_comparison_period")
+        historical_models = pd.DataFrame([
+            {"Model": "Recent sales average (7 days)", "Forecast error (%)": 74.58, "Bias (%)": -1.75, "RMSE (units)": 2.219, "Days": 7},
+            {"Model": "Recent sales average (28 days)", "Forecast error (%)": 73.91, "Bias (%)": -2.76, "RMSE (units)": 2.202, "Days": 7},
+            {"Model": "TSB (intermittent demand)", "Forecast error (%)": 72.816, "Bias (%)": -3.969, "RMSE (units)": 2.159, "Days": 7},
+            {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 72.846, "Bias (%)": -4.100, "RMSE (units)": 2.159, "Days": 7},
+            {"Model": "LightGBM (selected)", "Forecast error (%)": 71.62, "Bias (%)": -0.70, "RMSE (units)": 2.040, "Days": 7},
+            {"Model": "Recent sales average (7 days)", "Forecast error (%)": 75.77, "Bias (%)": -2.27, "RMSE (units)": 2.282, "Days": 14},
+            {"Model": "Recent sales average (28 days)", "Forecast error (%)": 74.65, "Bias (%)": -3.08, "RMSE (units)": 2.243, "Days": 14},
+            {"Model": "TSB (intermittent demand)", "Forecast error (%)": 73.729, "Bias (%)": -4.427, "RMSE (units)": 2.209, "Days": 14},
+            {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 73.763, "Bias (%)": -4.567, "RMSE (units)": 2.210, "Days": 14},
+            {"Model": "LightGBM (selected)", "Forecast error (%)": 72.55, "Bias (%)": -1.31, "RMSE (units)": 2.080, "Days": 14},
+            {"Model": "Recent sales average (7 days)", "Forecast error (%)": 77.25, "Bias (%)": -2.72, "RMSE (units)": 2.343, "Days": 28},
+            {"Model": "Recent sales average (28 days)", "Forecast error (%)": 75.94, "Bias (%)": -3.58, "RMSE (units)": 2.294, "Days": 28},
+            {"Model": "TSB (intermittent demand)", "Forecast error (%)": 75.060, "Bias (%)": -4.780, "RMSE (units)": 2.261, "Days": 28},
+            {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 75.104, "Bias (%)": -4.902, "RMSE (units)": 2.263, "Days": 28},
+            {"Model": "LightGBM (selected)", "Forecast error (%)": 73.94, "Bias (%)": -1.67, "RMSE (units)": 2.123, "Days": 28},
+        ])
+        selected_historical = historical_models.loc[historical_models["Days"] == comparison_horizon].copy()
+        st.dataframe(selected_historical.drop(columns="Days").round(2), hide_index=True, use_container_width=True)
+        compare_fig = go.Figure(go.Bar(
+            x=selected_historical["Model"], y=selected_historical["Forecast error (%)"],
+            marker_color=["#0071ce" if m == "LightGBM (selected)" else "#8497aa" for m in selected_historical["Model"]],
+            text=selected_historical["Forecast error (%)"].round(2), texttemplate="%{text:.2f}%", textposition="outside"))
+        compare_fig.update_layout(title=f"{comparison_horizon}-day historical forecast error (lower is better)",
+                                  yaxis_title="WAPE (%)", xaxis_title="", height=390,
+                                  xaxis_tickangle=-18, yaxis=dict(rangemode="tozero"))
+        st.plotly_chart(compare_fig, use_container_width=True)
+
+        st.caption(
+            "**Historical sources:** `03_M5_Statistical_Model_Exploration.ipynb` "
+            "(TSB, SES and statistical screening) and "
+            "`04_M5_LightGBM_Final_Forecasting.ipynb` (LightGBM, recent-mean "
+            "baselines, and 2016 holdout). Croston and SBA were evaluated during validation "
+            "but were not selected for confirmatory held-out testing. "
+            "TSB and SES are exploratory comparisons, not live dashboard models."
         )
-        feature_groups = pd.DataFrame({
-            "Input": ["Recent sales patterns", "Price", "Item and store type",
-                      "Calendar and events", "Same weekday history", "Forecast lead time"],
-            "Share of model gain (%)": [89.3, 5.1, 3.3, 1.2, 0.7, 0.3]
-        })
-        gain_fig = go.Figure(go.Bar(
-            x=feature_groups["Share of model gain (%)"],
-            y=feature_groups["Input"], orientation="h",
-            marker_color="#0071ce",
+
+        st.subheader("2. Did the models forecast too much or too little?")
+        st.write(
+            "A negative value means the method underestimated total demand. "
+            "For inventory teams, consistently underestimating demand can increase stockout risk."
+        )
+        bias_fig = go.Figure(go.Bar(
+            x=selected_historical["Model"],
+            y=selected_historical["Bias (%)"],
+            marker_color=["#0071ce" if m == "LightGBM (selected)" else "#8497aa"
+                          for m in selected_historical["Model"]],
+            text=selected_historical["Bias (%)"].round(2),
+            texttemplate="%{text:.2f}%", textposition="outside"
         ))
-        gain_fig.update_layout(
-            title="Feature groups by model gain", xaxis_title="Share of model gain (%)",
-            yaxis_title="", yaxis=dict(autorange="reversed"), height=340,
+        bias_fig.add_hline(y=0, line_color="#303030", line_width=1)
+        bias_fig.update_layout(
+            title=f"{comparison_horizon}-day forecast bias — 2016 test",
+            xaxis_title="", yaxis_title="Signed bias (%)",
+            xaxis_tickangle=-18, height=390,
         )
-        st.plotly_chart(gain_fig, use_container_width=True)
-        st.caption("Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 11.3.")
+        st.plotly_chart(bias_fig, use_container_width=True)
 
-    with st.expander("How reliable is the forecast range?", expanded=False):
+        st.subheader("3. Which types of products are harder to forecast?")
         st.write(
-            "We also tested how often actual daily sales landed between our lower and "
-            "higher demand estimates. Demand-type-specific ranges covered **77.7%** of "
-            "observations, compared with a nominal **80%** target. We use this result "
-            "to communicate uncertainty, not to promise that every future day falls in range."
+            "We grouped items by how regularly customers bought them. The seven-day results "
+            "show that products with sporadic sales are harder to predict than products with steady sales."
         )
-        st.caption("Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 11.2.")
+        by_pattern = pd.DataFrame({
+            "Demand pattern": ["Smooth", "Erratic", "Intermittent", "Lumpy", "No sales"],
+            "Recent 7-day average": [48.205, 58.448, 89.424, 83.773, 88.806],
+            "LightGBM": [44.625, 55.447, 86.927, 80.331, 89.532],
+        })
+        pattern_fig = go.Figure()
+        for model_name, color in [("Recent 7-day average", "#8497aa"), ("LightGBM", "#0071ce")]:
+            pattern_fig.add_trace(go.Bar(
+                x=by_pattern["Demand pattern"], y=by_pattern[model_name],
+                name=model_name, marker_color=color,
+            ))
+        pattern_fig.update_layout(
+            title="7-day forecast error by demand pattern — 2016 test",
+            yaxis_title="WAPE (%) — lower is better", xaxis_title="",
+            barmode="group", height=420,
+        )
+        st.plotly_chart(pattern_fig, use_container_width=True)
+        st.caption(
+            "This chart compares LightGBM with the recent seven-day average on the same "
+            "2016 held-out 50% sample. For products with no sales, WAPE is aggregated at "
+            "the group level; it is not an individual product's percentage error. "
+            "Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 10.2."
+        )
 
-    st.caption(
-        "**Notebook filenames:** `03_M5_Statistical_Model_Exploration.ipynb`; "
-        "`04_M5_LightGBM_Final_Forecasting.ipynb`. "
-        "All charts above report historical research results, not live accuracy or order costs."
-    )
+        st.subheader("4. Where might the model overestimate or underestimate demand?")
+        st.write(
+            "This historical chart highlights groups where the model systematically "
+            "forecast too high or too low. Negative numbers mean underforecasting. "
+            "For example, Wisconsin food items had a -3.53% bias in this test."
+        )
+        bias_map = pd.DataFrame(
+            [[-0.588, 2.082, 0.205], [-0.248, 1.659, 2.433], [-3.528, 0.232, -0.721]],
+            index=["California", "Texas", "Wisconsin"],
+            columns=["Foods", "Hobbies", "Household"]
+        )
+        location_fig = go.Figure(go.Heatmap(
+            z=bias_map.values, x=list(bias_map.columns), y=list(bias_map.index),
+            colorscale="RdBu_r", zmid=0,
+            colorbar=dict(title="Bias (%)"),
+            text=[[f"{v:+.2f}%" for v in row] for row in bias_map.values],
+            texttemplate="%{text}", textfont=dict(size=13),
+        ))
+        location_fig.update_layout(
+            title="LightGBM 7-day forecast bias by state and category — 2016 test",
+            height=380, xaxis_title="Category", yaxis_title="State",
+        )
+        st.plotly_chart(location_fig, use_container_width=True)
+        st.caption(
+            "Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 10.1. "
+            "Group-level historical estimates; they do not predict the bias of a specific product."
+        )
+
+        with st.expander("What information does LightGBM use most?", expanded=False):
+            st.write(
+                "The model relies mostly on recent sales patterns. These percentages measure "
+                "how much each group contributed to splits in the fitted model; "
+                "they do not prove that changing one input causes sales to change."
+            )
+            feature_groups = pd.DataFrame({
+                "Input": ["Recent sales patterns", "Price", "Item and store type",
+                          "Calendar and events", "Same weekday history", "Forecast lead time"],
+                "Share of model gain (%)": [89.3, 5.1, 3.3, 1.2, 0.7, 0.3]
+            })
+            gain_fig = go.Figure(go.Bar(
+                x=feature_groups["Share of model gain (%)"],
+                y=feature_groups["Input"], orientation="h",
+                marker_color="#0071ce",
+            ))
+            gain_fig.update_layout(
+                title="Feature groups by model gain", xaxis_title="Share of model gain (%)",
+                yaxis_title="", yaxis=dict(autorange="reversed"), height=340,
+            )
+            st.plotly_chart(gain_fig, use_container_width=True)
+            st.caption("Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 11.3.")
+
+        with st.expander("How reliable is the forecast range?", expanded=False):
+            st.write(
+                "We also tested how often actual daily sales landed between our lower and "
+                "higher demand estimates. Demand-type-specific ranges covered **77.7%** of "
+                "observations, compared with a nominal **80%** target. We use this result "
+                "to communicate uncertainty, not to promise that every future day falls in range."
+            )
+            st.caption("Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 11.2.")
+
+        st.caption(
+            "**Notebook filenames:** `03_M5_Statistical_Model_Exploration.ipynb`; "
+            "`04_M5_LightGBM_Final_Forecasting.ipynb`. "
+            "All charts above report historical research results, not live accuracy or order costs."
+        )
 
 # ============================================================
 # TAB 3: INVENTORY PLANNING
