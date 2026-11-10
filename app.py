@@ -1293,15 +1293,18 @@ with insights:
     st.header("Model Insights")
     render_model_summary()
 
-    # Poster-aligned summary: historical 2016 held-out, 50% item-store sample.
-    st.subheader("LightGBM results")
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("7-day forecast error", "71.6%", help="WAPE: total absolute forecast error divided by total actual units sold. Lower is better.")
-    k2.metric("7-day forecast bias", "−0.7%", help="The negative sign means the model slightly underestimated total sales.")
-    k3.metric("7-day RMSE", "2.04 units", help="A forecasting error metric that gives more weight to larger misses.")
-    k4.metric("Actual demand captured by prediction range", "77.7%", help="77.7% of observed daily sales values fell between the lower and upper estimates, against an 80% target. This measures the share of observations within the range, not the share of total sales units.")
+    # Extra diagnostics supplement the headline model-selection WAPE comparison.
+    st.subheader("4. Additional Seven-Day Diagnostics")
+    a, b, c = st.columns(3)
+    a.metric("Forecast bias", "−0.70%",
+             help="Negative means total demand was slightly underestimated.")
+    b.metric("RMSE", "2.04 units",
+             help="Forecast error measured in units, giving larger misses more weight.")
+    c.metric("P10–P90 coverage", "77.7%",
+             help="Share of actual daily observations within prediction bounds; target was 80%.")
+    st.caption("2016 held-out 50% sample; these are historical diagnostics, not live results.")
 
-    st.subheader("Forecast error across 7, 14 and 28 days")
+    st.subheader("5. Forecast Error Across 7, 14 and 28 Days")
     poster_horizons = pd.DataFrame({
         "Horizon": ["7 days", "14 days", "28 days"],
         "WAPE": [71.62, 72.55, 73.94],
@@ -1330,20 +1333,18 @@ with insights:
         "Source: `04_M5_LightGBM_Final_Forecasting.ipynb`."
     )
 
-    with st.expander("How we evaluated the models and what the metrics mean", expanded=False):
+    with st.expander("Evaluation methodology and data split", expanded=False):
         st.write(
-            "We trained on sales through 2014, used 2015 to choose the models, then tested them "
-            "against sales from January 1 to May 22, 2016. The test covers 15,245 item-store series."
+            "The models were trained using sales through 2014, validated on 2015, "
+            "then tested on unseen sales from January 1 to May 22, 2016. "
+            "The historical test includes 15,245 item–store series in the 50% sample."
         )
-        st.markdown(
-            "**WAPE:** Overall forecasting error relative to actual sales; lower is better.\n\n"
-            "**Bias:** Negative values mean forecasts were too low overall; positive values mean they were too high.\n\n"
-            "**RMSE:** Forecast error measured in units, with extra weight on large misses.\n\n"
-            "**Prediction range coverage:** The percentage of observed daily sales values within our lower and higher estimates "
-            "(77.7% versus an 80% target)."
+        st.caption(
+            "WAPE, bias, RMSE, and interval coverage are explained above in "
+            "'How to Interpret the Results'."
         )
 
-    with st.expander("Detailed model comparisons, demand patterns, and regional results", expanded=False):
+    with st.expander("6. Explore detailed model comparisons and segment results", expanded=False):
         st.subheader("1. Which forecasting method performed best?")
         st.markdown("**Historical test: comparing five forecast methods**")
         st.caption("2016 held-out test, 50% item-store sample. These are aggregate results, not live product predictions. "
