@@ -355,7 +355,7 @@ def focus_product(product_id):
     st.session_state["runway_scaled_product"] = product_id
     current_map_products = [pid for pid in st.session_state.get("runway_selected_products", [])
                             if pid != product_id]
-    st.session_state["runway_selected_products"] = [product_id] + current_map_products[:2]
+    st.session_state["runway_selected_products"] = [product_id] + current_map_products[:7]
     st.session_state["runway_selection_store"] = store
     st.session_state["focused_item"] = product_id
     st.session_state["focused_store"] = store
@@ -1999,23 +1999,45 @@ with planning:
         st.warning("Upload the compact 14-day daily forecast to enable longer stock projections.")
         runway_horizon = 7
     st.write(
-        "Each row is a product, and each column is a forecast day. "
-        "Green means stock covers expected demand, yellow means higher-than-expected "
-        "demand could exhaust stock, and red means expected demand exceeds available stock. "
-        "Choose products to compare and use the day slider to inspect their stock levels. "
-        "This view assumes no new deliveries."
+        "Select 3–8 products to compare. Each row shows a product, and each column "
+        "shows a forecast day. Green means enough stock for expected demand, yellow "
+        "means higher demand could exhaust stock, and red means expected demand "
+        "exceeds stock. Move the day slider to check each day's status. "
+        "The chart assumes no new deliveries."
     )
 
     import math
     import plotly.graph_objects as go
 
-    # The runway starts with three store-specific products that have the earliest
-    # forecast gaps, instead of showing a single arbitrary product or a blank map.
-    ranked_for_runway = (inv_items.sort_values(
-        ["first_shortage", "gap", "item_id"],
-        ascending=[True, False, True], na_position="last")
-        ["item_id"].drop_duplicates().tolist())
-    default_runway_products = ranked_for_runway[:3]
+    # Show a representative five-product comparison instead of five shortages.
+    # Status follows the same 7-day point/high-demand logic as the heatmap.
+    # Choosing by status also works when switching to the 14-day projection:
+    # the chart then recalculates each product's status for that period.
+    def pick_runway_examples(items, count=5):
+        ranked = items.sort_values(
+            ["first_shortage", "gap", "item_id"],
+            ascending=[True, False, True], na_position="last"
+        ).drop_duplicates("item_id")
+        red = ranked.loc[ranked["gap"] > 0, "item_id"].tolist()
+        amber = ranked.loc[
+            ranked["gap"].le(0) & ranked["high_demand_gap"].gt(0), "item_id"
+        ].tolist()
+        green = ranked.loc[
+            ranked["gap"].le(0) & ranked["high_demand_gap"].le(0), "item_id"
+        ].tolist()
+        # One red, two yellow, two green when those examples exist.
+        chosen = []
+        for group, limit in ((red, 1), (amber, 2), (green, 2)):
+            chosen.extend(group[:limit])
+        if len(chosen) < count:
+            for pid in amber[2:] + green[2:] + red[1:]:
+                if pid not in chosen:
+                    chosen.append(pid)
+                    if len(chosen) >= count:
+                        break
+        return chosen[:count]
+
+    default_runway_products = pick_runway_examples(inv_items)
     if st.session_state.get("runway_selection_store") != store:
         st.session_state["runway_selection_store"] = store
         st.session_state["runway_selected_products"] = default_runway_products
@@ -2025,7 +2047,7 @@ with planning:
         if pid in chosen_product_options
     ]
     runway_reset_col, runway_clear_col, _ = st.columns([1, 1, 4])
-    if runway_reset_col.button("Reset all", key="runway_reset_all", help="Return to three suggested products"):
+    if runway_reset_col.button("Reset all", key="runway_reset_all", help="Restore five example products with different stock conditions"):
         st.session_state["runway_selected_products"] = default_runway_products
     if runway_clear_col.button("Clear all", key="runway_clear_all"):
         st.session_state["runway_selected_products"] = []
@@ -2033,10 +2055,11 @@ with planning:
     runway_controls = st.columns(2)
 
     runway_products = runway_controls[0].multiselect(
-        "Products to compare",
+        "Products to compare (3–8 recommended)",
         options=chosen_product_options,
+        max_selections=8,
         key="runway_selected_products",
-        help="Start with suggested stock-gap products, or choose any products in this store."
+        help="The five defaults illustrate a mix of stock conditions. Add or remove items (up to eight), or use Reset all to start over."
     )
 
     runway_day = runway_controls[1].slider(
@@ -2086,7 +2109,7 @@ with planning:
     )
 
     if runway_totals.empty:
-        st.info("Choose products above, or click Reset all to restore the suggested comparison.")
+        st.info("Choose products above, or click Reset all to restore five example products.")
 
     else:
         # Demonstrate three different simulated stock situations.
