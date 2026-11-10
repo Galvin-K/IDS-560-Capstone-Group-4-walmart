@@ -16,6 +16,7 @@ from analysis_scope import SCOPES, resolve_question, scope_summary
 from Components.overview_intro import render_overview_intro
 from Components.model_summary import render_model_summary
 from Components.footer import render_footer
+from Components.dashboard_theme import render_dashboard_theme
 
 
 # RAG retrieval interface. The production backend remains the source of truth.
@@ -233,6 +234,7 @@ def manager_review_steps(flags):
 
 # DASHBOARD_STYLE_V1
 st.markdown('\n    <style>\n    /* DASHBOARD_STYLE_V1 */\n\n    /* Main background */\n    [data-testid="stAppViewContainer"] {\n        background-color: #f2f8fd;\n        color: #041e42;\n    }\n\n    /* Sidebar */\n    [data-testid="stSidebar"] {\n        background-color: #e7f1fa;\n        border-right: 1px solid #d2e2ef;\n    }\n\n    /* Page headings */\n    h1, h2, h3 {\n        color: #041e42;\n    }\n\n    /* KPI cards */\n    [data-testid="stMetric"] {\n        background: white;\n        border: 1px solid #d6e3ed;\n        border-radius: 10px;\n        padding: 16px;\n    }\n\n    /* Selected tabs */\n    button[data-baseweb="tab"][aria-selected="true"] {\n        color: #0071ce;\n        border-bottom-color: #0071ce;\n    }\n\n    /* Buttons */\n    div.stButton > button[kind="primary"],\n    button[data-testid="stFormSubmitButton"] {\n        border-radius: 8px;\n    }\n\n    /* Chart containers */\n    [data-testid="stPlotlyChart"] {\n        background: white;\n        border-radius: 10px;\n        padding: 8px;\n    }\n\n    /* Main content width */\n    .block-container {\n        max-width: 1280px;\n        padding-top: 3.25rem;\n    }\n    </style>\n    ', unsafe_allow_html=True)
+render_dashboard_theme()
 
 # Clean application header. Walmart logo is linked to the public Walmart wordmark file.
 # Trademark belongs to Walmart; this independent project is not an official Walmart system.
