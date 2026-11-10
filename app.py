@@ -339,6 +339,42 @@ with st.sidebar.expander("Inventory data source", expanded=False):
 if "inventory_overrides" not in st.session_state:
     st.session_state["inventory_overrides"] = {}
 
+# Cross-tab product focus: all selectors use the same store's item and department.
+# Streamlit tabs cannot be programmatically activated, but selecting an overview row
+# prepares the product in both tabs, without requiring another product search.
+def focus_product(product_id):
+    product_id = str(product_id)
+    rows = store_df.loc[store_df["item_id"].eq(product_id), "dept_id"]
+    if rows.empty:
+        return
+    department = str(rows.iloc[0])
+    st.session_state["forecast_dept"] = department
+    st.session_state["forecast_item"] = product_id
+    st.session_state["planning_dept"] = department
+    st.session_state["planning_item"] = product_id
+    st.session_state["runway_scaled_product"] = product_id
+    current_map_products = [pid for pid in st.session_state.get("runway_selected_products", [])
+                            if pid != product_id]
+    st.session_state["runway_selected_products"] = [product_id] + current_map_products[:2]
+    st.session_state["runway_selection_store"] = store
+    st.session_state["focused_item"] = product_id
+    st.session_state["focused_store"] = store
+
+# Avoid a stale product selection if the manager switches stores.
+if st.session_state.get("focused_store") != store:
+    st.session_state.pop("focused_item", None)
+    st.session_state["focused_store"] = store
+for department_key, product_key in (("forecast_dept", "forecast_item"),
+                                    ("planning_dept", "planning_item")):
+    if st.session_state.get(department_key) not in dept_options:
+        st.session_state[department_key] = dept_options[0]
+    valid_items = set(store_df.loc[store_df["dept_id"].eq(st.session_state[department_key]), "item_id"])
+    if st.session_state.get(product_key) not in valid_items:
+        st.session_state[product_key] = sorted(valid_items)[0]
+valid_all_items = set(store_df["item_id"].dropna().unique())
+if st.session_state.get("runway_scaled_product") not in valid_all_items:
+    st.session_state["runway_scaled_product"] = sorted(valid_all_items)[0]
+
 # 5. NAVIGATION
 
 overview, forecasting, planning, insights, assistant = st.tabs([
@@ -943,11 +979,30 @@ with overview:
             "units_to_cover": "7-Day Gap Units",
             "estimated_order_cost": "7-Day Gap Value at M5 Price ($)",
         }).round(2)
-        st.dataframe(
+        st.caption("Click a product row to load it into Demand Forecasting and Inventory Planning.")
+        priority_event = st.dataframe(
             priorities_display,
             hide_index=True,
             use_container_width=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            key=f"executive_priority_selection_{store}",
         )
+        chosen_rows = priority_event.selection.rows
+        chosen_item = (str(urgent.iloc[chosen_rows[0]]["item_id"])
+                       if chosen_rows and chosen_rows[0] < len(urgent) else None)
+        # Respond only to a NEW click; do not overwrite later manual selections
+        # each time Streamlit reruns the rest of the application.
+        latest_click_key = f"executive_last_clicked_{store}"
+        if chosen_item != st.session_state.get(latest_click_key):
+            st.session_state[latest_click_key] = chosen_item
+            if chosen_item:
+                focus_product(chosen_item)
+        if st.session_state.get("focused_item") and st.session_state.get("focused_store") == store:
+            st.success(
+                f"{st.session_state['focused_item']} selected. Open Demand Forecasting "
+                "or Inventory Planning to see its details."
+            )
 
     st.caption(
         "Seven-day gap values use M5 selling prices (not wholesale costs) and do not include safety stock; "
@@ -1012,7 +1067,7 @@ with forecasting:
             f"This chart uses a separately exported {product_horizon}-day LightGBM forecast. "
             "The first seven predictions may differ from the existing seven-day view."
         )
-    # Forecast page state is intentionally independent of Inventory Planning and AI scopes.
+    # Forecast and Inventory Planning share the product selected in Executive Overview.
     dept, filtered, item, item_data = forecast_dept, forecast_filtered, forecast_item, forecast_item_data
     forecast_horizon = product_horizon
     st.subheader("Product forecast KPIs")
@@ -1568,11 +1623,8 @@ with planning:
             help="Select a product from the filtered list to see its 14-day order, confidence and review checks below."
         )
         def open_action_product():
-            dept_match = store_df.loc[store_df["item_id"].eq(action_item_selected), "dept_id"]
-            if not dept_match.empty:
-                st.session_state["planning_dept"] = str(dept_match.iloc[0])
-                st.session_state["planning_item"] = str(action_item_selected)
-                st.session_state["action_product_notice"] = str(action_item_selected)
+            focus_product(action_item_selected)
+            st.session_state["action_product_notice"] = str(action_item_selected)
         st.button("Open selected product's inventory details", on_click=open_action_product,
                   key="action_open_details", type="primary")
         if st.session_state.get("action_product_notice") == action_item_selected:
@@ -1947,22 +1999,44 @@ with planning:
         st.warning("Upload the compact 14-day daily forecast to enable longer stock projections.")
         runway_horizon = 7
     st.write(
-        f"See when your estimated starting stock could run out over the next {runway_horizon} days. "
-        "We subtract each day's expected sales. This projection assumes no deliveries. "
-        "The 14-day replenishment recommendation above is a separate decision that adds safety stock and review rules."
+        "Each row is a product, and each column is a forecast day. "
+        "Green means stock covers expected demand, yellow means higher-than-expected "
+        "demand could exhaust stock, and red means expected demand exceeds available stock. "
+        "Choose products to compare and use the day slider to inspect their stock levels. "
+        "This view assumes no new deliveries."
     )
 
     import math
     import plotly.graph_objects as go
 
+    # The runway starts with three store-specific products that have the earliest
+    # forecast gaps, instead of showing a single arbitrary product or a blank map.
+    ranked_for_runway = (inv_items.sort_values(
+        ["first_shortage", "gap", "item_id"],
+        ascending=[True, False, True], na_position="last")
+        ["item_id"].drop_duplicates().tolist())
+    default_runway_products = ranked_for_runway[:3]
+    if st.session_state.get("runway_selection_store") != store:
+        st.session_state["runway_selection_store"] = store
+        st.session_state["runway_selected_products"] = default_runway_products
+    chosen_product_options = sorted(inv_items["item_id"].dropna().unique().tolist())
+    st.session_state["runway_selected_products"] = [
+        pid for pid in st.session_state.get("runway_selected_products", default_runway_products)
+        if pid in chosen_product_options
+    ]
+    runway_reset_col, runway_clear_col, _ = st.columns([1, 1, 4])
+    if runway_reset_col.button("Reset all", key="runway_reset_all", help="Return to three suggested products"):
+        st.session_state["runway_selected_products"] = default_runway_products
+    if runway_clear_col.button("Clear all", key="runway_clear_all"):
+        st.session_state["runway_selected_products"] = []
+
     runway_controls = st.columns(2)
 
     runway_products = runway_controls[0].multiselect(
         "Products to compare",
-        options=sorted(inv_items["item_id"].unique().tolist()),
-        default=[item] if item in inv_items["item_id"].values else [],
+        options=chosen_product_options,
         key="runway_selected_products",
-        help="Choose the exact products you want on the runway; no automatic top-demand selection."
+        help="Start with suggested stock-gap products, or choose any products in this store."
     )
 
     runway_day = runway_controls[1].slider(
@@ -2012,7 +2086,7 @@ with planning:
     )
 
     if runway_totals.empty:
-        st.info("Select one or more products above to display their stock runway.")
+        st.info("Choose products above, or click Reset all to restore the suggested comparison.")
 
     else:
         # Demonstrate three different simulated stock situations.
