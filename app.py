@@ -183,6 +183,49 @@ def m5_price_value(units, prices):
                   pd.to_numeric(prices, errors="coerce")).sum(min_count=1))
 
 
+# Manager-facing inventory checks (pure helpers; no model or API access).
+def calculate_gap_values(demand, starting_stock, sell_price, lead_time_demand):
+    """Return seven-day gap and lead-time at-risk sales values in M5 retail prices.
+
+    The order-cover value rounds each item to a whole unit. The lead-time
+    shortfall value stays continuous to represent forecast expected sales.
+    Both exclude missing/non-positive prices, without substituting a cost.
+    """
+    import numpy as np
+    units = pd.to_numeric(demand, errors="coerce").fillna(0).clip(lower=0)
+    stock = pd.to_numeric(starting_stock, errors="coerce").fillna(0).clip(lower=0)
+    lead = pd.to_numeric(lead_time_demand, errors="coerce").fillna(0).clip(lower=0)
+    price = pd.to_numeric(sell_price, errors="coerce")
+    valid = price.gt(0) & price.notna()
+    gap = (units - stock).clip(lower=0)
+    cover_units = np.ceil(gap)
+    at_risk_units = (lead - stock).clip(lower=0)
+    gap_value = float((cover_units[valid] * price[valid]).sum()) if valid.any() else float("nan")
+    at_risk_value = float((at_risk_units[valid] * price[valid]).sum()) if valid.any() else float("nan")
+    return {"gap_units": float(cover_units.sum()), "gap_value": gap_value,
+            "at_risk_units": float(at_risk_units.sum()), "at_risk_value": at_risk_value,
+            "priced_items": int(valid.sum()), "total_items": int(len(valid))}
+
+
+def manager_review_steps(flags):
+    """Map v4 review codes to concrete store-manager checks."""
+    import re
+    names = set(re.findall(r"NEW_ITEM|POSSIBLE_STOCKOUT|POSSIBLY_DISCONTINUED|STALE_SEGMENT",
+                           str(flags).upper()))
+    steps = []
+    if "POSSIBLE_STOCKOUT" in names:
+        steps.append("Check the shelf and stockroom, confirm the inventory count, and make sure the product is still listed for sale.")
+    if "POSSIBLY_DISCONTINUED" in names:
+        steps.append("Confirm the store still carries this product before approving another order.")
+    if "NEW_ITEM" in names:
+        steps.append("Confirm the product is listed and stocked. Compare early sales with similar products before setting the first order.")
+    if "STALE_SEGMENT" in names:
+        steps.append("Review recent sales before relying on an older demand classification.")
+    if not steps and str(flags).strip().lower() not in ("", "nan", "none", "[]"):
+        steps.append("Review the reported flag and verify the current inventory before approving an order.")
+    return steps
+
+
 # 3. HEADER
 
 # DASHBOARD_STYLE_V1
@@ -248,7 +291,7 @@ with st.expander("About the Forecast & Data", expanded=False):
         "**Inventory:** Estimated starting stock uses predefined forecast-based "
         "assumptions; it is not observed Walmart inventory. Product-level manual "
         "stock overrides are available in Inventory Planning.\n\n"
-        "**Interpretation:** Stock gaps and ordering costs are illustrative; "
+        "**Interpretation:** Stock gaps and M5-price-based values are estimates; "
         "supplier lead times, actual on-hand inventories, and replenishment policies "
         "are not verified. This is a capstone decision-support application, "
         "not an official Walmart operational system."
@@ -529,9 +572,18 @@ with overview:
     ).clip(lower=0)
 
     inv_lead_demand = add_m5_prices(inv_lead_demand.assign(store_id=store))
-    inv_sales_at_risk = m5_price_value(
-        inv_lead_demand["simulated_lost_units"], inv_lead_demand["sell_price"]
+    # Calculate the two price-based indicators from a common item-level table.
+    # Gap value = rounded full-period units to cover × historical selling price.
+    # Sales at risk = lead-time shortfall × historical selling price (not a cost).
+    priced_comparison = inv_items[["item_id", "demand", "starting_stock", "sell_price"]].merge(
+        inv_lead_demand[["item_id", "forecast"]].rename(columns={"forecast": "lead_demand"}),
+        on="item_id", how="left", validate="one_to_one"
     )
+    seven_day_values = calculate_gap_values(
+        priced_comparison["demand"], priced_comparison["starting_stock"],
+        priced_comparison["sell_price"], priced_comparison["lead_demand"]
+    )
+    inv_sales_at_risk = seven_day_values["at_risk_value"]
 
     # Calculate inventory KPI values
 
@@ -573,8 +625,8 @@ with overview:
     inv_labels = [
         "Items with 7-day gap",
         "7-day gap units",
-        "7-day gap value (M5 prices)",
-        "Sales value at risk (M5 price)",
+        "7-day units-to-cover value (M5 price)",
+        "Sales at risk during lead time (M5 price)",
         "Items with enough stock",
         "Possible excess stock"
     ]
@@ -582,8 +634,8 @@ with overview:
     inv_values = [
         f"{inv_action:,} / {inv_total:,}",
         f"{inv_cover:,}",
-        (f"${m5_price_value(inv_items['units_to_cover'], inv_items['sell_price']):,.0f}"
-         if inv_items['sell_price'].notna().any() else "Price file needed"),
+        (f"${seven_day_values['gap_value']:,.0f}"
+         if pd.notna(seven_day_values["gap_value"]) else "Price file needed"),
         (f"${inv_sales_at_risk:,.0f}" if pd.notna(inv_sales_at_risk) else "Price file needed"),
         f"{inv_covered:.1f}%",
         f"{inv_excess_count:,}"
@@ -599,8 +651,9 @@ with overview:
                 "forecasting/m5_prices_asof_2015_12_31.csv.gz (generated from M5 sell_prices.csv).")
 
     st.caption(
-        "A stock gap occurs when expected demand exceeds starting inventory. "
-        "See Inventory Planning for suggested orders."
+        "The seven-day value covers whole units needed to close the forecast gap. "
+        "Sales at risk counts only expected shortages before a delivery could arrive. "
+        "Both use M5 selling prices, not supplier costs."
     )
     with st.expander("How we calculate these seven-day indicators", expanded=False):
         st.write(
@@ -608,6 +661,16 @@ with overview:
             "We round positive gaps up to whole units. We label stock as possible excess when it is "
             "at least twice the predicted demand. The upper forecast scenarios add daily P90 figures; "
             "they are not validated seven-day uncertainty limits."
+        )
+        st.write(
+            f"**Why the dollar totals differ:** The full seven-day gap value sums rounded-up "
+            f"shortage units at each product's M5 price. Sales at risk looks only at the "
+            f"first {inv_lead_days} day(s), using forecast shortage units before the assumed "
+            "delivery could arrive. Neither amount represents a purchase cost or realized lost sales."
+        )
+        st.caption(
+            f"Price coverage: {seven_day_values['priced_items']:,} of "
+            f"{seven_day_values['total_items']:,} item-store products have a usable M5 price."
         )
 
     # PHASE4: Separate the evaluated 14-day inventory policy from seven-day gaps.
@@ -841,8 +904,8 @@ with overview:
                         )
 
     st.caption(
-        "Inventory levels use estimated starting stock, "
-        "otherwise estimated values. Units to order cover "
+        "Inventory uses estimated starting stock unless manually changed. "
+        "Units to cover address "
         "point-forecast gaps, not validated purchase orders. "
         "Figures exclude products outside the forecasting "
         "sample. Dollar values use historical M5 selling prices, not supplier costs."
@@ -1504,6 +1567,24 @@ with planning:
         "Demand Gap": 2,
     })
     st.dataframe(inv_display, hide_index=True, use_container_width=True)
+    if not inv_list.empty:
+        st.markdown("**Inspect a product from this list**")
+        action_item_options = inv_list["item_id"].drop_duplicates().tolist()
+        action_item_selected = st.selectbox(
+            "Product to inspect", action_item_options, key="action_item_to_inspect",
+            help="Select a product from the filtered list to see its 14-day order, confidence and review checks below."
+        )
+        def open_action_product():
+            dept_match = store_df.loc[store_df["item_id"].eq(action_item_selected), "dept_id"]
+            if not dept_match.empty:
+                st.session_state["planning_dept"] = str(dept_match.iloc[0])
+                st.session_state["planning_item"] = str(action_item_selected)
+                st.session_state["action_product_notice"] = str(action_item_selected)
+        st.button("Open selected product's inventory details", on_click=open_action_product,
+                  key="action_open_details", type="primary")
+        if st.session_state.get("action_product_notice") == action_item_selected:
+            st.success(f"Selected {action_item_selected}. Its inventory and 14-day order are ready below.")
+            st.markdown("[Go to product details](#product-inventory-details)")
     st.download_button(
         f"Download {action_horizon}-Day Action List CSV",
         inv_display.to_csv(index=False),
@@ -1633,14 +1714,15 @@ with planning:
         "Days of cover counts complete forecast days before "
         "the first expected shortage. An order-by date before "
         "the forecast origin indicates an item requiring "
-        "earlier attention. Order quantities and costs are "
-        "illustrative, not validated replenishment decisions. "
+        "earlier attention. Order quantities and price-based values are "
+        "estimates, not validated replenishment decisions. "
         "Sales at risk is based on predicted lead-time shortfall "
         "valued at each product's M5 selling price. Dollar values do not represent supplier costs."
     )
 
     st.divider()
 
+    st.subheader("Product Inventory Details")
     planning_dept = st.selectbox("Department for inventory planning", dept_options, key="planning_dept")
     planning_items = sorted(store_df[store_df["dept_id"] == planning_dept]["item_id"].dropna().unique().tolist())
     planning_item = st.selectbox("Product for inventory KPIs", planning_items, key="planning_item")
@@ -1766,6 +1848,13 @@ with planning:
                     st.write("**Review flags:**", str(v4_selected['flags']))
                 if str(v4_selected.get('hold_reasons','')).strip() not in ('','nan'):
                     st.write("**Hold reasons:**", str(v4_selected['hold_reasons']))
+                review_steps = manager_review_steps(
+                    f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
+                )
+                if review_steps:
+                    st.markdown("**What the manager should check**")
+                    for step in review_steps:
+                        st.write("• " + step)
                 st.caption(
                     f"Inventory position: {v4_selected['inventory_position']:,.0f} units "
                     f"({on_hand:,} on hand + {int(policy_on_order):,} on order). "
