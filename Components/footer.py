@@ -83,7 +83,7 @@ def render_footer() -> None:
 <style>
 .smartstock-footer, .smartstock-footer * { box-sizing: border-box; }
 .smartstock-footer {
-    width:100%; margin-top:4rem; padding:34px 26px 22px;
+    width:100%;  margin-top: 100px; padding:34px 26px 22px;
     background:#0c245c; border-top:5px solid #c8102e;
     color:#f7f9ff; border-radius:16px 16px 6px 6px;
     font-family:system-ui,-apple-system,Segoe UI,sans-serif;
