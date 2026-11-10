@@ -1886,13 +1886,41 @@ with planning:
                     )
                 else:
                     st.success("No automatic hold flag for this historical decision.")
-                st.write(f"**How confident are we in the forecast?** {v4_selected['confidence']}")
-                if str(v4_selected.get('confidence_reasons','')).strip() not in ('','nan'):
-                    st.caption("Confidence basis: " + str(v4_selected['confidence_reasons']))
-                if str(v4_selected.get('flags','')).strip() not in ('','nan'):
-                    st.write("**Review flags:**", str(v4_selected['flags']))
-                if str(v4_selected.get('hold_reasons','')).strip() not in ('','nan'):
-                    st.write("**Hold reasons:**", str(v4_selected['hold_reasons']))
+                # Keep forecast confidence separate from the ordering hold decision.
+                # The hold warning above determines whether an order may proceed.
+                confidence_label = str(v4_selected.get("confidence", "Low")).strip().title()
+                if confidence_label not in ("High", "Medium", "Low"):
+                    confidence_label = "Low"
+                confidence_design = {
+                    "High": ("#237A47", "#E6F4EA", "#C5E5D0"),
+                    "Medium": ("#9B6500", "#FFF4D6", "#F0DBA5"),
+                    "Low": ("#B42332", "#FDEBEC", "#F3C4C9"),
+                }
+                confidence_fg, confidence_bg, confidence_border = confidence_design[confidence_label]
+                st.markdown(
+                    '<div style="display:flex;align-items:center;justify-content:space-between;'
+                    'gap:12px;max-width:500px;padding:11px 15px;margin-top:12px;'
+                    f'background:{confidence_bg};border:1px solid {confidence_border};border-radius:10px">'
+                    '<span style="font-weight:650;color:#041e42">Forecast confidence</span>'
+                    f'<span style="color:{confidence_fg};font-weight:750">'
+                    f'● &nbsp; {confidence_label}</span></div>',
+                    unsafe_allow_html=True,
+                )
+                st.caption("Confidence levels show how cautiously to use the forecast; they do not approve an order.")
+                legend_cols = st.columns(3)
+                for legend_col, (level, explanation) in zip(legend_cols, [
+                    ("High", "More reliable based on available evidence"),
+                    ("Medium", "Some uncertainty; review as needed"),
+                    ("Low", "Higher uncertainty; check before deciding"),
+                ]):
+                    fg, bg, border = confidence_design[level]
+                    legend_col.markdown(
+                        f'<div style="background:{bg};border:1px solid {border};'
+                        'border-radius:8px;padding:9px 11px;min-height:76px">'
+                        f'<div style="font-weight:700;color:{fg}">● {level}</div>'
+                        f'<div style="font-size:0.77rem;color:#364B63">{explanation}</div></div>',
+                        unsafe_allow_html=True,
+                    )
                 review_steps = manager_review_steps(
                     f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
                 )
@@ -1900,6 +1928,16 @@ with planning:
                     st.markdown("**What the manager should check**")
                     for step in review_steps:
                         st.write("• " + step)
+                with st.expander("Why this confidence level?", expanded=False):
+                    reasons = str(v4_selected.get("confidence_reasons", "")).strip()
+                    st.write(reasons if reasons and reasons.lower() != "nan" else
+                             "The confidence score comes from the historical forecast-error and uncertainty checks.")
+                    flags = str(v4_selected.get("flags", "")).strip()
+                    holds = str(v4_selected.get("hold_reasons", "")).strip()
+                    if flags and flags.lower() != "nan":
+                        st.caption("Review flags: " + flags.replace("_", " ").title())
+                    if holds and holds.lower() != "nan":
+                        st.caption("Hold reasons: " + holds.replace("_", " ").title())
                 st.caption(
                     f"Inventory position: {v4_selected['inventory_position']:,.0f} units "
                     f"({on_hand:,} on hand + {int(policy_on_order):,} on order). "
