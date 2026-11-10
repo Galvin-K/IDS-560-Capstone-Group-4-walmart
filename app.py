@@ -14,6 +14,7 @@ from v4_policy_bridge import (offline_policy_status, load_offline_policy,
                               offline_v4_recommendation)
 from analysis_scope import SCOPES, resolve_question, scope_summary
 from Components.overview_intro import render_overview_intro
+from Components.model_summary import render_model_summary
 from Components.footer import render_footer
 
 
@@ -1290,10 +1291,7 @@ with forecasting:
 
 with insights:
     st.header("Model Insights")
-    st.write(
-        "We tested several forecasting methods on sales the models hadn't seen before. "
-        "Here is how LightGBM performed over different forecast periods."
-    )
+    render_model_summary()
 
     # Poster-aligned summary: historical 2016 held-out, 50% item-store sample.
     st.subheader("LightGBM results")
