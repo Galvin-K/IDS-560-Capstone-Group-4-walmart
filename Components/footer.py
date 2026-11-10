@@ -102,6 +102,14 @@ def render_footer() -> None:
 .smartstock-footer { width:100%; margin-top:4rem; padding:34px 26px 22px; background:#0c245c; border-top:5px solid #c8102e; color:#f7f9ff; border-radius:16px 16px 6px 6px; font-family:system-ui,-apple-system,Segoe UI,sans-serif; }
 .smartstock-footer .ss-top { text-align:center; margin:0 auto 26px; max-width:850px; }
 .smartstock-footer .ss-eyebrow { text-transform:uppercase; letter-spacing:.14em; font-size:11px; color:#ffc2ca; font-weight:700; }
+.smartstock-footer .brand-title {
+    color: #ffffff;
+    font-size: clamp(22px, 2.5vw, 28px);
+    font-weight: 800;
+    margin: 6px 0;
+    line-height: 1.2;
+    text-align: center;
+}
 .smartstock-footer h2 { color:white; margin:6px 0; font-size:clamp(25px,3vw,34px); font-weight:800; }
 .smartstock-footer .ss-desc { color:#d6e1f6; margin:5px 0; font-size:14px; line-height:1.55; }
 .smartstock-footer .ss-divider { height:1px; background:rgba(255,255,255,.20); margin:25px 0; }
@@ -153,7 +161,7 @@ def render_footer() -> None:
         <div><strong>University of Illinois Chicago</strong> · IDS 560 Analytics Capstone · Fall 2026</div>
     </div>
     <div class="ss-divider"></div>
-    <div class="ss-bottom">© 2026 SmartStock AI Project Team · Academic Project · Built with Python, Streamlit, LightGBM &amp; RAG</div>
+    <div class="ss-bottom">© 2026 IDS 560 Group 4 · Academic Project · Built with Python, Streamlit, LightGBM &amp; RAG</div>
 </section>'''
     html = (html.replace("__CARDS__", cards)
                 .replace("__GITHUB__", github)
