@@ -209,8 +209,7 @@ st.markdown(
     "and review suggested orders for your store. You can change starting stock when you know the actual quantity."
 )
 st.caption(
-    "Historical M5 demonstration: forecasts start January 1, 2016. "
-    "This is a planning prototype, not a connection to Walmart's current inventory."
+    "Built from historical Walmart M5 sales data. Forecasts shown here begin on January 1, 2016."
 )
 
 with st.expander("Which planning period should I use?", expanded=False):
@@ -221,11 +220,7 @@ with st.expander("Which planning period should I use?", expanded=False):
     with col_order:
         st.markdown("**14 days — Plan replenishment**")
         st.write("Review how much to order, including extra safety stock and items needing a manager's check.")
-    st.caption(
-        "Model Insights also compares 28-day forecast accuracy. "
-        "A 28-day daily demand chart will appear when a verified 28-day forecast file is available. "
-        "The ordering policy stays fixed at 14 days."
-    )
+    st.caption("Model Insights includes historical 28-day evaluation results; replenishment recommendations remain based on 14 days.")
 
 with st.expander("What do these dashboard terms mean?", expanded=False):
     st.markdown(
@@ -1199,27 +1194,19 @@ with forecasting:
 with insights:
     st.header("Model Insights")
     st.write(
-        "We compared several methods against sales they had not seen during training. "
-        "Use these results to understand where forecasts work well, where they miss demand, "
-        "and why managers should review uncertain orders."
+        "We tested several forecasting methods on sales the models hadn't seen before. "
+        "Here is how LightGBM performed over different forecast periods."
     )
-    st.info(
-        "**What does held-out test mean?** We trained using historical sales through 2014, "
-        "used 2015 to tune and choose the models, then checked their frozen forecasts "
-        "against actual sales from January 1 to May 22, 2016. "
-        "This gives us a more realistic test than scoring the data used to train the models. "
-        "The results below cover a 50% sample of item-store combinations (15,245 series), "
-        "not every Walmart item or a live sales period."
-    )
-    st.caption(
-        "**Forecast error (WAPE):** Lower is better; it measures total absolute forecast error "
-        "relative to total actual sales. **Bias:** Negative means we predicted too little "
-        "overall, while positive means we predicted too much. **RMSE:** Measures forecast "
-        "error in units and places more weight on large misses. These metrics do not "
-        "measure real procurement costs or store-level profit."
-    )
-    # Poster-aligned summary from the team's 2016 held-out forecasting study.
-    st.subheader("LightGBM performance across 7, 14 and 28 days")
+
+    # Poster-aligned summary: historical 2016 held-out, 50% item-store sample.
+    st.subheader("LightGBM results")
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("7-day forecast error", "71.6%", help="WAPE: total absolute forecast error divided by total actual units sold. Lower is better.")
+    k2.metric("7-day forecast bias", "−0.7%", help="The negative sign means the model slightly underestimated total sales.")
+    k3.metric("7-day RMSE", "2.04 units", help="A forecasting error metric that gives more weight to larger misses.")
+    k4.metric("Actual demand captured by prediction range", "77.7%", help="77.7% of observed daily sales values fell between the lower and upper estimates, against an 80% target. This measures the share of observations within the range, not the share of total sales units.")
+
+    st.subheader("Forecast error across 7, 14 and 28 days")
     poster_horizons = pd.DataFrame({
         "Horizon": ["7 days", "14 days", "28 days"],
         "WAPE": [71.62, 72.55, 73.94],
@@ -1227,36 +1214,39 @@ with insights:
     })
     poster_fig = go.Figure(go.Bar(
         x=poster_horizons["Horizon"], y=poster_horizons["WAPE"],
-        marker_color=["#0071ce", "#3188c9", "#77a9ce"],
+        marker_color=["#184A8C", "#4F81BD", "#B8CCE4"],
         text=[f"{v:.1f}%" for v in poster_horizons["WAPE"]],
         textposition="outside",
     ))
     poster_fig.update_layout(
-        title="Forecast error by planning period — lower is better",
-        xaxis_title="Forecast horizon", yaxis_title="WAPE (%)",
+        title="Forecast error by period — lower is better",
+        xaxis_title="Forecast period", yaxis_title="WAPE (%)",
         yaxis=dict(range=[0, 90]), height=340, showlegend=False,
         margin=dict(t=55, b=50),
     )
     st.plotly_chart(poster_fig, use_container_width=True)
-    st.caption(
-        "The model performed best over 7 days. Error increased gradually for 14- and 28-day forecasts. "
-        "These are historical held-out results, not forecasts for the selected store."
-    )
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("7-day forecast error", "71.6%", help="WAPE: absolute forecast error divided by total actual units sold; lower is better.")
-    k2.metric("7-day forecast bias", "-0.7%", help="Negative bias means the model underestimated total sales slightly.")
-    k3.metric("7-day RMSE", "2.04 units", help="An error measure that gives extra weight to large mistakes.")
-    k4.metric("Prediction range coverage", "77.7%", help="Observed daily sales within P10-P90 bounds; target was 80%.")
-    st.caption(
-        "Poster source: `04_M5_LightGBM_Final_Forecasting.ipynb`, 2016 held-out test (50% item-store sample). "
-        "Bias across 7/14/28 days: -0.7%, -1.3%, and -1.7%. "
-        "The RMSE and coverage cards summarize the seven-day results."
-    )
     st.markdown(
-        "**What this means:** LightGBM forecasts support a quick weekly demand check, "
-        "while our replenishment policy uses a separate 14-day forecast plus safety stock. "
-        "The 28-day results show how the model performs farther ahead; they do not change the 14-day ordering rule."
+        "**Key takeaway:** Forecast error was lowest at 7 days and rose gradually at 14 and 28 days. "
+        "The dashboard uses 7-day forecasts for quick stock checks and a separate 14-day forecast "
+        "with safety stock for replenishment decisions."
     )
+    st.caption(
+        "2016 held-out test, 50% item-store sample. "
+        "Source: `04_M5_LightGBM_Final_Forecasting.ipynb`."
+    )
+
+    with st.expander("How we evaluated the models and what the metrics mean", expanded=False):
+        st.write(
+            "We trained on sales through 2014, used 2015 to choose the models, then tested them "
+            "against sales from January 1 to May 22, 2016. The test covers 15,245 item-store series."
+        )
+        st.markdown(
+            "**WAPE:** Overall forecasting error relative to actual sales; lower is better.\n\n"
+            "**Bias:** Negative values mean forecasts were too low overall; positive values mean they were too high.\n\n"
+            "**RMSE:** Forecast error measured in units, with extra weight on large misses.\n\n"
+            "**Prediction range coverage:** The percentage of observed daily sales values within our lower and higher estimates "
+            "(77.7% versus an 80% target)."
+        )
 
     with st.expander("Detailed model comparisons, demand patterns, and regional results", expanded=False):
         st.subheader("1. Which forecasting method performed best?")
@@ -1288,7 +1278,7 @@ with insights:
         st.dataframe(selected_historical.drop(columns="Days").round(2), hide_index=True, use_container_width=True)
         compare_fig = go.Figure(go.Bar(
             x=selected_historical["Model"], y=selected_historical["Forecast error (%)"],
-            marker_color=["#0071ce" if m == "LightGBM (selected)" else "#8497aa" for m in selected_historical["Model"]],
+            marker_color=["#184A8C" if m == "LightGBM (selected)" else "#B8CCE4" for m in selected_historical["Model"]],
             text=selected_historical["Forecast error (%)"].round(2), texttemplate="%{text:.2f}%", textposition="outside"))
         compare_fig.update_layout(title=f"{comparison_horizon}-day historical forecast error (lower is better)",
                                   yaxis_title="WAPE (%)", xaxis_title="", height=390,
@@ -1312,7 +1302,7 @@ with insights:
         bias_fig = go.Figure(go.Bar(
             x=selected_historical["Model"],
             y=selected_historical["Bias (%)"],
-            marker_color=["#0071ce" if m == "LightGBM (selected)" else "#8497aa"
+            marker_color=["#184A8C" if m == "LightGBM (selected)" else "#B8CCE4"
                           for m in selected_historical["Model"]],
             text=selected_historical["Bias (%)"].round(2),
             texttemplate="%{text:.2f}%", textposition="outside"
@@ -1336,7 +1326,7 @@ with insights:
             "LightGBM": [44.625, 55.447, 86.927, 80.331, 89.532],
         })
         pattern_fig = go.Figure()
-        for model_name, color in [("Recent 7-day average", "#8497aa"), ("LightGBM", "#0071ce")]:
+        for model_name, color in [("Recent 7-day average", "#B8CCE4"), ("LightGBM", "#184A8C")]:
             pattern_fig.add_trace(go.Bar(
                 x=by_pattern["Demand pattern"], y=by_pattern[model_name],
                 name=model_name, marker_color=color,
