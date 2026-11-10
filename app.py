@@ -391,7 +391,6 @@ overview, forecasting, planning, insights, assistant = st.tabs([
 # ============================================================
 
 with overview:
-
     st.header("Executive Overview")
       render_overview_intro(store)
     dept = dept_options[0]  # Legacy default; Executive Overview covers all departments.
