@@ -33,19 +33,6 @@ def render_model_summary() -> None:
                 "prices, calendar factors, holidays, and SNAP days."
             )
 
-    st.markdown("##### How to read the evaluation results")
-    st.markdown(
-        "**WAPE (Weighted Absolute Percentage Error):** Total absolute forecast error "
-        "divided by total actual sales. **Lower is better.** For example, 71.62% WAPE "
-        "does **not** mean 71.62% accuracy.\n\n"
-        "**Bias:** Whether the model tends to overpredict (+) or underpredict (−) "
-        "sales. Values closer to zero indicate less overall systematic error.\n\n"
-        "**RMSE (Root Mean Squared Error):** Forecast error measured in units, with "
-        "larger mistakes receiving more weight. **Lower is better.**\n\n"
-        "**P10–P90 coverage:** The percentage of observed daily sales inside the "
-        "model's lower and upper demand estimates; the project's target was 80%."
-    )
-
     st.divider()
     st.subheader("Why We Selected LightGBM")
     with st.container(border=True):
@@ -71,7 +58,18 @@ def render_model_summary() -> None:
             "Historical 2016 holdout · 50% item–store sample · Aggregate evaluation, "
             "not accuracy for the selected store or live forecasts."
         )
-
+    st.markdown("##### How to read the evaluation results")
+    st.markdown(
+        "**WAPE (Weighted Absolute Percentage Error):** Total absolute forecast error "
+        "divided by total actual sales. **Lower is better.** For example, 71.62% WAPE "
+        "does **not** mean 71.62% accuracy.\n\n"
+        "**Bias:** Whether the model tends to overpredict (+) or underpredict (−) "
+        "sales. Values closer to zero indicate less overall systematic error.\n\n"
+        "**RMSE (Root Mean Squared Error):** Forecast error measured in units, with "
+        "larger mistakes receiving more weight. **Lower is better.**\n\n"
+        "**P10–P90 coverage:** The percentage of observed daily sales inside the "
+        "model's lower and upper demand estimates; the project's target was 80%."
+    )
     with st.expander("How does this support inventory decisions?", expanded=False):
         st.write(
             "LightGBM estimates demand. The replenishment policy then combines "
