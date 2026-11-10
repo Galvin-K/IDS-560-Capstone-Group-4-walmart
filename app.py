@@ -13,6 +13,7 @@ from inventory_engine import protection_period_order, repeat_week_scenario, appl
 from v4_policy_bridge import (offline_policy_status, load_offline_policy,
                               offline_v4_recommendation)
 from analysis_scope import SCOPES, resolve_question, scope_summary
+from Components.overview_intro import render_overview_intro
 from Components.footer import render_footer
 
 
@@ -378,7 +379,7 @@ if st.session_state.get("runway_scaled_product") not in valid_all_items:
 
 # 5. NAVIGATION
 
-overview, forecasting, planning, insights, assistant = st.tabs([
+, forecasting, planning, insights, assistant = st.tabs([
     "Executive Overview",
     "Demand Forecasting",
     "Inventory Planning",
@@ -393,15 +394,11 @@ overview, forecasting, planning, insights, assistant = st.tabs([
 with overview:
 
     st.header("Executive Overview")
+      render_overview_intro(store)
     dept = dept_options[0]  # Legacy default; Executive Overview covers all departments.
     filtered = store_df.copy()
     item = sorted(filtered["item_id"].dropna().unique().tolist())[0]
     item_data = filtered[filtered["item_id"] == item].sort_values("date").copy()
-
-    st.write(
-        "Start with the seven-day demand check below. Then use the 14-day replenishment summary "
-        "to review suggested orders and items that need approval."
-    )
 
     total_demand = float(filtered["forecast"].sum())
     total_products = filtered["item_id"].nunique()
