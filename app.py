@@ -2602,40 +2602,42 @@ with assistant:
                     f"{type(error).__name__}: {error}"
                 )
 
-    with st.expander("RAG Performance & Research Findings", expanded=False):
-        st.caption("Research benchmarks below come from the five v4 development notebooks; they are not live dashboard performance measurements.")
-        current_retrieval_description = (
-            "Official v4 hybrid candidate search and cross-encoder reranking are active. "
-            "Evidence is filtered by decision date, location, category, and a provisional "
-            "relevance threshold. Retrieved passages provide context, not proof of causality. "
-            "The relevance threshold does not guarantee reliable no-answer detection."
-            if v4_retrieval_available else
-            "The dashboard is using the hybrid-v3 fallback. Official v4 reranking is not active. "
-            "Ranking scores are not validated relevance probabilities."
-        )
+    with st.expander("How the AI Assistant Works", expanded=False):
         st.markdown(
-            f"**Current retrieval:** {current_retrieval_description}\n\n"
-            "**Retrieval benchmark:** The v4 hybrid + reranker method reported "
-            "precision@5 of **0.376** and hit@5 of **0.848**; the v3-style dense baseline "
-            "reported **0.315** and **0.758**, respectively. "
-            "The offline benchmark does not establish that the production dashboard "
-            "has the same settings or performance.\n\n"
-            "**14-day ordering backtest:** The v4 notebook reported **97.3%** "
-            "14-day demand coverage for non-held orders at its 95% service target, "
-            "compared with **65.5%** using forecast-only quantities. "
-            "Higher coverage also comes with more leftover inventory in the benchmark. "
-            "This simulation is **not** a validated operational ordering policy.\n\n"
-            "**New products and confidence:** The precomputed v4 inventory table includes "
-            "the notebook’s historical confidence scores, review/hold flags, and "
-            "new-item conditional quantities. These are available in Inventory Planning "
-            "when its offline policy CSV is installed.\n\n"
-            "**Inventory integration status:** The existing seven-day dashboard remains "
-            "available. The separate 14-day inventory panel reads offline LightGBM "
-            "results and recomputes quantities from estimated or manually entered stock. "
-            "These are historical planning outputs, not live operational orders."
+            "**Where the answers come from**\n\n"
+            "The assistant combines the dashboard's demand forecasts and inventory estimates "
+            "with historical sources such as Walmart reports, economic updates, "
+            "weather records, and sales-pattern summaries. It shows the sources behind "
+            "its explanations so you can review them yourself."
         )
 
-    st.caption(
-        "Forecast and inventory numbers use the chosen analysis scope. "
-        "RAG provides historical context; Gemini does not modify stock."
-    )
+        if v4_retrieval_available:
+            st.caption(
+                "The assistant searches for relevant sources based on the question, "
+                "store, product category, and decision date."
+            )
+        else:
+            st.caption(
+                "The assistant is using a simpler source-search method in this session."
+            )
+
+        st.markdown(
+            "**How we tested it**\n\n"
+            "In our research tests, the source-search method found at least one "
+            "expected source for **84.8% of test questions**. In a separate inventory "
+            "simulation, suggested orders covered **97.3% of demand** for items not "
+            "on review hold, compared with **65.5%** when ordering only the forecast amount. "
+            "The additional stock also increased leftover inventory."
+        )
+        st.caption(
+            "These are results from our team's historical tests, not measurements "
+            "of current Walmart operations."
+        )
+
+        st.markdown(
+            "**What the assistant cannot do**\n\n"
+            "It cannot check live stock, place orders, or reliably calculate every "
+            "historical sales comparison from the documents it retrieves. "
+            "Managers should verify suggested orders and review flagged items before acting."
+        )
+
