@@ -1344,7 +1344,7 @@ with insights:
             "'How to Interpret the Results'."
         )
 
-    with st.expander("6. Explore detailed model comparisons and segment results", expanded=False):
+    with st.expander(" Explore detailed model comparisons and segment results", expanded=False):
         st.subheader("1. Which forecasting method performed best?")
         st.markdown("**Historical test: comparing five forecast methods**")
         st.caption("2016 held-out test, 50% item-store sample. These are aggregate results, not live product predictions. "
