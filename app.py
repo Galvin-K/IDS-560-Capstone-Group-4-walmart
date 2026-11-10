@@ -378,8 +378,7 @@ if st.session_state.get("runway_scaled_product") not in valid_all_items:
     st.session_state["runway_scaled_product"] = sorted(valid_all_items)[0]
 
 # 5. NAVIGATION
-
-, forecasting, planning, insights, assistant = st.tabs([
+overview, forecasting, planning, insights, assistant = st.tabs([
     "Executive Overview",
     "Demand Forecasting",
     "Inventory Planning",
