@@ -625,8 +625,8 @@ with overview:
     inv_labels = [
         "Items with 7-day gap",
         "7-day gap units",
-        "7-day units-to-cover value (M5 price)",
-        "Sales at risk during lead time (M5 price)",
+        "7-day units-to-cover value",
+        "Sales at risk during lead time",
         "Items with enough stock",
         "Possible excess stock"
     ]
@@ -969,13 +969,6 @@ with forecasting:
     forecast_28_store = (daily_28_data.loc[daily_28_data["store_id"].eq(store)].copy()
                          if daily_28_data is not None else None)
     available_horizons = [7, 14] + ([28] if forecast_28_store is not None else [])
-    if forecast_28_store is None:
-        st.caption(
-            "**28-day view:** Available in our historical model evaluation, but not yet as a daily chart. "
-            "The supplied LightGBM forecast cube contains only 14 days of daily predictions. "
-            "Once the forecasting team exports genuine 28-day daily predictions, "
-            "this tab will offer the 28-day option automatically."
-        )
 
     def demand_section_period(label, key):
         # Keep session-state stable if a previously available data file is removed.
