@@ -135,7 +135,6 @@ def render_footer() -> None:
 <section class="smartstock-footer" aria-label="SmartStock AI team and project information">
     <div class="ss-top">
       <div class="ss-eyebrow">University of Illinois Chicago · IDS 560</div>
-      <h2>SmartStock AI</h2>
       <p class="ss-desc">Retrieval-Augmented Decision Support for Retail Inventory Replenishment</p>
       <p class="ss-desc">Integrating demand forecasting with evidence-grounded explanations</p>
     </div>
