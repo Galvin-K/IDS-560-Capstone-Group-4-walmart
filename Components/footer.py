@@ -12,6 +12,14 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import streamlit as st
+from pathlib import Path
+
+uic_logo_path = Path(__file__).resolve().parents[1] / "Assets" / "UIC_logo.png"
+
+uic_logo = (
+    "data:image/png;base64,"
+    + base64.b64encode(uic_logo_path.read_bytes()).decode("ascii")
+)
 
 ASSET_DIR = Path(__file__).resolve().parents[1] / "Assets" / "Teams"
 GITHUB_URL = "https://github.com/Galvin-K/IDS-560-Capstone-Group-4-walmart/"
@@ -111,6 +119,31 @@ def render_footer() -> None:
     text-align: center;
 }
 .smartstock-footer h2 { color:white; margin:6px 0; font-size:clamp(25px,3vw,34px); font-weight:800; }
+.smartstock-footer .ss-top {
+    position: relative;
+}
+
+.smartstock-footer .ss-uic-logo {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 190px;
+    max-width: 25%;
+    height: auto;
+    background: white;
+    padding: 6px;
+    border-radius: 6px;
+}
+
+@media (max-width: 700px) {
+    .smartstock-footer .ss-uic-logo {
+        position: static;
+        display: block;
+        margin: 0 auto 16px;
+        max-width: 220px;
+        width: 100%;
+    }
+}
 .smartstock-footer .ss-desc { color:#d6e1f6; margin:5px 0; font-size:14px; line-height:1.55; }
 .smartstock-footer .ss-divider { height:1px; background:rgba(255,255,255,.20); margin:25px 0; }
 .smartstock-footer .ss-heading { text-align:center; font-size:21px; font-weight:750; margin:0 0 19px; color:white; }
@@ -142,6 +175,7 @@ def render_footer() -> None:
 </style>
 <section class="smartstock-footer" aria-label="SmartStock AI team and project information">
     <div class="ss-top">
+    <img src="__UIC_LOGO__" class="ss-uic-logo" alt="University of Illinois Chicago logo">
     <h2 class="brand-title">IDS 560 Analytics Strategy and Practice</h2>
       <div class="ss-eyebrow">University of Illinois Chicago</div>
       <p class="ss-desc">Retrieval-Augmented Decision Support for Retail Inventory Replenishment</p>
@@ -167,4 +201,5 @@ def render_footer() -> None:
                 .replace("__GITHUB__", github)
                 .replace("__ADVISOR__", escape(ADVISOR_NAME))
                 .replace("__ADVISOR_EMAIL__", advisor_email))
+    html = html.replace("__UIC_LOGO__", uic_logo)
     st.html(html)
