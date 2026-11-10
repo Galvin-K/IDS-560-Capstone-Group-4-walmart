@@ -1,8 +1,7 @@
-"""Compact, research-grounded model-selection explanation for IDS 560.
+"""Plain-language model and metric guide for IDS 560 Model Insights.
 
-Call render_model_summary() inside the existing Model Insights tab.
-All performance numbers are fixed historical 2016 holdout results; they are
-NOT live performance metrics or statistics for the selected store.
+Use render_model_summary() at the top of the existing Model Insights tab.
+Figures are from the historical 2016 holdout, not the selected store.
 """
 from __future__ import annotations
 
@@ -10,52 +9,78 @@ import streamlit as st
 
 
 def render_model_summary() -> None:
-    """Explain the model choice without replacing detailed validation charts."""
-    st.markdown(
-        "**Why LightGBM?** Our decision-support system needs a demand forecast "
-        "before calculating inventory replenishment. Demand is difficult to predict "
-        "because approximately **68% of item–store–days had zero sales** in the "
-        "M5 data used for this project."
+    """Introduce methods and evaluation terms BEFORE showing results."""
+    st.subheader("Understanding the Forecasting Models")
+    st.write(
+        "The goal is to predict demand for each product and store before calculating "
+        "replenishment needs. This is challenging because approximately **68% of "
+        "item–store–days had zero sales** in the M5 dataset."
     )
 
+    recent, lgbm = st.columns(2, gap="medium")
+    with recent:
+        with st.container(border=True):
+            st.markdown("**Recent Mean · Baseline**")
+            st.write(
+                "Uses average sales from a recent period to predict upcoming demand. "
+                "It's a simple reference point for judging whether more complex models help."
+            )
+    with lgbm:
+        with st.container(border=True):
+            st.markdown("**LightGBM · Selected model**")
+            st.write(
+                "A gradient-boosted tree model that learns patterns from recent sales, "
+                "prices, calendar factors, holidays, and SNAP days."
+            )
+
+    st.markdown("##### How to read the evaluation results")
+    st.markdown(
+        "**WAPE (Weighted Absolute Percentage Error):** Total absolute forecast error "
+        "divided by total actual sales. **Lower is better.** For example, 71.62% WAPE "
+        "does **not** mean 71.62% accuracy.\n\n"
+        "**Bias:** Whether the model tends to overpredict (+) or underpredict (−) "
+        "sales. Values closer to zero indicate less overall systematic error.\n\n"
+        "**RMSE (Root Mean Squared Error):** Forecast error measured in units, with "
+        "larger mistakes receiving more weight. **Lower is better.**\n\n"
+        "**P10–P90 coverage:** The percentage of observed daily sales inside the "
+        "model's lower and upper demand estimates; the project's target was 80%."
+    )
+
+    st.divider()
+    st.subheader("Why We Selected LightGBM")
     with st.container(border=True):
-        st.markdown("##### Model selection at a glance")
         a, b, c = st.columns(3, gap="small")
         a.metric(
             "LightGBM · 7-day WAPE", "71.62%",
-            help="Historical 2016 holdout; lower WAPE is better.",
+            help="2016 holdout; aggregate WAPE. Lower is better.",
         )
         b.metric(
-            "Recent 7-day mean · WAPE", "74.58%",
-            help="Historical 2016 holdout baseline on the same evaluation.",
+            "Recent 7-day Mean · WAPE", "74.58%",
+            help="Baseline on the same 2016 historical evaluation.",
         )
         c.metric(
-            "Error reduction", "2.96 pp",
-            help="74.58% − 71.62% = 2.96 percentage points; not a relative percentage reduction.",
+            "Lower WAPE", "2.96 pp",
+            help="74.58 − 71.62 = 2.96 percentage points; not percent relative improvement.",
         )
-        st.markdown(
-            "LightGBM achieved **2.96 percentage points lower WAPE** than the "
-            "seven-day Recent Mean baseline. Its signed forecast bias was also "
-            "closer to zero (**−0.70%** versus **−1.75%**)."
+        st.write(
+            "LightGBM had **2.96 percentage points lower WAPE** than the recent "
+            "7-day mean baseline. Its signed bias was also closer to zero "
+            "(**−0.70%** versus **−1.75%**)."
         )
         st.caption(
-            "2016 held-out evaluation · 50% item–store sample · Aggregate model results, "
+            "Historical 2016 holdout · 50% item–store sample · Aggregate evaluation, "
             "not accuracy for the selected store or live forecasts."
         )
 
-    with st.expander("How does this support the inventory decision?", expanded=False):
-        st.markdown(
-            "The model predicts expected demand; the replenishment policy then "
-            "combines demand with **assumed starting stock, safety stock, and review "
-            "flags**. The dashboard does not have actual Walmart on-hand inventory "
-            "and does not place purchase orders."
+    with st.expander("How does this support inventory decisions?", expanded=False):
+        st.write(
+            "LightGBM estimates demand. The replenishment policy then combines "
+            "the forecast with **assumed starting inventory, safety stock, and review "
+            "flags**. The app uses historical M5 data and simulated inventory; "
+            "it does not place actual orders."
         )
-        st.markdown(
-            "**Why not simply use the lowest error at all costs?** Forecast error "
-            "is only one consideration. Systematic bias, uncertainty, and managerial "
-            "review matter when a forecast informs an inventory decision."
+        st.write(
+            "Lower error alone does not guarantee a better order: systematic bias, "
+            "uncertainty and manager review are important when deciding what to replenish."
         )
-        st.caption(
-            "See the detailed comparisons and horizon results below. Sources: "
-            "project's final LightGBM forecasting notebook and research poster."
-        )
+        st.caption("Source: IDS 560 forecasting evaluation and research poster.")
