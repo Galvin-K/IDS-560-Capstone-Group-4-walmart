@@ -164,6 +164,43 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
   color:inherit!important;
   font-size:21px!important;
 }
+/* V7: give the five native sidebar icon buttons a fixed icon column.
+   These wrappers are identified by their stable Streamlit widget keys.
+   This overrides Streamlit's default "center the whole icon+label group" layout. */
+[data-testid="stSidebar"] [class*="st-key-page_"] button {
+  display: grid !important;
+  grid-template-columns: 26px minmax(0, 1fr) !important;
+  grid-auto-flow: row !important;
+  align-items: center !important;
+  justify-content: stretch !important;
+  justify-items: start !important;
+  column-gap: 11px !important;
+  width: 100% !important;
+  text-align: left !important;
+  padding: 9px 12px !important;
+}
+[data-testid="stSidebar"] [class*="st-key-page_"] button > span[data-testid="stIconMaterial"] {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  width: 26px !important;
+  justify-self: center !important;
+  text-align: center !important;
+  margin: 0 !important;
+}
+[data-testid="stSidebar"] [class*="st-key-page_"] button > [data-testid="stMarkdownContainer"] {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  min-width: 0 !important;
+  justify-self: start !important;
+  text-align: left !important;
+  margin: 0 !important;
+}
+[data-testid="stSidebar"] [class*="st-key-page_"] button p {
+  text-align: left !important;
+  margin: 0 !important;
+  white-space: nowrap;
+}
+
 /* V6: Explicit, consistent section separation independent of Streamlit heading internals. */
 .main .ds-section-band {
   display:block!important;
@@ -206,6 +243,22 @@ def render_dashboard_banner() -> None:
 
 
 def render_section_heading(title: str) -> None:
-    """A visible navy section separator, consistent across all pages."""
+    """Render a visible navy/yellow section bar, independent of heading CSS.
+
+    An ordinary h2 inherited the app's existing !important heading rules,
+    which is why the previous section headers remained plain. This uses
+    a semantic role=heading div with explicit styles instead.
+    """
     from html import escape
-    st.markdown(f'<h2 class="ds-section-band">{escape(title)}</h2>', unsafe_allow_html=True)
+
+    st.html(
+        '<div role="heading" aria-level="2" '
+        'style="display:block;width:100%;box-sizing:border-box;'
+        'background:linear-gradient(95deg,#18376b,#284a85);'
+        'color:#ffffff;border-left:5px solid #ffc220;'
+        'border-radius:9px;padding:12px 17px;margin:24px 0 10px;'
+        'font-family:Segoe UI,Arial,sans-serif;font-size:18px;'
+        'font-weight:600;line-height:1.4;letter-spacing:0;'
+        'box-shadow:0 3px 12px rgba(24,55,107,.09)">'
+        + escape(title) + '</div>'
+    )
