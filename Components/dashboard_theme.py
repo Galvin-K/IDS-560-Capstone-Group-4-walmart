@@ -101,6 +101,72 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
 .smartstock-footer {margin-top:6.5rem!important;}
 @media(max-width:780px){.ds-banner{padding:16px;margin-left:0;width:100%;}.ds-banner-main{gap:11px;flex-wrap:wrap}.ds-banner-rule,.ds-banner-badge{display:none}.ds-banner-title{font-size:19px}.ds-banner::after{right:7px;opacity:.5}}
 @media(prefers-reduced-motion:reduce){[data-testid="stSidebar"] [data-testid="stRadio"] label {transition:none!important;}}
+
+/* V5: left navigation uses meaningful icons rather than radio circles. */
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label {
+  display:flex !important;
+  align-items:center !important;
+  gap:9px !important;
+  padding:10px 12px !important;
+  min-height:45px !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label::before {
+  content:"";
+  display:inline-block;
+  flex:0 0 20px;
+  width:20px;
+  height:20px;
+  background-size:20px 20px;
+  background-repeat:no-repeat;
+  background-position:center;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label [data-baseweb="radio"],
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label [role="radio"],
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label > div:first-child:has(input) {
+  display:none !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label:nth-child(1)::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2318376b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m3%2010%209-7%209%207v10a1%201%200%200%201-1%201h-5v-7H9v7H4a1%201%200%200%201-1-1z%22%2F%3E%3C%2Fsvg%3E"); }
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label:nth-child(2)::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2318376b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2020V12h4v8M10%2020V7h4v13M16%2020V4h4v16M3%2020h18%22%2F%3E%3C%2Fsvg%3E"); }
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label:nth-child(3)::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2318376b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m12%202%209%205v10l-9%205-9-5V7zM3%207l9%205%209-5M12%2012v10%22%2F%3E%3C%2Fsvg%3E"); }
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label:nth-child(4)::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2318376b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m12%203%209%205-9%205-9-5zM3%2012l9%205%209-5M3%2016l9%205%209-5%22%2F%3E%3C%2Fsvg%3E"); }
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label:nth-child(5)::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2318376b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M21%2011.5a8.5%208.5%200%200%201-8.5%208.5%209%209%200%200%201-4-.9L3%2021l1.9-5.5a8.5%208.5%200%201%201%2016.1-4z%22%2F%3E%3Cpath%20d%3D%22M8%2011.5h.01M12%2011.5h.01M16%2011.5h.01%22%20stroke-width%3D%222.5%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+/* V5: denser dashboard-style table panels, without interfering with iframe internals. */
+[data-testid="stDataFrame"], [data-testid="stTable"] {
+  border:1px solid #d5e0ef !important;
+  border-radius:12px !important;
+  background:#fff !important;
+  box-shadow:0 5px 16px rgba(21,48,101,.07) !important;
+  overflow:hidden !important;
+}
+[data-testid="stDataFrame"]:focus-within {
+  outline:2px solid rgba(40,107,193,.25) !important;
+  outline-offset:1px !important;
+}
+/* Make table and chart sections easier to distinguish from the neutral canvas. */
+.main [data-testid="stHeadingWithActionElements"]:has(h2) {
+  background:#18376b !important;
+  border-left:4px solid #ffc220 !important;
+  border-radius:8px !important;
+  padding:10px 14px !important;
+  margin-top:1.9rem !important;
+  margin-bottom:1.0rem !important;
+}
+.main [data-testid="stHeadingWithActionElements"]:has(h2) h2,
+.main [data-testid="stHeadingWithActionElements"]:has(h2) a {
+  color:#fff !important;
+}
+/* Keep top-level page headings clean rather than forcing every title into a panel. */
+.main [data-testid="stHeadingWithActionElements"]:has(h1) {
+  margin-bottom:.7rem !important;
+}
+/* Move the banner up without modifying any of its internal elements. */
+.ds-banner {
+  margin-top:-18px !important;
+}
+@media(max-width:780px) {
+ .ds-banner {margin-top:-8px !important;}
+}
+
 </style>
 """, unsafe_allow_html=True)
 
