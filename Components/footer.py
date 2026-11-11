@@ -52,148 +52,89 @@ def _member_card(member: dict) -> str:
     qr = _data_uri(ASSET_DIR / member["qr"])
     linkedin = _safe_link(member.get("linkedin", ""))
 
-    if linkedin:
-        linked_qr = (
-            f'<a href="{linkedin}" target="_blank" rel="noopener noreferrer" '
-            f'aria-label="Open {name} LinkedIn profile">'
-            f'<img class="ss-qr" src="{qr}" alt="LinkedIn QR code for {name}" loading="lazy"></a>'
-        )
-        direct = f'<a class="ss-linkedin" href="{linkedin}" target="_blank" rel="noopener noreferrer">LinkedIn profile ↗</a>'
-    else:
-        linked_qr = f'<img class="ss-qr" src="{qr}" alt="LinkedIn QR code supplied for {name}" loading="lazy">'
-        direct = '<span class="ss-linkedin ss-muted">Scan LinkedIn QR</span>'
-
+    linkedin_link = (
+        f'<a href="{linkedin}" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>'
+        if linkedin else '<span class="ss-muted">LinkedIn via QR</span>'
+    )
     return f'''<article class="ss-member">
-        <img class="ss-photo" src="{photo}" alt="Headshot of {name}" loading="lazy">
-        <h3>{name}</h3>
-        <a class="ss-email" href="mailto:{email}">{email}</a>
-        <div class="ss-qr-frame">{linked_qr}</div>
-        {direct}
+       <img class="ss-photo" src="{photo}" alt="Headshot of {name}" loading="lazy">
+       <div class="ss-member-meta">
+         <div class="ss-name">{name}</div>
+         <a class="ss-email" href="mailto:{email}">{email}</a>
+         <div class="ss-links">{linkedin_link}
+           <details class="ss-qr-toggle"><summary>QR code</summary>
+             <div class="ss-qr-box"><img src="{qr}" alt="LinkedIn QR code for {name}" loading="lazy"></div>
+           </details>
+         </div>
+       </div>
     </article>'''
 
 
 def render_footer() -> None:
-    """Render a regular, non-sticky footer at the bottom of the Streamlit page."""
+    """Compact footer, with all original contacts and QR codes preserved."""
     cards = "\n".join(_member_card(member) for member in TEAM)
     uic_logo = _data_uri(UIC_LOGO_PATH)
     github = _safe_link(GITHUB_URL)
     advisor_email = escape(ADVISOR_EMAIL, quote=True)
-
-    html = '''
-<style>
-.smartstock-footer, .smartstock-footer * { box-sizing: border-box; }
-.smartstock-footer {
-    width:100%; margin-top:7rem; padding:30px 26px 22px;
-    background:#172e64; border-top:5px solid #ffc220;
-    color:#f7f9ff; border-radius:16px 16px 6px 6px;
-    font-family:"Segoe UI",Inter,Arial,sans-serif;
+    html = '''<style>
+.smartstock-footer,.smartstock-footer *{box-sizing:border-box}
+.smartstock-footer{
+ width:100%;margin-top:6.5rem;padding:19px 22px 16px;background:#172e64;
+ border-top:4px solid #ffc220;color:#f7f9ff;border-radius:12px;
+ font-family:"Aptos","Segoe UI Variable","Segoe UI",system-ui,sans-serif;
 }
-/* Balanced columns keep the course title centered across the entire footer. */
-.smartstock-footer .ss-header-grid {
-    display:grid; grid-template-columns:190px minmax(0,1fr) 190px;
-    gap:16px; align-items:start; margin:0 auto 26px;
+.smartstock-footer a{color:#e7efff;text-decoration:none}
+.smartstock-footer a:hover{text-decoration:underline}
+.smartstock-footer .ss-topline{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.smartstock-footer .ss-uic-logo{width:165px;max-width:100%;display:block;background:#fff;border-radius:5px;padding:4px}
+.smartstock-footer .ss-project{flex:1;min-width:230px}
+.smartstock-footer .ss-project strong{font-size:17px;font-weight:600;letter-spacing:-.01em;color:#fff}
+.smartstock-footer .ss-project p{font-size:12px;line-height:1.45;margin:3px 0;color:#d5e2f9}
+.smartstock-footer .ss-github-link{background:#ffc220;color:#142a55!important;border-radius:7px;font-size:12px;font-weight:600;padding:9px 13px;white-space:nowrap}
+.smartstock-footer .ss-section-title{font-size:15px;font-weight:600;margin:14px 0 11px;color:#fff}
+.smartstock-footer .ss-team{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}
+.smartstock-footer .ss-member{
+ min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;
+ border:1px solid rgba(230,240,255,.16);border-radius:10px;padding:11px 7px;
+ background:rgba(255,255,255,.05);
 }
-.smartstock-footer .ss-logo-area { display:flex; justify-content:flex-start; padding-top:4px; }
-.smartstock-footer .ss-uic-logo {
-    display:block; width:190px; max-width:100%; height:auto;
-    background:#fff; padding:6px; border-radius:6px;
+.smartstock-footer .ss-photo{width:64px;height:64px;border:2px solid #d8e5fa;border-radius:50%;object-fit:cover;object-position:center 33%}
+.smartstock-footer .ss-member-meta{min-width:0}
+.smartstock-footer .ss-name{font-weight:600;font-size:12px;color:#fff}
+.smartstock-footer .ss-email{font-size:10px;overflow-wrap:anywhere;display:block;line-height:1.4;margin:3px 0}
+.smartstock-footer .ss-links{display:flex;align-items:center;justify-content:center;gap:9px;flex-wrap:wrap;font-size:10px;margin-top:5px}
+.smartstock-footer .ss-qr-toggle{position:relative}
+.smartstock-footer .ss-qr-toggle summary{cursor:pointer;color:#e9f0ff;list-style:none;text-decoration:underline;text-underline-offset:2px}
+.smartstock-footer .ss-qr-toggle summary::-webkit-details-marker{display:none}
+.smartstock-footer .ss-qr-box{margin-top:8px;background:#fff;padding:6px;border-radius:7px;line-height:0}
+.smartstock-footer .ss-qr-box img{width:96px;height:96px;object-fit:contain}
+.smartstock-footer .ss-muted{color:#cfddf4}
+.smartstock-footer .ss-bottom{
+ border-top:1px solid rgba(245,250,255,.17);margin-top:15px;padding-top:12px;
+ display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;
+ color:#cbd9ef;font-size:11px;line-height:1.45;
 }
-.smartstock-footer .ss-header-text { min-width:0; text-align:center; }
-.smartstock-footer .brand-title {
-    color:#fff; font-size:clamp(20px,2.15vw,25px);
-    font-weight:650; margin:6px 0 8px; line-height:1.2;
-    text-align:center; overflow-wrap:normal;
-}
-.smartstock-footer .ss-eyebrow {
-    text-transform:uppercase; letter-spacing:.14em;
-    font-size:11px; color:#ffdf80; font-weight:600;
-}
-.smartstock-footer .ss-desc { color:#d6e1f6; margin:5px 0; font-size:14px; line-height:1.55; }
-.smartstock-footer .ss-divider { height:1px; background:rgba(255,255,255,.20); margin:25px 0; }
-.smartstock-footer .ss-heading { text-align:center; font-size:20px; font-weight:650; margin:0 0 19px; color:white; }
-.smartstock-footer .ss-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; }
-.smartstock-footer .ss-member {
-    display:flex; flex-direction:column; align-items:center; text-align:center;
-    padding:20px 9px 17px; min-width:0;
-    background:#203f7a; border:1px solid #47669c; border-radius:14px;
-    transition:transform .18s,border-color .18s;
-}
-.smartstock-footer .ss-member:hover { transform:translateY(-3px); border-color:#ffc220; }
-.smartstock-footer .ss-photo {
-    width:110px; height:110px; aspect-ratio:1; border-radius:50%;
-    border:3px solid #fff; object-fit:cover; object-position:center 34%;
-    margin:0 0 12px; background:#dce7f7;
-}
-.smartstock-footer .ss-member h3 { color:#fff; font-size:14px; font-weight:600; line-height:1.3; margin:0 0 6px; }
-.smartstock-footer a { text-decoration:none; }
-.smartstock-footer a:hover { text-decoration:underline; }
-.smartstock-footer .ss-email { color:#d7e6ff; font-size:12px; overflow-wrap:anywhere; line-height:1.5; min-height:35px; }
-.smartstock-footer .ss-qr-frame { background:#fff; padding:8px; border-radius:8px; margin:10px 0 7px; line-height:0; }
-.smartstock-footer .ss-qr { width:90px; height:90px; object-fit:contain; image-rendering:auto; }
-.smartstock-footer .ss-linkedin { color:#fff; font-size:12px; font-weight:600; }
-.smartstock-footer .ss-muted { color:#c4d2ec; font-weight:400; }
-.smartstock-footer .ss-github {
-    text-align:center; margin:22px auto 14px; max-width:750px;
-    padding:21px 16px; border-radius:14px;
-    background:#203f7a; border:1px solid #47669c;
-}
-.smartstock-footer .ss-github h3 { color:white; font-size:18px; margin:0 0 7px; }
-.smartstock-footer .ss-github p { color:#d6e1f6; font-size:13px; line-height:1.5; margin:0 0 15px; }
-.smartstock-footer .ss-button { display:inline-block; color:#102451; background:#ffc220; padding:11px 21px; border-radius:8px; font-size:13px; font-weight:650; }
-.smartstock-footer .ss-button:hover { background:#ffe18a; text-decoration:none; }
-.smartstock-footer .ss-advisor { text-align:center; font-size:13px; line-height:1.8; color:#d6e1f6; }
-.smartstock-footer .ss-advisor strong { color:white; }
-.smartstock-footer .ss-advisor a { color:#fff; }
-.smartstock-footer .ss-bottom { text-align:center; font-size:11px; line-height:1.7; color:#c4d2ec; }
-@media(max-width:1100px) {
-    .smartstock-footer .ss-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
-}
-@media(max-width:850px) {
-    .smartstock-footer .ss-header-grid { grid-template-columns:minmax(0,1fr); gap:12px; }
-    .smartstock-footer .ss-logo-area { justify-content:center; padding-top:0; }
-    .smartstock-footer .ss-uic-logo { width:190px; }
-    .smartstock-footer .ss-header-spacer { display:none; }
-}
-@media(max-width:650px) {
-    .smartstock-footer { padding:24px 14px 18px; }
-    .smartstock-footer .ss-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
-    .smartstock-footer .ss-photo { width:92px; height:92px; }
-    .smartstock-footer .ss-member { padding:15px 6px; }
-    .smartstock-footer .ss-qr { width:82px; height:82px; }
-}
-@media(max-width:380px) { .smartstock-footer .ss-grid { grid-template-columns:1fr; } }
-@media(prefers-reduced-motion:reduce) { .smartstock-footer .ss-member { transition:none; } }
+.smartstock-footer .ss-bottom a{color:#e3eeff}
+@media(max-width:1020px){.smartstock-footer .ss-team{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.smartstock-footer{padding:16px 12px}.smartstock-footer .ss-team{grid-template-columns:repeat(2,minmax(0,1fr))}.smartstock-footer .ss-uic-logo{width:145px}}
+@media(max-width:360px){.smartstock-footer .ss-team{grid-template-columns:1fr}}
 </style>
-<section class="smartstock-footer" aria-label="IDS 560 team and project information">
-    <div class="ss-header-grid">
-        <div class="ss-logo-area">
-            <img src="__UIC_LOGO__" class="ss-uic-logo" alt="University of Illinois Chicago logo">
-        </div>
-        <div class="ss-header-text">
-            <h2 class="brand-title">IDS 560 Analytics Strategy and Practice</h2>
-            <div class="ss-eyebrow">University of Illinois Chicago</div>
-            <p class="ss-desc">Demand Forecasting &amp; Inventory Decision Support</p>
-            <p class="ss-desc">Historical M5 data · Simulated replenishment · Evidence-grounded insights</p>
-        </div>
-        <div class="ss-header-spacer" aria-hidden="true"></div>
-    </div>
-    <div class="ss-divider"></div>
-    <h2 class="ss-heading">Meet Our Team</h2>
-    <div class="ss-grid">__CARDS__</div>
-    <div class="ss-github">
-        <h3>Explore the Project on GitHub</h3>
-        <p>Source code, demand forecasting, retrieval-augmented explanations, and the Streamlit dashboard</p>
-        <a class="ss-button" href="__GITHUB__" target="_blank" rel="noopener noreferrer">View GitHub Repository ↗</a>
-    </div>
-    <div class="ss-divider"></div>
-    <div class="ss-advisor">
-        <div><strong>Faculty Advisor:</strong> __ADVISOR__ · <a href="mailto:__ADVISOR_EMAIL__">__ADVISOR_EMAIL__</a></div>
-        <div><strong>University of Illinois Chicago</strong> · IDS 560 Analytics Capstone · Fall 2026</div>
-    </div>
-    <div class="ss-divider"></div>
-    <div class="ss-bottom">© 2026 IDS 560 Group 4 · Academic Project · Built with Python, Streamlit, LightGBM &amp; RAG</div>
+<section class="smartstock-footer" aria-label="Project team and resources">
+ <div class="ss-topline">
+   <img class="ss-uic-logo" src="__UIC_LOGO__" alt="University of Illinois Chicago logo">
+   <div class="ss-project">
+     <strong>IDS 560 · Retail Inventory Decision Support</strong>
+     <p>Historical Walmart M5 forecasting · Simulated replenishment · Evidence-grounded explanations</p>
+   </div>
+   <a class="ss-github-link" href="__GITHUB__" target="_blank" rel="noopener noreferrer">GitHub Repository ↗</a>
+ </div>
+ <div class="ss-section-title">Meet Our Team</div>
+ <div class="ss-team">__CARDS__</div>
+ <div class="ss-bottom">
+   <span><strong>Faculty Advisor:</strong> __ADVISOR__ · <a href="mailto:__ADVISOR_EMAIL__">__ADVISOR_EMAIL__</a></span>
+   <span>University of Illinois Chicago · IDS 560 · Fall 2026</span>
+ </div>
 </section>'''
-
     html = (html.replace("__UIC_LOGO__", uic_logo)
                 .replace("__CARDS__", cards)
                 .replace("__GITHUB__", github)
