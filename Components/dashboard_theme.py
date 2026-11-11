@@ -1,166 +1,141 @@
-"""Walmart-inspired white/blue/yellow visual theme for the IDS 560 Streamlit dashboard.
+"""Option C — navy-accented Walmart M5 dashboard theme.
 
-Call render_dashboard_theme() after the existing DASHBOARD_STYLE_V1 CSS block
-(and before the dashboard header) so these visual overrides take precedence.
-No forecasting, inventory, RAG, or app state is modified.
+UI-only: no changes to model outputs, inventory logic, data or RAG.
+Call render_dashboard_theme() AFTER legacy CSS and BEFORE the page header.
+Optional: replace the existing Walmart title block with render_dashboard_banner().
 """
 
 import streamlit as st
 
 
 def render_dashboard_theme() -> None:
-    """Apply a white-and-blue dashboard theme with Walmart-yellow accents."""
-    st.markdown(
-        """
+    """Apply a restrained neutral, navy, blue and amber theme."""
+    st.html("""
 <style>
-/* IDS560_LIGHT_THEME_V1: white canvas / Walmart-inspired blue and yellow accents */
+/* OPTION_C_NAUTICAL: single source for app-wide visual overrides */
 :root {
-  --ids-navy: #142759;
-  --ids-blue: #0071CE;
-  --ids-yellow: #FFC220;
-  --ids-orange: #FF9F1C;
-  --ids-text: #122446;
-  --ids-muted: #566782;
-  --ids-border: #DFE7F1;
-  --ids-sidebar: #F7FAFD;
+  --c-navy: #132c60;
+  --c-navy-deep: #102451;
+  --c-blue: #1767b8;
+  --c-yellow: #ffc220;
+  --c-canvas: #f7f9fc;
+  --c-surface: #ffffff;
+  --c-sidebar: #f1f5fb;
+  --c-border: #dce5f1;
+  --c-muted: #61738e;
+  --c-shadow: 0 4px 15px rgba(18,42,86,.065);
 }
-
-/* Main page: remove the old gray-blue wash */
+/* Overall canvas: deliberately off-white, never flat gray */
 [data-testid="stAppViewContainer"],
 [data-testid="stAppViewContainer"] > .main {
-  background: #FFFFFF !important;
-  color: var(--ids-text);
+    background: var(--c-canvas) !important;
+    color: var(--c-navy-deep);
 }
-[data-testid="stHeader"] {
-  background: #FFFFFF !important;
+[data-testid="stHeader"] { background: rgba(247,249,252,.97) !important; }
+.main .block-container { max-width: 1300px !important; padding-top: 2.2rem; padding-bottom: 3rem; }
+/* Sidebar */
+[data-testid="stSidebar"], [data-testid="stSidebarContent"] {
+  background: var(--c-sidebar) !important;
 }
-.main .block-container {
-  max-width: 1280px;
-}
-
-/* Sidebar and text hierarchy */
-[data-testid="stSidebar"],
-[data-testid="stSidebarContent"] {
-  background: var(--ids-sidebar) !important;
-}
-[data-testid="stSidebar"] {
-  border-right: 1px solid var(--ids-border) !important;
-}
-[data-testid="stSidebar"] h1,
-[data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3,
-.main h1, .main h2, .main h3 {
-  color: var(--ids-navy);
-}
-.main [data-testid="stCaptionContainer"],
-.main small {
-  color: var(--ids-muted);
-}
-
-/* Tabs: clear active state; yellow accent for active tab */
-button[data-baseweb="tab"] {
-  color: var(--ids-muted) !important;
-  font-weight: 550;
-}
-button[data-baseweb="tab"][aria-selected="true"] {
-  color: var(--ids-navy) !important;
-  border-bottom-color: var(--ids-yellow) !important;
-  font-weight: 700;
-}
-[data-baseweb="tab-highlight"] {
-  background-color: var(--ids-yellow) !important;
-}
-
-/* Metrics: white cards with fine borders and legible numbers */
+[data-testid="stSidebar"] { border-right: 1px solid var(--c-border) !important; }
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 { color: var(--c-navy-deep) !important; }
+/* Type */
+.main h1, .main h2, .main h3 { color: var(--c-navy-deep); letter-spacing:-.018em; }
+.main [data-testid="stCaptionContainer"], .main small { color:var(--c-muted); }
+/* Active tab: yellow indicator, blue/navy text */
+button[data-baseweb="tab"] { color:#3f5170 !important; font-weight:600; padding-bottom:11px; }
+button[data-baseweb="tab"][aria-selected="true"] { color:var(--c-blue) !important; font-weight:760; }
+[data-baseweb="tab-highlight"] { background-color:var(--c-yellow) !important; height:4px !important; border-radius:3px !important; }
+/* Native metrics: light lift and clear border */
 [data-testid="stMetric"] {
-  background: #FFFFFF !important;
-  border: 1px solid var(--ids-border) !important;
-  border-radius: 12px !important;
-  padding: 16px !important;
-  box-shadow: 0 2px 7px rgba(20,39,89,.035);
+  background:var(--c-surface) !important;
+  border:1px solid var(--c-border) !important;
+  box-shadow:var(--c-shadow);
+  border-radius:13px !important;
+  padding:19px 17px !important;
 }
-[data-testid="stMetricValue"] {
-  color: var(--ids-navy) !important;
-}
-
-/* Expanders and native bordered containers */
+[data-testid="stMetricValue"] { color:var(--c-navy-deep) !important; font-weight:740 !important; }
+[data-testid="stMetricLabel"] { color:#344867 !important; }
+/* Panels / cards / expanders */
 [data-testid="stExpander"] {
-  background: #FFFFFF !important;
-  border: 1px solid var(--ids-border) !important;
-  border-radius: 10px !important;
-  overflow: hidden;
+  border:1px solid var(--c-border) !important; border-radius:11px !important;
+  background:#fff !important; overflow:hidden;
 }
-[data-testid="stExpander"] summary {
-  background: #FAFCFF !important;
-  color: var(--ids-navy) !important;
-}
+[data-testid="stExpander"] summary { background:#f9fbff !important; color:var(--c-navy-deep) !important; }
 [data-testid="stVerticalBlockBorderWrapper"] > div {
-  border-color: var(--ids-border);
+  border-color:var(--c-border) !important;
+  border-radius:13px !important;
 }
-
-/* Tables, select boxes, inputs */
-[data-testid="stDataFrame"],
-[data-testid="stTable"] {
-  border-radius: 10px;
-  overflow: hidden;
+/* Native selection / input */
+[data-baseweb="select"] > div, [data-baseweb="input"] > div,
+[data-testid="stNumberInput"] input {
+  border-color:#cdd9e8 !important;
+  border-radius:9px !important;
+  background:var(--c-surface) !important;
 }
-[data-baseweb="select"] > div,
-[data-baseweb="input"] > div {
-  background: #FFFFFF !important;
-  border-color: var(--ids-border) !important;
+/* Dark navy selected store and primary action; soft gold highlight on hover */
+div.stButton > button, [data-testid="stDownloadButton"] button { border-radius:9px !important; }
+div.stButton > button[kind="primary"], button[data-testid="stFormSubmitButton"] {
+  background:var(--c-navy) !important; border-color:var(--c-navy) !important;
+  color:#fff !important; font-weight:650 !important;
 }
-
-/* Charts should look like part of the same white canvas */
+div.stButton > button[kind="primary"]:hover, button[data-testid="stFormSubmitButton"]:hover {
+  background:#1d4385 !important; border-color:var(--c-yellow) !important;
+}
+/* Chart backgrounds and tables */
 [data-testid="stPlotlyChart"] {
-  background: #FFFFFF !important;
-  border: 1px solid #E9EEF5;
-  border-radius: 12px !important;
-  padding: 8px !important;
+  background:var(--c-surface) !important; border:1px solid var(--c-border) !important;
+  border-radius:13px !important; padding:9px 8px !important;
+  box-shadow:var(--c-shadow);
 }
-
-/* Native buttons: restrained, consistent styling */
-div.stButton > button,
-[data-testid="stDownloadButton"] button {
-  border-radius: 9px !important;
+[data-testid="stDataFrame"], [data-testid="stTable"] { border-radius:11px !important; overflow:hidden; }
+/* Header for optional navy brand banner */
+.ids-c-hero {
+  display:flex; justify-content:space-between; align-items:center; gap:22px;
+  width:100%; padding:22px 28px; margin:0 0 22px;
+  background:linear-gradient(115deg,#102452 0%,#1a3977 80%,#284c92 100%);
+  border-radius:13px; color:#fff; position:relative; overflow:hidden;
+  box-shadow:0 8px 22px rgba(16,36,82,.12);
 }
-div.stButton > button[kind="primary"],
-button[data-testid="stFormSubmitButton"] {
-  background: var(--ids-navy) !important;
-  border-color: var(--ids-navy) !important;
-  color: white !important;
+.ids-c-hero::after {
+  content:""; position:absolute; width:22px; height:155%; top:-25%; right:38px;
+  background:var(--c-yellow); transform:skew(-28deg);
 }
-div.stButton > button[kind="primary"]:hover,
-button[data-testid="stFormSubmitButton"]:hover {
-  background: var(--ids-blue) !important;
-  border-color: var(--ids-blue) !important;
+.ids-c-hero h1 { color:#fff !important; font-size:clamp(22px,2.6vw,33px); line-height:1.2; margin:0 0 5px !important; }
+.ids-c-hero p { color:#e7efff !important; font-size:13px; margin:0; }
+.ids-c-mark { width:148px; max-width:100%; height:auto; object-fit:contain; }
+.ids-c-hero-content { z-index:1; flex:1; }
+.ids-c-chip { position:relative; z-index:1; background:rgba(255,255,255,.10);
+  border:1px solid rgba(255,255,255,.23); color:#fff; font-size:12px; padding:7px 10px;
+  border-radius:30px; margin-right:40px; white-space:nowrap; }
+/* Optional section banners: apply only where explicitly requested */
+.ids-c-section {
+  background:var(--c-navy); color:#fff; border-radius:9px 9px 0 0;
+  padding:11px 15px; font-size:17px; font-weight:750; letter-spacing:.01em;
 }
-
-/* Preserve the footer's navy surface, but replace its red accents with yellow. */
-.smartstock-footer {
-  border-top-color: var(--ids-yellow) !important;
+/* Responsive behavior */
+@media(max-width: 720px) {
+ .main .block-container { padding-left:1rem; padding-right:1rem; }
+ .ids-c-hero { flex-wrap:wrap; padding:20px; }
+ .ids-c-chip { display:none; }
+ .ids-c-hero::after { right:14px; }
 }
-.smartstock-footer .ss-button {
-  background: var(--ids-yellow) !important;
-  color: #142759 !important;
-}
-.smartstock-footer .ss-button:hover {
-  background: var(--ids-orange) !important;
-  color: #142759 !important;
-}
-.smartstock-footer .ss-member:hover {
-  border-color: var(--ids-yellow) !important;
-}
-/* High contrast for the primary CTA without yellow-on-white text */
-div.stButton > button[kind="primary"]:focus-visible,
-button[data-testid="stFormSubmitButton"]:focus-visible {
-  outline: 3px solid var(--ids-yellow);
-  outline-offset: 2px;
-}
-@media (max-width: 650px) {
-  [data-testid="stMetric"] { padding: 12px !important; }
-  [data-testid="stPlotlyChart"] { padding: 4px !important; }
+@media(prefers-reduced-motion:reduce) {
+  * { scroll-behavior:auto !important; }
 }
 </style>
-""",
-        unsafe_allow_html=True,
-    )
+""")
+
+
+def render_dashboard_banner() -> None:
+    """Optional replacement for existing app's inline Walmart header (not an extra heading)."""
+    st.html('''
+<div class="ids-c-hero" aria-label="Demand and Inventory Planner">
+  <div class="ids-c-hero-content">
+    <h1>Demand &amp; Inventory Planner</h1>
+    <p>Walmart M5 historical data · Forecasting &amp; replenishment decision support</p>
+  </div>
+  <span class="ids-c-chip">IDS 560 · Academic prototype</span>
+</div>
+''')
