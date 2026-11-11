@@ -348,6 +348,36 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
 /* Store comparison explanation labels. */
 .ds-store-count small,
 .ds-store-value { color: #586781 !important; }
+
+/* V12: Store selection contrast and typographic emphasis.
+   These selectors are scoped to the Compare Stores buttons only. */
+[class*="st-key-compact_store_"] button,
+[data-testid="stVerticalBlockBorderWrapper"]:has(.ds-store-stats) .stButton button {
+  font-weight: 700 !important;
+  letter-spacing: 0.005em !important;
+}
+[class*="st-key-compact_store_"] button p,
+[class*="st-key-compact_store_"] button span,
+[data-testid="stVerticalBlockBorderWrapper"]:has(.ds-store-stats) .stButton button p {
+  font-weight: 700 !important;
+}
+/* Active store uses a navy fill with genuinely white lettering. */
+[class*="st-key-compact_store_"] button[kind="primary"],
+[data-testid="stVerticalBlockBorderWrapper"]:has(.ds-store-stats) .stButton button[kind="primary"] {
+  background: #213c71 !important;
+  border-color: #213c71 !important;
+  color: #ffffff !important;
+}
+[class*="st-key-compact_store_"] button[kind="primary"] *,
+[data-testid="stVerticalBlockBorderWrapper"]:has(.ds-store-stats) .stButton button[kind="primary"] * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+/* Inactive stores stay dark navy on white. */
+[class*="st-key-compact_store_"] button[kind="secondary"] *,
+[data-testid="stVerticalBlockBorderWrapper"]:has(.ds-store-stats) .stButton button[kind="secondary"] * {
+  color: #18376b !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
