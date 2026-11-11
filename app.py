@@ -16,7 +16,7 @@ from analysis_scope import SCOPES, resolve_question, scope_summary
 from Components.overview_intro import render_overview_intro
 from Components.model_summary import render_model_summary
 from Components.footer import render_footer
-from Components.dashboard_theme import render_dashboard_theme, render_dashboard_banner
+from Components.dashboard_theme import render_dashboard_theme, render_dashboard_banner, render_section_heading
 
 
 # RAG retrieval interface. The production backend remains the source of truth.
@@ -288,20 +288,40 @@ with st.expander("About the Forecast & Data", expanded=False):
 # 4. SIDEBAR NAVIGATION & FILTERS
 
 st.sidebar.markdown("### Navigation")
-active_section = st.sidebar.radio(
-    "Go to section",
-    [
-        "Executive Overview",
-        "Demand Forecasting",
-        "Inventory Planning",
-        "Model Insights",
-        "AI Assistant",
-    ],
-    key="main_section_nav",
-    label_visibility="collapsed",
-)
 
-st.sidebar.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+# Use native Streamlit buttons with Material icons, not CSS-generated icons.
+# This avoids the old radio circles and remains keyboard-accessible.
+SECTION_NAVIGATION = [
+    ("Executive Overview", ":material/home:"),
+    ("Demand Forecasting", ":material/bar_chart:"),
+    ("Inventory Planning", ":material/inventory_2:"),
+    ("Model Insights", ":material/layers:"),
+    ("AI Assistant", ":material/chat_bubble_outline:"),
+]
+
+if st.session_state.get("main_section_nav") not in [name for name, _ in SECTION_NAVIGATION]:
+    st.session_state["main_section_nav"] = "Executive Overview"
+
+
+def _open_dashboard_section(section_name):
+    st.session_state["main_section_nav"] = section_name
+
+
+with st.sidebar:
+    for section_name, section_icon in SECTION_NAVIGATION:
+        st.button(
+            section_name,
+            icon=section_icon,
+            key="page_" + section_name.lower().replace(" ", "_"),
+            type=("primary" if st.session_state["main_section_nav"] == section_name else "secondary"),
+            use_container_width=True,
+            on_click=_open_dashboard_section,
+            args=(section_name,),
+        )
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+active_section = st.session_state["main_section_nav"]
+
 st.sidebar.header("Filters")
 
 # Keep the sidebar store selection synchronized with store cards
@@ -556,7 +576,7 @@ if active_section == "Executive Overview":
     # Seven-day forecast-based inventory simulation
     import math
 
-    st.subheader("7-Day Demand & Stock Gap Overview")
+    render_section_heading("7-Day Demand & Stock Gap Overview")
     st.caption(
         "Identify products that may run short based on expected demand and estimated inventory."
     )
@@ -711,7 +731,7 @@ if active_section == "Executive Overview":
     # PHASE4: Separate the evaluated 14-day inventory policy from seven-day gaps.
     # This panel only reads a compact precomputed table: it never starts M5
     # loading, a model or the RAG reranker. Incoming orders assumed zero.
-    st.subheader("14-Day Replenishment Summary")
+    render_section_heading("14-Day Replenishment Summary")
     st.caption(
         "Review suggested order quantities, including safety stock and items that need manager approval."
     )
@@ -755,7 +775,7 @@ if active_section == "Executive Overview":
 
     # STORE_COMPARISON_V1
 
-    st.subheader("Compare Stores")
+    render_section_heading("Compare Stores")
 
     st.caption(
         "Compare potential stock shortages across stores. Select a store to explore its results."
@@ -948,7 +968,7 @@ if active_section == "Executive Overview":
 
     st.divider()
 
-    st.subheader("7-Day Demand-Gap Priorities")
+    render_section_heading("7-Day Demand-Gap Priorities")
 
     priority_count = st.selectbox(
         "Number of priorities to display",
@@ -1043,7 +1063,7 @@ if active_section == "Demand Forecasting":
             return forecast_14_store
         return forecast_28_store
 
-    st.subheader("Demand by department")
+    render_section_heading("Demand by department")
     dept_horizon = demand_section_period("Department comparison period", "dept_comparison_horizon")
     forecast_view_df = demand_section_data(dept_horizon)
     dept_summary = (forecast_view_df.groupby("dept_id", as_index=False)
@@ -1054,7 +1074,7 @@ if active_section == "Demand Forecasting":
     fig_depts = go.Figure(go.Bar(x=dept_summary["dept_id"], y=dept_summary["predicted_demand"], marker_color="#0071ce"))
     fig_depts.update_layout(title="Demand by department", xaxis_title="Department", yaxis_title=f"{dept_horizon}-day predicted units", height=360)
     st.plotly_chart(fig_depts, use_container_width=True)
-    st.subheader("Product-level demand forecast")
+    render_section_heading("Product-level demand forecast")
     product_horizon = demand_section_period("Product forecast period", "product_forecast_horizon")
     product_view_df = demand_section_data(product_horizon)
     forecast_dept = st.selectbox("Department", dept_options, key="forecast_dept")
@@ -1101,7 +1121,7 @@ if active_section == "Demand Forecasting":
 
     st.divider()
 
-    st.subheader("Daily product forecast table")
+    render_section_heading("Daily product forecast table")
 
     detail_table = item_data[
         ["date", "lead", "forecast", "p10", "p90"]
@@ -1132,7 +1152,7 @@ if active_section == "Demand Forecasting":
 
     st.divider()
 
-    st.subheader("Daily product forecast chart")
+    render_section_heading("Daily product forecast chart")
 
     st.write(
         "The blue line shows our expected daily sales. The shaded area shows a range of "
@@ -1225,7 +1245,7 @@ if active_section == "Demand Forecasting":
 
     # Daily aggregated demand forecast
 
-    st.subheader("Department daily demand chart")
+    render_section_heading("Department daily demand chart")
 
     st.write(
         "Total predicted units sold each day across "
@@ -1524,7 +1544,7 @@ if active_section == "Inventory Planning":
         "We start with estimates and let you enter a different stock level for any product."
     )
 
-    st.subheader("Prioritized Inventory Action List")
+    render_section_heading("Prioritized Inventory Action List")
     action_horizon = st.radio(
         "Action list forecast period", [7, 14], horizontal=True,
         format_func=lambda days: f"{days} days", key="action_list_horizon",
@@ -1655,7 +1675,7 @@ if active_section == "Inventory Planning":
 
     # ORDER_LIST_V2
 
-    st.subheader("Estimated Order List")
+    render_section_heading("Estimated Order List")
 
     st.caption(
         "Historical planning example as of December 31, 2015. "
@@ -1779,7 +1799,7 @@ if active_section == "Inventory Planning":
 
     st.divider()
 
-    st.subheader("Product Inventory Details")
+    render_section_heading("Product Inventory Details")
     planning_dept = st.selectbox("Department for inventory planning", dept_options, key="planning_dept")
     planning_items = sorted(store_df[store_df["dept_id"] == planning_dept]["item_id"].dropna().unique().tolist())
     planning_item = st.selectbox("Product for inventory KPIs", planning_items, key="planning_item")
@@ -1811,7 +1831,7 @@ if active_section == "Inventory Planning":
             if selected_key in st.session_state["inventory_overrides"]:
                 st.session_state["inventory_overrides"].pop(selected_key, None)
                 st.caption("Removed the manual override. Other dashboard sections refresh on the next rerun.")
-    st.subheader("Inventory Assumptions")
+    render_section_heading("Inventory Assumptions")
 
     col1, col2 = st.columns(2)
 
@@ -1850,7 +1870,7 @@ if active_section == "Inventory Planning":
     # M5 history, safety stock, confidence and hold/review rules. The only
     # live arithmetic is stock-dependent ordering; do NOT initialize M5 here.
     st.divider()
-    st.subheader("14-Day Replenishment | Suggested Orders")
+    render_section_heading("14-Day Replenishment | Suggested Orders")
     st.write(
         "**January 1–14, 2016.** This is the ordering view. We combine expected demand "
         "with a safety buffer, subtract stock already available or on order, and flag items "
@@ -1993,7 +2013,7 @@ if active_section == "Inventory Planning":
     # A separate 7/14-day stock check for the main selected item.
     # This control does not affect the later comparison map or the 14-day order.
     st.divider()
-    st.subheader("Stock Check | No New Deliveries")
+    render_section_heading("Stock Check | No New Deliveries")
     stock_check_horizon = st.radio(
         "Stock check period", [7, 14],
         format_func=lambda days: f"{days} days", horizontal=True,
@@ -2033,7 +2053,7 @@ if active_section == "Inventory Planning":
 
     # MULTI_ITEM_RUNWAY_V3
 
-    st.subheader("When Could Each Product Run Out?")
+    render_section_heading("When Could Each Product Run Out?")
     runway_horizon = st.radio(
         "Choose the stock projection period",
         [7, 14],
@@ -2309,7 +2329,7 @@ if active_section == "Inventory Planning":
         with product_inspection_slot:
             # Product-level inspection
 
-            st.subheader("Selected Product Inventory")
+            render_section_heading("Selected Product Inventory")
 
             selected_product = st.selectbox(
                 "Inspect a product (independent of the runway display)",
@@ -2412,7 +2432,7 @@ if active_section == "Inventory Planning":
 
             # INVENTORY_EXPLANATION_V1
 
-            st.subheader("Potential Shortage (Units)")
+            render_section_heading("Potential Shortage (Units)")
 
             point_unmet = max(
                 0.0,
