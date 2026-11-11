@@ -405,6 +405,46 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
   opacity: .55 !important;
   cursor: not-allowed !important;
 }
+
+/* V14: left-align all five sidebar navigation options consistently. */
+[data-testid="stSidebar"] [class*="st-key-page_"] button {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+  padding: 10px 12px 10px 42px !important;
+  gap: 0 !important;
+  min-height: 46px !important;
+  width: 100% !important;
+  position: relative !important;
+}
+[data-testid="stSidebar"] [class*="st-key-page_"] button [data-testid="stIconMaterial"] {
+  position: absolute !important;
+  left: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 22px !important;
+  height: 22px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  flex: none !important;
+}
+[data-testid="stSidebar"] [class*="st-key-page_"] button [data-testid="stMarkdownContainer"] {
+  display: block !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  text-align: left !important;
+  margin: 0 !important;
+}
+[data-testid="stSidebar"] [class*="st-key-page_"] button [data-testid="stMarkdownContainer"] p {
+  text-align: left !important;
+  margin: 0 !important;
+  white-space: normal !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
