@@ -1931,14 +1931,21 @@ if active_section == "Inventory Planning":
                                       help="Expected 14-day demand plus safety stock.")
                 metric_cols[3].metric("Suggested units to order", f"{v4_selected['order_qty']:,}",
                                       help="Target minus stock on hand and stock already on order; zero for held items.")
+                # Order approval status is separate from forecast reliability.
+                # This label is based on the precomputed hold decision, not confidence.
+                st.markdown("**Order status**")
                 if v4_selected['hold']:
                     st.warning(
-                        "Hold for manager review: do not place an order until the item is checked. "
-                        f"If confirmed, conditional order quantity is "
+                        "**Manager review required** — Do not place an order until this item "
+                        "has been checked. "
+                        f"Conditional order quantity after approval: "
                         f"{v4_selected['if_confirmed_order_qty']:,} units."
                     )
                 else:
-                    st.success("No automatic hold flag for this historical decision.")
+                    st.success(
+                        "**No hold** — No automatic manager-approval hold was triggered "
+                        "for this historical recommendation."
+                    )
                 # Keep forecast confidence separate from the ordering hold decision.
                 # The hold warning above determines whether an order may proceed.
                 confidence_label = str(v4_selected.get("confidence", "Low")).strip().title()
