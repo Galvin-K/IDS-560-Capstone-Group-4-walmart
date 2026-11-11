@@ -1978,13 +1978,21 @@ if active_section == "Inventory Planning":
                     f'{confidence_description}</div></div>',
                     unsafe_allow_html=True,
                 )
-                review_steps = manager_review_steps(
-                    f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
-                )
-                if review_steps:
-                    st.markdown("**What the manager should check**")
-                    for step in review_steps:
-                        st.write("• " + step)
+                st.markdown("**What the manager should check**")
+                if v4_selected["hold"]:
+                    review_steps = manager_review_steps(
+                        f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
+                    )
+                    if review_steps:
+                        for step in review_steps:
+                            st.write("• " + step)
+                    else:
+                        st.write("• Review the reason for the hold and verify current inventory before approving an order.")
+                else:
+                    st.write(
+                        "• Verify current inventory and review forecast uncertainty "
+                        "before approving the suggested order."
+                    )
                 with st.expander("Why this confidence level?", expanded=False):
                     reasons = str(v4_selected.get("confidence_reasons", "")).strip()
                     st.write(reasons if reasons and reasons.lower() != "nan" else
