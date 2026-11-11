@@ -298,13 +298,6 @@ active_section = st.sidebar.radio(
         "AI Assistant",
     ],
     key="main_section_nav",
-    format_func=lambda s: {
-        "Executive Overview": "▦  Executive Overview",
-        "Demand Forecasting": "▥  Demand Forecasting",
-        "Inventory Planning": "▣  Inventory Planning",
-        "Model Insights": "◫  Model Insights",
-        "AI Assistant": "◇  AI Assistant",
-    }[s],
     label_visibility="collapsed",
 )
 
