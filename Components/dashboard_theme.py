@@ -221,6 +221,67 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
  .main .ds-section-band {font-size:1.02rem!important; padding:10px 12px!important;}
 }
 
+
+/* V8 sidebar — align labels in a fixed column (including Model Insights and AI Assistant). */
+[data-testid="stSidebar"] [class*="st-key-page_"] button {
+  display:flex !important;
+  position:relative !important;
+  justify-content:flex-start !important;
+  align-items:center !important;
+  text-align:left !important;
+  width:100% !important;
+  gap:0 !important;
+  padding:10px 12px 10px 49px !important;
+  min-height:45px !important;
+}
+[data-testid="stSidebar"] [class*="st-key-page_"] button [data-testid="stIconMaterial"] {
+  position:absolute !important;
+  left:16px !important;
+  top:50% !important;
+  transform:translateY(-50%) !important;
+  width:22px !important;
+  height:22px !important;
+  margin:0 !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  font-size:21px !important;
+}
+[data-testid="stSidebar"] [class*="st-key-page_"] button [data-testid="stMarkdownContainer"] {
+  flex:1 1 auto !important;
+  display:block !important;
+  margin:0 !important;
+  min-width:0 !important;
+  text-align:left !important;
+}
+[data-testid="stSidebar"] [class*="st-key-page_"] button p {
+  text-align:left !important;
+  margin:0 !important;
+  white-space:normal !important;
+  font-weight:550 !important;
+}
+/* Dashboard KPI hierarchy: supporting labels remain readable; numbers are restrained. */
+[data-testid="stMetric"] {
+  border-top:3px solid #dce8f7 !important;
+  box-shadow:0 4px 14px rgba(23,46,100,.045) !important;
+}
+[data-testid="stMetricValue"] {
+  font-size:clamp(1.1rem,1.4vw,1.38rem) !important;
+  font-weight:540 !important;
+}
+/* Store comparison: tidy figures and distinct information tiers. */
+.ds-store-stats {display:grid;gap:8px;padding-top:5px;font-family:"Aptos","Segoe UI",system-ui,sans-serif;}
+.ds-store-count {font-size:16px;font-weight:600;color:#203b69;letter-spacing:-.012em;}
+.ds-store-count small {display:block;margin-top:2px;font-size:11px;font-weight:400;color:#667893;}
+.ds-store-gap {font-size:14px;color:#263e60;}
+.ds-store-gap strong {font-weight:600;}
+.ds-store-value {font-size:12px;color:#64748b;padding-top:8px;border-top:1px solid #e3eaf3;}
+/* More intentional separation around cards and tables. */
+[data-testid="stDataFrame"], [data-testid="stPlotlyChart"] {box-shadow:0 6px 18px rgba(23,46,100,.055)!important;}
+@media (max-width:700px) {
+ [data-testid="stSidebar"] [class*="st-key-page_"] button {padding-left:45px !important;}
+}
+
 </style>
 """, unsafe_allow_html=True)
 
