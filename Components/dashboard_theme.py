@@ -102,34 +102,6 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
 @media(max-width:780px){.ds-banner{padding:16px;margin-left:0;width:100%;}.ds-banner-main{gap:11px;flex-wrap:wrap}.ds-banner-rule,.ds-banner-badge{display:none}.ds-banner-title{font-size:19px}.ds-banner::after{right:7px;opacity:.5}}
 @media(prefers-reduced-motion:reduce){[data-testid="stSidebar"] [data-testid="stRadio"] label {transition:none!important;}}
 
-/* V5: left navigation uses meaningful icons rather than radio circles. */
-[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label {
-  display:flex !important;
-  align-items:center !important;
-  gap:9px !important;
-  padding:10px 12px !important;
-  min-height:45px !important;
-}
-[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label::before {
-  content:"";
-  display:inline-block;
-  flex:0 0 20px;
-  width:20px;
-  height:20px;
-  background-size:20px 20px;
-  background-repeat:no-repeat;
-  background-position:center;
-}
-[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label [data-baseweb="radio"],
-[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label [role="radio"],
-[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label > div:first-child:has(input) {
-  display:none !important;
-}
-[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label:nth-child(1)::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2318376b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m3%2010%209-7%209%207v10a1%201%200%200%201-1%201h-5v-7H9v7H4a1%201%200%200%201-1-1z%22%2F%3E%3C%2Fsvg%3E"); }
-[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label:nth-child(2)::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2318376b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2020V12h4v8M10%2020V7h4v13M16%2020V4h4v16M3%2020h18%22%2F%3E%3C%2Fsvg%3E"); }
-[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label:nth-child(3)::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2318376b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m12%202%209%205v10l-9%205-9-5V7zM3%207l9%205%209-5M12%2012v10%22%2F%3E%3C%2Fsvg%3E"); }
-[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label:nth-child(4)::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2318376b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m12%203%209%205-9%205-9-5zM3%2012l9%205%209-5M3%2016l9%205%209-5%22%2F%3E%3C%2Fsvg%3E"); }
-[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > label:nth-child(5)::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2318376b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M21%2011.5a8.5%208.5%200%200%201-8.5%208.5%209%209%200%200%201-4-.9L3%2021l1.9-5.5a8.5%208.5%200%201%201%2016.1-4z%22%2F%3E%3Cpath%20d%3D%22M8%2011.5h.01M12%2011.5h.01M16%2011.5h.01%22%20stroke-width%3D%222.5%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
 /* V5: denser dashboard-style table panels, without interfering with iframe internals. */
 [data-testid="stDataFrame"], [data-testid="stTable"] {
   border:1px solid #d5e0ef !important;
@@ -142,19 +114,6 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
   outline:2px solid rgba(40,107,193,.25) !important;
   outline-offset:1px !important;
 }
-/* Make table and chart sections easier to distinguish from the neutral canvas. */
-.main [data-testid="stHeadingWithActionElements"]:has(h2) {
-  background:#18376b !important;
-  border-left:4px solid #ffc220 !important;
-  border-radius:8px !important;
-  padding:10px 14px !important;
-  margin-top:1.9rem !important;
-  margin-bottom:1.0rem !important;
-}
-.main [data-testid="stHeadingWithActionElements"]:has(h2) h2,
-.main [data-testid="stHeadingWithActionElements"]:has(h2) a {
-  color:#fff !important;
-}
 /* Keep top-level page headings clean rather than forcing every title into a panel. */
 .main [data-testid="stHeadingWithActionElements"]:has(h1) {
   margin-bottom:.7rem !important;
@@ -165,6 +124,64 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
 }
 @media(max-width:780px) {
  .ds-banner {margin-top:-8px !important;}
+}
+
+
+/* V6: Real native navigation buttons with Streamlit's Material icons. */
+[data-testid="stSidebar"] div.stButton > button {
+  display:flex!important;
+  justify-content:flex-start!important;
+  align-items:center!important;
+  gap:13px!important;
+  padding:10px 13px!important;
+  min-height:44px!important;
+  width:100%!important;
+  background:transparent!important;
+  color:#18376b!important;
+  border:1px solid transparent!important;
+  border-radius:10px!important;
+  box-shadow:none!important;
+  font-family:"Aptos","Segoe UI Variable","Segoe UI",sans-serif!important;
+  font-weight:560!important;
+  font-size:.94rem!important;
+}
+[data-testid="stSidebar"] div.stButton > button:hover {
+  background:#fff!important;
+  border-color:#dce5f1!important;
+}
+[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
+  background:#ffec9c!important;
+  color:#152d61!important;
+  border:1px solid #f0d05a!important;
+  box-shadow:inset 3px 0 #ffc220!important;
+  font-weight:650!important;
+}
+[data-testid="stSidebar"] div.stButton > button[kind="primary"]:hover {
+  background:#ffe67e!important;
+  color:#152d61!important;
+}
+[data-testid="stSidebar"] div.stButton > button span[data-testid="stIconMaterial"] {
+  color:inherit!important;
+  font-size:21px!important;
+}
+/* V6: Explicit, consistent section separation independent of Streamlit heading internals. */
+.main .ds-section-band {
+  display:block!important;
+  width:100%!important;
+  background:linear-gradient(95deg,#18376b,#284a85)!important;
+  color:#fff!important;
+  border-left:5px solid #ffc220!important;
+  border-radius:9px!important;
+  padding:12px 16px!important;
+  margin:28px 0 16px!important;
+  font-size:1.12rem!important;
+  font-weight:620!important;
+  line-height:1.45!important;
+  letter-spacing:0!important;
+  box-shadow:0 3px 12px rgba(24,55,107,.09);
+}
+@media(max-width:780px) {
+ .main .ds-section-band {font-size:1.02rem!important; padding:10px 12px!important;}
 }
 
 </style>
@@ -185,3 +202,10 @@ def render_dashboard_banner() -> None:
   <div class="ds-banner-badge">IDS 560 · Academic project</div>
 </div>
 """, unsafe_allow_html=True)
+
+
+
+def render_section_heading(title: str) -> None:
+    """A visible navy section separator, consistent across all pages."""
+    from html import escape
+    st.markdown(f'<h2 class="ds-section-band">{escape(title)}</h2>', unsafe_allow_html=True)
