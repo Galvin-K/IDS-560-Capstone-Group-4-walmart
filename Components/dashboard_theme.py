@@ -322,6 +322,32 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
   padding-top: 10px !important;
   color: #566a86 !important;
 }
+
+/* V10: increase muted-text contrast, preserving custom navy/white components. */
+:root {
+  --ds-muted: #586781;
+}
+/* Explanatory text beneath major section headings and ordinary markdown. */
+[data-testid="stMain"] [data-testid="stMarkdownContainer"] > p,
+[data-testid="stMain"] [data-testid="stMarkdownContainer"] > div > p {
+  color: #344563;
+}
+/* Captions and methodological notes should be secondary, not washed out. */
+[data-testid="stMain"] [data-testid="stCaptionContainer"],
+[data-testid="stMain"] [data-testid="stCaptionContainer"] p,
+[data-testid="stMain"] [data-testid="stCaptionContainer"] span,
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
+  color: #586781 !important;
+}
+/* Labels above numbers should remain legible without enlarging the KPI values. */
+[data-testid="stMetricLabel"],
+[data-testid="stMetricLabel"] p {
+  color: #465a78 !important;
+}
+/* Store comparison explanation labels. */
+.ds-store-count small,
+.ds-store-value { color: #586781 !important; }
 </style>
 """, unsafe_allow_html=True)
 
