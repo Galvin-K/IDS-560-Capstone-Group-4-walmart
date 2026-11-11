@@ -248,7 +248,7 @@ def manager_review_steps(flags):
     if "STALE_SEGMENT" in names:
         steps.append("Review recent sales before relying on an older demand classification.")
     if not steps and str(flags).strip().lower() not in ("", "nan", "none", "[]"):
-        steps.append("Review the reported flag and verify the current inventory before approving an order.")
+        steps.append("Identify the hold reason, verify available and incoming stock, and release the order only after the issue is resolved.")
     return steps
 
 
@@ -1940,13 +1940,13 @@ if active_section == "Inventory Planning":
                     )
                     if not review_steps:
                         review_steps = [
-                            "Review the reason for the hold and verify current inventory before approving an order."
+                            "Confirm the hold reason, verify available and incoming stock, and approve the order only after the issue is resolved."
                         ]
                     review_text = "\n".join(f"- {step}" for step in review_steps)
                     st.warning(
-                        "**Manager review required** — Review this item before approving any order.\n\n"
+                        "**Manager review required** — Complete these checks before releasing the order:\n\n"
                         f"{review_text}\n\n"
-                        "**Conditional quantity after approval:** "
+                        "**Suggested quantity if the hold is cleared:** "
                         f"{v4_selected['if_confirmed_order_qty']:,} units."
                     )
                 else:
@@ -1968,14 +1968,10 @@ if active_section == "Inventory Planning":
                 # Show only the current confidence level and one plain-language
                 # explanation; retain details under the existing expander.
                 confidence_description = {
-                    "High": "More reliable based on historical forecast performance.",
-                    "Medium": "Some uncertainty; review the forecast before ordering.",
-                    "Low": "Higher uncertainty; check the forecast and product details carefully.",
+                    "High": "Forecast shows relatively strong historical reliability.",
+                    "Medium": "Some forecast uncertainty. Review demand estimates before ordering.",
+                    "Low": "Higher forecast uncertainty. Verify inventory and review the forecast carefully before ordering.",
                 }[confidence_label]
-                if not v4_selected["hold"]:
-                    confidence_description += (
-                        " Verify current inventory before approving the suggested order."
-                    )
                 st.markdown(
                     '<div style="border:1px solid #DBE3EF;border-radius:10px;'
                     'padding:12px 15px;margin-top:12px;margin-bottom:12px;max-width:720px">'
