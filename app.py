@@ -943,19 +943,18 @@ if active_section == "Executive Overview":
                             )
                         )
 
-                        st.markdown(
-                            f"**{action_count:,} / {item_count:,}**"
+                        # Rich but compact data hierarchy inside each store card.
+                        cost_text = (
+                            f"${order_cost:,.0f}" if pd.notna(order_cost)
+                            else "Price unavailable"
                         )
-
-                        st.caption("7-day gap items")
-
-                        st.markdown(
-                            f"**{order_units:,}** gap units"
-                        )
-
-                        st.caption(
-                            (f"M5 price value: ${order_cost:,.0f}" if pd.notna(order_cost)
-                             else "M5 prices not uploaded")
+                        st.html(
+                            '<div class="ds-store-stats">'
+                            f'<div class="ds-store-count">{action_count:,} / {item_count:,}'
+                            '<small>Products with estimated 7-day gaps</small></div>'
+                            f'<div class="ds-store-gap"><strong>{order_units:,}</strong> gap units</div>'
+                            f'<div class="ds-store-value">Historical selling-price value: {cost_text}</div>'
+                            '</div>'
                         )
 
     st.caption(
