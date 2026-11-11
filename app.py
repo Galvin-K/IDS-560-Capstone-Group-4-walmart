@@ -1606,12 +1606,26 @@ if active_section == "Inventory Planning":
         "daily_p90_sum": "High-demand scenario*", "gap": "Demand Gap",
         "units_to_cover": "Units to Cover", "Stockout date": "Stockout Date",
     }
+    # A seven-day or fourteen-day gap is a screening signal, not an approved purchase order.
+    action_labels = {
+        "Point-forecast shortage": "Check shortage",
+        "Monitor high demand": "Monitor demand",
+        "Possible excess": "Review excess",
+        "Covered": "No immediate action",
+    }
+    inv_list["Action"] = inv_list["Status"].map(action_labels).fillna("Review")
+    inv_columns["Action"] = "Action"
     inv_display = inv_list[list(inv_columns)].rename(columns=inv_columns)
     inv_display = inv_display.round({
         f"{action_horizon}-Day Demand": 2, "High-demand scenario*": 2,
         "Demand Gap": 2,
     })
-    st.dataframe(inv_display, hide_index=True, use_container_width=True)
+    st.dataframe(
+        inv_display, hide_index=True, use_container_width=True,
+        column_config={"Action": st.column_config.TextColumn(
+            "Action", help="Suggested review step based on forecasted stock status; not an approved order."
+        )},
+    )
     if not inv_list.empty:
         st.markdown("**Inspect a product from this list**")
         action_item_options = inv_list["item_id"].drop_duplicates().tolist()
@@ -1728,7 +1742,8 @@ if active_section == "Inventory Planning":
     ].rename(
         columns={
             "item_id": "Item",
-            "dept_id": "Department"
+            "dept_id": "Department",
+            "M5 price value": "Price",
         }
     )
 
@@ -1737,8 +1752,8 @@ if active_section == "Inventory Planning":
         hide_index=True,
         use_container_width=True,
         column_config={
-            "M5 price value": st.column_config.NumberColumn(
-                "M5 price value",
+            "Price": st.column_config.NumberColumn(
+                "Price",
                 format="$%.2f"
             )
         }
