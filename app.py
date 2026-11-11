@@ -16,7 +16,7 @@ from analysis_scope import SCOPES, resolve_question, scope_summary
 from Components.overview_intro import render_overview_intro
 from Components.model_summary import render_model_summary
 from Components.footer import render_footer
-from Components.dashboard_theme import render_dashboard_theme
+from Components.dashboard_theme import render_dashboard_theme, render_dashboard_banner
 
 
 # RAG retrieval interface. The production backend remains the source of truth.
@@ -235,22 +235,7 @@ def manager_review_steps(flags):
 # DASHBOARD_STYLE_V1
 st.markdown('\n    <style>\n    /* DASHBOARD_STYLE_V1 */\n\n    /* Main background */\n    [data-testid="stAppViewContainer"] {\n        background-color: #f2f8fd;\n        color: #041e42;\n    }\n\n    /* Sidebar */\n    [data-testid="stSidebar"] {\n        background-color: #e7f1fa;\n        border-right: 1px solid #d2e2ef;\n    }\n\n    /* Page headings */\n    h1, h2, h3 {\n        color: #041e42;\n    }\n\n    /* KPI cards */\n    [data-testid="stMetric"] {\n        background: white;\n        border: 1px solid #d6e3ed;\n        border-radius: 10px;\n        padding: 16px;\n    }\n\n    /* Selected tabs */\n    button[data-baseweb="tab"][aria-selected="true"] {\n        color: #0071ce;\n        border-bottom-color: #0071ce;\n    }\n\n    /* Buttons */\n    div.stButton > button[kind="primary"],\n    button[data-testid="stFormSubmitButton"] {\n        border-radius: 8px;\n    }\n\n    /* Chart containers */\n    [data-testid="stPlotlyChart"] {\n        background: white;\n        border-radius: 10px;\n        padding: 8px;\n    }\n\n    /* Main content width */\n    .block-container {\n        max-width: 1280px;\n        padding-top: 3.25rem;\n    }\n    </style>\n    ', unsafe_allow_html=True)
 render_dashboard_theme()
-
-# Clean application header. Walmart logo is linked to the public Walmart wordmark file.
-# Trademark belongs to Walmart; this independent project is not an official Walmart system.
-st.markdown(
-    """
-    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;min-height:80px;padding:16px 0 12px 0;margin:0 0 12px 0;overflow:visible">
-      <img
-        src="https://commons.wikimedia.org/wiki/Special:Redirect/file/Walmart_logo_%282025%3B_Alt%29.svg"
-        alt="Walmart"
-        style="display:block;width:160px;max-width:100%;height:55px;object-fit:contain;object-position:center"
-      />
-      <span style="font-size:2.05rem;font-weight:730;color:#041e42;line-height:1.2">Demand &amp; Inventory Planner</span>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+render_dashboard_banner()
 
 st.markdown(
     "**Plan inventory with fewer surprises.** Check expected sales, spot products that may run short, "
@@ -302,8 +287,23 @@ with st.expander("About the Forecast & Data", expanded=False):
         "not an official Walmart operational system."
     )
 
-# 4. SIDEBAR FILTERS
+# 4. SIDEBAR NAVIGATION & FILTERS
 
+st.sidebar.markdown("### Navigation")
+active_section = st.sidebar.radio(
+    "Go to section",
+    [
+        "Executive Overview",
+        "Demand Forecasting",
+        "Inventory Planning",
+        "Model Insights",
+        "AI Assistant",
+    ],
+    key="main_section_nav",
+    label_visibility="collapsed",
+)
+
+st.sidebar.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 st.sidebar.header("Filters")
 
 # Keep the sidebar store selection synchronized with store cards
@@ -380,20 +380,14 @@ valid_all_items = set(store_df["item_id"].dropna().unique())
 if st.session_state.get("runway_scaled_product") not in valid_all_items:
     st.session_state["runway_scaled_product"] = sorted(valid_all_items)[0]
 
-# 5. NAVIGATION
-overview, forecasting, planning, insights, assistant = st.tabs([
-    "Executive Overview",
-    "Demand Forecasting",
-    "Inventory Planning",
-    "Model Insights",
-    "AI Assistant"
-])
+# 5. PAGE SECTIONS
+# Navigation is handled from the sidebar to match the dashboard mockup.
 
 # ============================================================
 # TAB 1: EXECUTIVE OVERVIEW
 # ============================================================
 
-with overview:
+if active_section == "Executive Overview":
     st.header("Executive Overview")
     render_overview_intro(store)
     dept = dept_options[0]  # Legacy default; Executive Overview covers all departments.
@@ -1013,7 +1007,7 @@ with overview:
 # TAB 2: DEMAND FORECASTING
 # ============================================================
 
-with forecasting:
+if active_section == "Demand Forecasting":
     st.header("Demand Forecasting")
     st.caption("Choose the forecast period in each section below. Changing one chart will not change the others or your replenishment plan.")
     daily_14_data = load_14day_daily_forecasts()
@@ -1291,7 +1285,7 @@ with forecasting:
 # Historical evidence, separate from manager-facing decision tabs.
 # ============================================================
 
-with insights:
+if active_section == "Model Insights":
     st.header("Model Insights")
     render_model_summary()
 
@@ -1512,7 +1506,7 @@ with insights:
 # TAB 3: INVENTORY PLANNING
 # ============================================================
 
-with planning:
+if active_section == "Inventory Planning":
 
     st.header("Inventory Planning")
     st.write(
@@ -2506,7 +2500,7 @@ with planning:
 
 # AI ASSISTANT
 
-with assistant:
+if active_section == "AI Assistant":
     st.subheader("Ask about demand and inventory")
     st.caption("Ask a question about stores, products, or past sales patterns. "
                "The assistant checks forecast data and historical references; it does not change orders.")
