@@ -282,6 +282,46 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
  [data-testid="stSidebar"] [class*="st-key-page_"] button {padding-left:45px !important;}
 }
 
+
+/* V9: Compare Stores readability and white card surfaces.
+   Scope to the bordered Streamlit containers holding ds-store-stats.
+   Avoid changing every bordered container across the app. */
+.main [data-testid="stVerticalBlockBorderWrapper"]:has(.ds-store-stats),
+.main [data-testid="stVerticalBlockBorderWrapper"]:has(.ds-store-stats) > div {
+  background-color: #ffffff !important;
+}
+.main [data-testid="stVerticalBlockBorderWrapper"]:has(.ds-store-stats) {
+  border-color: #d9e2ef !important;
+  box-shadow: 0 3px 12px rgba(24,55,107,.055) !important;
+}
+/* Streamlit may put the actual border on a nested element. */
+.main [data-testid="stVerticalBlockBorderWrapper"]:has(.ds-store-stats) [data-testid="stVerticalBlock"] {
+  background-color: #ffffff !important;
+}
+.ds-store-stats {
+  gap: 10px !important;
+  padding-top: 8px !important;
+}
+.ds-store-count {
+  font-size: 17px !important;
+  line-height: 1.4 !important;
+}
+.ds-store-count small {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+  margin-top: 4px !important;
+  color: #526987 !important;
+}
+.ds-store-gap {
+  font-size: 15px !important;
+  line-height: 1.45 !important;
+}
+.ds-store-value {
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+  padding-top: 10px !important;
+  color: #566a86 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
