@@ -1935,10 +1935,18 @@ if active_section == "Inventory Planning":
                 # This label is based on the precomputed hold decision, not confidence.
                 st.markdown("**Order status**")
                 if v4_selected['hold']:
+                    review_steps = manager_review_steps(
+                        f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
+                    )
+                    if not review_steps:
+                        review_steps = [
+                            "Review the reason for the hold and verify current inventory before approving an order."
+                        ]
+                    review_text = "\n".join(f"- {step}" for step in review_steps)
                     st.warning(
-                        "**Manager review required** — Do not place an order until this item "
-                        "has been checked. "
-                        f"Conditional order quantity after approval: "
+                        "**Manager review required** — Review this item before approving any order.\n\n"
+                        f"{review_text}\n\n"
+                        "**Conditional quantity after approval:** "
                         f"{v4_selected['if_confirmed_order_qty']:,} units."
                     )
                 else:
@@ -1964,6 +1972,10 @@ if active_section == "Inventory Planning":
                     "Medium": "Some uncertainty; review the forecast before ordering.",
                     "Low": "Higher uncertainty; check the forecast and product details carefully.",
                 }[confidence_label]
+                if not v4_selected["hold"]:
+                    confidence_description += (
+                        " Verify current inventory before approving the suggested order."
+                    )
                 st.markdown(
                     '<div style="border:1px solid #DBE3EF;border-radius:10px;'
                     'padding:12px 15px;margin-top:12px;margin-bottom:12px;max-width:720px">'
@@ -1978,21 +1990,6 @@ if active_section == "Inventory Planning":
                     f'{confidence_description}</div></div>',
                     unsafe_allow_html=True,
                 )
-                st.markdown("**What the manager should check**")
-                if v4_selected["hold"]:
-                    review_steps = manager_review_steps(
-                        f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
-                    )
-                    if review_steps:
-                        for step in review_steps:
-                            st.write("• " + step)
-                    else:
-                        st.write("• Review the reason for the hold and verify current inventory before approving an order.")
-                else:
-                    st.write(
-                        "• Verify current inventory and review forecast uncertainty "
-                        "before approving the suggested order."
-                    )
                 with st.expander("Why this confidence level?", expanded=False):
                     reasons = str(v4_selected.get("confidence_reasons", "")).strip()
                     st.write(reasons if reasons and reasons.lower() != "nan" else
