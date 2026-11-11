@@ -5,6 +5,18 @@ import streamlit as st
 def render_dashboard_theme() -> None:
     # Avoid forcing fonts on icon containers; Streamlit uses a separate icon font.
     st.markdown("""
+/* Make primary buttons readable */
+div.stButton > button[kind="primary"],
+div.stButton > button[data-testid="stBaseButton-primary"] {
+    background-color: #213C71 !important;
+    color: #FFFFFF !important;
+    border-color: #213C71 !important;
+}
+
+div.stButton > button[kind="primary"] *,
+div.stButton > button[data-testid="stBaseButton-primary"] * {
+    color: #FFFFFF !important;
+}
 <style>
 :root {
   --ds-ink: #1d355a;
