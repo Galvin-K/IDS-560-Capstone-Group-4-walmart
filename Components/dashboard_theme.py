@@ -1,26 +1,109 @@
-"""Consistent navy, white and gold visual theme for the IDS 560 dashboard.
-
-Style-only. Keep this import after st.set_page_config and before main UI.
-"""
+"""Visual-only styling for the IDS 560 Retail Inventory Decision Support app."""
 import streamlit as st
 
 
 def render_dashboard_theme() -> None:
-    st.markdown('<style>\n:root { --rp-navy:#172e64; --rp-navy-dark:#102554; --rp-blue:#286bc1; --rp-gold:#ffc220; --rp-bg:#f6f8fc; --rp-card:#fff; --rp-border:#dee6f1; --rp-muted:#66758e; }\nhtml,body,[data-testid="stAppViewContainer"] { background:var(--rp-bg)!important; }\n[data-testid="stHeader"] { background:rgba(246,248,252,.97)!important; }\n.main .block-container { max-width:1400px!important; padding-top:1.65rem!important; padding-bottom:3.5rem!important; }\n/* Keep normal-weight Segoe UI throughout. No exaggerated typography or heavy shadows. */\n/* Only text controls receive the font override. Leave Material Symbols and SVG icons untouched. */\n[data-testid="stAppViewContainer"] :is(p,h1,h2,h3,h4,label,button,input,textarea),\n[data-testid="stSidebar"] :is(p,h1,h2,h3,h4,label,button,input) {\n font-family:Arial,"Helvetica Neue",sans-serif!important;\n}\n/* Restore icon fonts when Streamlit uses its Material Symbols glyphs. */\n.material-symbols-rounded,.material-symbols-outlined,[data-testid="stIconMaterial"] {\n font-family:"Material Symbols Rounded","Material Symbols Outlined"!important;\n font-weight:normal!important;letter-spacing:normal!important;\n}\n.main h1,.main h2,.main h3 { color:var(--rp-navy-dark)!important; letter-spacing:-.018em!important; }\n.main h1 { font-size:clamp(1.75rem,2.4vw,2.15rem)!important;font-weight:700!important; }\n.main h2 { font-size:clamp(1.45rem,1.9vw,1.75rem)!important;font-weight:700!important; }\n.main h3 { font-size:1.22rem!important;font-weight:650!important; }\n.main p { line-height:1.65!important; }\n.main [data-testid="stCaptionContainer"],.main small { color:var(--rp-muted)!important; }\n[data-testid="stSidebar"],[data-testid="stSidebarContent"] { background:#f2f6fc!important; }\n[data-testid="stSidebar"] { border-right:1px solid var(--rp-border)!important; }\n[data-testid="stSidebar"] h2,[data-testid="stSidebar"] h3 { color:var(--rp-navy-dark)!important; font-weight:700!important; }\n/* Navigation: clean full-width rows; original radio remains keyboard accessible. */\n[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] { gap:.26rem!important; }\n[data-testid="stSidebar"] [data-testid="stRadio"] label {\n width:100%; border:1px solid transparent!important; border-radius:9px!important;\n padding:.57rem .70rem!important; background:transparent!important;\n transition:background .15s,border-color .15s!important;\n}\n[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background:white!important; border-color:var(--rp-border)!important; }\n[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {\n background:#ffeb9d!important;border-color:#f4d46b!important;box-shadow:inset 3px 0 0 #e7ad00!important;\n}\n[data-testid="stSidebar"] [data-testid="stRadio"] label [data-baseweb="radio"] > div:first-child { width:0!important;min-width:0!important;opacity:0!important;margin:0!important;overflow:hidden!important; }\n[data-testid="stSidebar"] [data-testid="stRadio"] label p { font-size:.92rem!important;font-weight:600!important;color:var(--rp-navy-dark)!important;margin:0!important; }\n/* White cards, restrained outlines and shadows */\n[data-testid="stMetric"] { background:white!important;border:1px solid var(--rp-border)!important;border-radius:13px!important;padding:17px 18px!important;box-shadow:0 2px 8px rgba(19,42,84,.045)!important; }\n[data-testid="stMetricValue"] { color:var(--rp-navy-dark)!important;font-family:Arial,"Helvetica Neue",sans-serif!important;font-size:clamp(1.5rem,2vw,1.9rem)!important;font-weight:550!important;letter-spacing:-.01em!important;font-variant-numeric:tabular-nums!important; }\n[data-testid="stMetricLabel"] { color:#405475!important;font-weight:500!important;font-size:.91rem!important; }\n[data-testid="stExpander"] { border:1px solid var(--rp-border)!important;background:white!important;border-radius:10px!important;overflow:hidden!important; }\n[data-testid="stExpander"] summary { background:#fff!important;color:var(--rp-navy-dark)!important; }\n[data-testid="stVerticalBlockBorderWrapper"] > div {border-color:var(--rp-border)!important;border-radius:12px!important;}\n[data-testid="stPlotlyChart"] { background:white!important;border:1px solid var(--rp-border)!important;border-radius:12px!important;padding:8px!important;box-shadow:0 2px 10px rgba(19,42,84,.045)!important; }\n[data-testid="stDataFrame"],[data-testid="stTable"] {border:1px solid var(--rp-border)!important;border-radius:11px!important;overflow:hidden!important;background:white!important;}\n[data-baseweb="select"] > div,[data-baseweb="input"] > div,[data-testid="stNumberInput"] input {background:#fff!important;border-color:#cfdae9!important;border-radius:9px!important;}\ndiv.stButton > button,[data-testid="stDownloadButton"] button {border-radius:9px!important;font-weight:600!important;}\ndiv.stButton > button[kind="primary"],button[data-testid="stFormSubmitButton"] {background:var(--rp-navy)!important;border-color:var(--rp-navy)!important;color:white!important;}\ndiv.stButton > button[kind="primary"]:hover {background:var(--rp-blue)!important;border-color:var(--rp-gold)!important;}\n/* Header: same navy and yellow detailing as the footer. */\n.rp-hero {position:relative;overflow:hidden;background:linear-gradient(110deg,#172e64,#214684);border-radius:12px;padding:20px 26px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:102px;}\n.rp-hero:after {content:"";position:absolute;right:46px;top:-25px;height:170px;width:13px;background:var(--rp-gold);transform:rotate(35deg);}\n.rp-hero-left {display:flex;align-items:center;gap:20px;position:relative;z-index:1;min-width:0;}\n.rp-hero-mark {font-size:18px;line-height:1.3;color:#fff;white-space:nowrap;font-weight:650;}\n.rp-hero-mark .spark {font-size:20px;color:var(--rp-gold);margin-left:4px;}\n.rp-hero-rule {width:1px;height:43px;background:rgba(255,255,255,.30);flex-shrink:0;}\n.rp-hero-title {font-size:clamp(20px,2.3vw,27px);font-weight:650;letter-spacing:-.025em;line-height:1.24;color:white;}\n.rp-hero-subtitle {font-size:12.5px;font-weight:400;color:#dce7fa;margin-top:5px;}\n.rp-hero-badge {color:#e4edff;font-size:11px;font-weight:500;white-space:nowrap;margin-right:60px;position:relative;z-index:1;}\n/* Consistent visual section hierarchy without turning every heading into a banner. */\n.main [data-testid="stHeadingWithActionElements"] h2 {margin-top:1.1rem!important;}\n.smartstock-footer { margin-top:7rem!important; }\n@media(max-width:800px) {.rp-hero{padding:18px}.rp-hero-left{gap:12px}.rp-hero-badge{display:none}.rp-hero-rule{height:36px}.rp-hero-mark{font-size:15px}.rp-hero-title{font-size:20px}.rp-hero:after{right:12px;opacity:.45}}\n@media(max-width:520px) {.rp-hero-rule{display:none}.rp-hero-left{display:block}.rp-hero-title{margin-top:10px}.rp-hero-mark{font-size:14px}.main .block-container{padding-left:1rem!important;padding-right:1rem!important}}\n@media(prefers-reduced-motion:reduce) { * {transition:none!important;} }\n</style>', unsafe_allow_html=True)
+    # Avoid forcing fonts on icon containers; Streamlit uses a separate icon font.
+    st.markdown("""
+<style>
+:root {
+  --ds-ink: #1d355a;
+  --ds-navy: #18376b;
+  --ds-blue: #286bc1;
+  --ds-yellow: #ffc220;
+  --ds-bg: #f7f9fc;
+  --ds-line: #dfe6ef;
+  --ds-muted: #63748d;
+  --ds-card: #ffffff;
+}
+[data-testid="stAppViewContainer"] { background: var(--ds-bg) !important; }
+[data-testid="stHeader"] { background: rgba(247,249,252,.96) !important; }
+.main .block-container { max-width:1400px!important; padding-top:1.55rem!important; padding-bottom:3.5rem!important; }
+/* Unified type, without changing Streamlit's icon glyphs */
+[data-testid="stMarkdownContainer"] :is(p,li,h1,h2,h3,h4),
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] :is(p,h1,h2,h3,h4),
+[data-testid="stMetricLabel"], [data-testid="stMetricValue"],
+[data-testid="stWidgetLabel"] p, [data-testid="stCaptionContainer"] p {
+ font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif !important;
+}
+.main :is(h1,h2,h3) { color:var(--ds-ink)!important; letter-spacing:-.018em!important; }
+.main h1 {font-size:1.8rem!important;font-weight:650!important;}
+.main h2 {font-size:1.45rem!important;font-weight:630!important;}
+.main h3 {font-size:1.14rem!important;font-weight:620!important;}
+.main p {line-height:1.6;}
+[data-testid="stCaptionContainer"] p {color:var(--ds-muted)!important;font-size:.85rem!important;}
+/* Refined sections: a navy guide line and subtle separation instead of empty headings */
+.main [data-testid="stHeadingWithActionElements"]:has(h2) {
+  border-left:3px solid #3465a5; padding:8px 12px 8px 13px; margin-top:1.25rem; background:#edf3fb; border-radius:0 8px 8px 0;
+}
+.main [data-testid="stHeadingWithActionElements"]:has(h3) {
+  padding-bottom:3px; border-bottom:1px solid #e3e9f2;
+}
+/* Navigation */
+[data-testid="stSidebar"],[data-testid="stSidebarContent"] {background:#f1f5fb!important;}
+[data-testid="stSidebar"] {border-right:1px solid var(--ds-line)!important;}
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {gap:.30rem!important;}
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+  display:flex!important; align-items:center!important; border:1px solid transparent!important;
+  padding:.66rem .82rem!important; border-radius:10px!important; background:transparent!important;
+  min-height:40px!important; width:100%; transition:background .15s ease;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label [data-baseweb="radio"] {display:none!important;}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {background:#fff!important;border-color:var(--ds-line)!important;}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked),
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has([aria-checked="true"]) {
+ background:#fff1b9!important; border-color:#efd37b!important;
+ box-shadow:inset 3px 0 0 var(--ds-yellow)!important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label p {font-size:.93rem!important;font-weight:550!important;color:var(--ds-ink)!important;margin:0!important;}
+/* Cards / data */
+[data-testid="stMetric"] {background:#fff!important;border:1px solid var(--ds-line)!important;border-radius:12px!important;padding:14px 17px!important;box-shadow:0 3px 10px rgba(23,46,100,.04)!important;}
+[data-testid="stMetricLabel"] {font-size:.85rem!important;font-weight:500!important;color:#4e617b!important;}
+[data-testid="stMetricValue"] {
+  color:var(--ds-ink)!important;font-size:clamp(1.15rem,1.55vw,1.52rem)!important;
+  font-weight:520!important;line-height:1.35!important;letter-spacing:-.025em!important;
+  font-variant-numeric:tabular-nums!important;
+}
+[data-testid="stExpander"] {background:#fff!important;border:1px solid var(--ds-line)!important;border-radius:10px!important;overflow:hidden!important;}
+[data-testid="stExpander"] summary {background:#fff!important;color:var(--ds-ink)!important;}
+[data-testid="stVerticalBlockBorderWrapper"] > div {border-color:var(--ds-line)!important;border-radius:12px!important;}
+[data-testid="stPlotlyChart"] {background:#fff!important;border:1px solid var(--ds-line)!important;border-radius:12px!important;padding:9px!important;box-shadow:0 2px 8px rgba(23,46,100,.035)!important;}
+[data-testid="stDataFrame"],[data-testid="stTable"] {background:#fff!important;border:1px solid var(--ds-line)!important;border-radius:10px!important;overflow:hidden!important;}
+[data-baseweb="select"]>div,[data-baseweb="input"]>div,[data-testid="stNumberInput"] input {background:#fff!important;border:1px solid #d0dbe8!important;border-radius:9px!important;}
+div.stButton>button,[data-testid="stDownloadButton"] button {border-radius:9px!important;font-weight:550!important;}
+div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {background:var(--ds-navy)!important;color:#fff!important;border-color:var(--ds-navy)!important;}
+/* Consistent, compact banner */
+.ds-banner {
+ display:flex;justify-content:space-between;align-items:center;gap:20px;
+ background:linear-gradient(110deg,#172e64,#254981);color:#fff;
+ border-radius:12px;padding:18px 23px;margin-bottom:20px;position:relative;overflow:hidden;
+}
+.ds-banner::after {content:"";position:absolute;width:12px;height:140%;background:var(--ds-yellow);right:38px;top:-20%;transform:skew(-31deg);}
+.ds-banner-main {position:relative;z-index:1;display:flex;align-items:center;gap:19px;min-width:0;}
+.ds-banner-mark {color:#fff;font-size:17px;font-weight:600;white-space:nowrap;}
+.ds-banner-mark .ds-spark {color:var(--ds-yellow);margin-left:4px;font-size:19px;}
+.ds-banner-rule {width:1px;height:38px;background:rgba(255,255,255,.3);flex-shrink:0;}
+.ds-banner-title {font-size:clamp(18px,2vw,23px);font-weight:610;line-height:1.25;letter-spacing:-.018em;color:#fff;}
+.ds-banner-subtitle {font-size:12px;color:#dfe9fc;margin-top:4px;}
+.ds-banner-badge {color:#dfe9fc;font-size:11px;margin-right:48px;z-index:1;white-space:nowrap;}
+.smartstock-footer {margin-top:6.5rem!important;}
+@media(max-width:780px){.ds-banner{padding:16px}.ds-banner-main{gap:11px;flex-wrap:wrap}.ds-banner-rule,.ds-banner-badge{display:none}.ds-banner-title{font-size:19px}.ds-banner::after{right:7px;opacity:.5}}
+@media(prefers-reduced-motion:reduce){[data-testid="stSidebar"] [data-testid="stRadio"] label {transition:none!important;}}
+</style>
+""", unsafe_allow_html=True)
 
 
 def render_dashboard_banner() -> None:
-    """A compact, restrained title that matches the academic footer."""
     st.markdown("""
-<div class="rp-hero" role="banner" aria-label="Retail Inventory Decision Support">
-  <div class="rp-hero-left">
-    <div class="rp-hero-mark">Walmart M5 <span class="spark">✳</span></div>
-    <div class="rp-hero-rule" aria-hidden="true"></div>
+<div class="ds-banner" role="banner" aria-label="Retail Inventory Decision Support">
+  <div class="ds-banner-main">
+    <div class="ds-banner-mark">Walmart M5 <span class="ds-spark">✳</span></div>
+    <div class="ds-banner-rule" aria-hidden="true"></div>
     <div>
-      <div class="rp-hero-title">Retail Inventory Decision Support</div>
-      <div class="rp-hero-subtitle">Demand forecasting · Replenishment planning · Evidence-grounded insights</div>
+      <div class="ds-banner-title">Retail Inventory Decision Support</div>
+      <div class="ds-banner-subtitle">Forecasting · Inventory planning · Evidence-grounded insights</div>
     </div>
   </div>
-  <div class="rp-hero-badge">IDS 560 · Academic project</div>
+  <div class="ds-banner-badge">IDS 560 · Academic project</div>
 </div>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
