@@ -445,6 +445,51 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
   white-space: normal !important;
 }
 
+
+/* V15: Align the actual rendered navigation LABELS, not just their wrappers.
+   Streamlit can center button content internally, so anchor both parts to
+   fixed positions relative to the button. Scope strictly to page navigation. */
+[data-testid="stSidebar"] [class*="st-key-page_"] button {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  min-height: 46px !important;
+  padding: 10px 12px 10px 74px !important;
+  text-align: left !important;
+}
+[data-testid="stSidebar"] [class*="st-key-page_"] button [data-testid="stIconMaterial"] {
+  position: absolute !important;
+  left: 16px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 24px !important;
+  height: 24px !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+[data-testid="stSidebar"] [class*="st-key-page_"] button [data-testid="stMarkdownContainer"] {
+  width: auto !important;
+  flex: none !important;
+  margin: 0 !important;
+  text-align: left !important;
+}
+[data-testid="stSidebar"] [class*="st-key-page_"] button [data-testid="stMarkdownContainer"] p,
+[data-testid="stSidebar"] [class*="st-key-page_"] button p {
+  position: absolute !important;
+  left: 74px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: calc(100% - 83px) !important;
+  text-align: left !important;
+  white-space: normal !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
