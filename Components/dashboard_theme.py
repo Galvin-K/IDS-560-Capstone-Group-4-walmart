@@ -1,4 +1,4 @@
-"""Option C — navy-accented Walmart M5 dashboard theme.
+""" navy-accented Walmart M5 dashboard theme.
 
 UI-only: no changes to model outputs, inventory logic, data or RAG.
 Call render_dashboard_theme() AFTER legacy CSS and BEFORE the page header.
