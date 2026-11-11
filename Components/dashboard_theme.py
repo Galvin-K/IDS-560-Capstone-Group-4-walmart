@@ -378,6 +378,33 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
 [data-testid="stVerticalBlockBorderWrapper"]:has(.ds-store-stats) .stButton button[kind="secondary"] * {
   color: #18376b !important;
 }
+
+/* V13: Primary action buttons -- fix unreadable navy-on-navy labels.
+   Scoped to main content so the yellow active sidebar nav is not affected. */
+[data-testid="stMain"] button[data-testid="stBaseButton-primary"],
+[data-testid="stMain"] .stButton button[kind="primary"],
+[data-testid="stMain"] .stFormSubmitButton button[kind="primary"] {
+  background-color: #213c71 !important;
+  border-color: #213c71 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+[data-testid="stMain"] button[data-testid="stBaseButton-primary"] :is(p,span,div,strong),
+[data-testid="stMain"] .stButton button[kind="primary"] :is(p,span,div,strong),
+[data-testid="stMain"] .stFormSubmitButton button[kind="primary"] :is(p,span,div,strong) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+[data-testid="stMain"] button[data-testid="stBaseButton-primary"]:hover,
+[data-testid="stMain"] .stButton button[kind="primary"]:hover {
+  background-color: #2c4e86 !important;
+  border-color: #2c4e86 !important;
+}
+[data-testid="stMain"] button[data-testid="stBaseButton-primary"]:disabled,
+[data-testid="stMain"] .stButton button[kind="primary"]:disabled {
+  opacity: .55 !important;
+  cursor: not-allowed !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
