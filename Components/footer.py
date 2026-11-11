@@ -83,10 +83,10 @@ def render_footer() -> None:
 <style>
 .smartstock-footer, .smartstock-footer * { box-sizing: border-box; }
 .smartstock-footer {
-    width:100%;  margin-top: 100px; padding:34px 26px 22px;
-    background:#0c245c; border-top:5px solid #c8102e;
+    width:100%; margin-top:7rem; padding:30px 26px 22px;
+    background:#172e64; border-top:5px solid #ffc220;
     color:#f7f9ff; border-radius:16px 16px 6px 6px;
-    font-family:system-ui,-apple-system,Segoe UI,sans-serif;
+    font-family:"Segoe UI",Inter,Arial,sans-serif;
 }
 /* Balanced columns keep the course title centered across the entire footer. */
 .smartstock-footer .ss-header-grid {
@@ -100,31 +100,31 @@ def render_footer() -> None:
 }
 .smartstock-footer .ss-header-text { min-width:0; text-align:center; }
 .smartstock-footer .brand-title {
-    color:#fff; font-size:clamp(22px,2.5vw,28px);
-    font-weight:800; margin:6px 0 8px; line-height:1.2;
+    color:#fff; font-size:clamp(20px,2.15vw,25px);
+    font-weight:650; margin:6px 0 8px; line-height:1.2;
     text-align:center; overflow-wrap:normal;
 }
 .smartstock-footer .ss-eyebrow {
     text-transform:uppercase; letter-spacing:.14em;
-    font-size:11px; color:#ffc2ca; font-weight:700;
+    font-size:11px; color:#ffdf80; font-weight:600;
 }
 .smartstock-footer .ss-desc { color:#d6e1f6; margin:5px 0; font-size:14px; line-height:1.55; }
 .smartstock-footer .ss-divider { height:1px; background:rgba(255,255,255,.20); margin:25px 0; }
-.smartstock-footer .ss-heading { text-align:center; font-size:21px; font-weight:750; margin:0 0 19px; color:white; }
+.smartstock-footer .ss-heading { text-align:center; font-size:20px; font-weight:650; margin:0 0 19px; color:white; }
 .smartstock-footer .ss-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; }
 .smartstock-footer .ss-member {
     display:flex; flex-direction:column; align-items:center; text-align:center;
     padding:20px 9px 17px; min-width:0;
-    background:#17366e; border:1px solid #35548c; border-radius:14px;
+    background:#203f7a; border:1px solid #47669c; border-radius:14px;
     transition:transform .18s,border-color .18s;
 }
-.smartstock-footer .ss-member:hover { transform:translateY(-3px); border-color:#d56477; }
+.smartstock-footer .ss-member:hover { transform:translateY(-3px); border-color:#ffc220; }
 .smartstock-footer .ss-photo {
     width:110px; height:110px; aspect-ratio:1; border-radius:50%;
     border:3px solid #fff; object-fit:cover; object-position:center 34%;
     margin:0 0 12px; background:#dce7f7;
 }
-.smartstock-footer .ss-member h3 { color:#fff; font-size:15px; font-weight:700; line-height:1.3; margin:0 0 6px; }
+.smartstock-footer .ss-member h3 { color:#fff; font-size:14px; font-weight:600; line-height:1.3; margin:0 0 6px; }
 .smartstock-footer a { text-decoration:none; }
 .smartstock-footer a:hover { text-decoration:underline; }
 .smartstock-footer .ss-email { color:#d7e6ff; font-size:12px; overflow-wrap:anywhere; line-height:1.5; min-height:35px; }
@@ -135,12 +135,12 @@ def render_footer() -> None:
 .smartstock-footer .ss-github {
     text-align:center; margin:22px auto 14px; max-width:750px;
     padding:21px 16px; border-radius:14px;
-    background:#17366e; border:1px solid #35548c;
+    background:#203f7a; border:1px solid #47669c;
 }
 .smartstock-footer .ss-github h3 { color:white; font-size:18px; margin:0 0 7px; }
 .smartstock-footer .ss-github p { color:#d6e1f6; font-size:13px; line-height:1.5; margin:0 0 15px; }
-.smartstock-footer .ss-button { display:inline-block; color:#fff; background:#c8102e; padding:11px 21px; border-radius:8px; font-size:13px; font-weight:750; }
-.smartstock-footer .ss-button:hover { background:#a90d27; text-decoration:none; }
+.smartstock-footer .ss-button { display:inline-block; color:#102451; background:#ffc220; padding:11px 21px; border-radius:8px; font-size:13px; font-weight:650; }
+.smartstock-footer .ss-button:hover { background:#ffe18a; text-decoration:none; }
 .smartstock-footer .ss-advisor { text-align:center; font-size:13px; line-height:1.8; color:#d6e1f6; }
 .smartstock-footer .ss-advisor strong { color:white; }
 .smartstock-footer .ss-advisor a { color:#fff; }
@@ -172,8 +172,8 @@ def render_footer() -> None:
         <div class="ss-header-text">
             <h2 class="brand-title">IDS 560 Analytics Strategy and Practice</h2>
             <div class="ss-eyebrow">University of Illinois Chicago</div>
-            <p class="ss-desc">Retrieval-Augmented Decision Support for Retail Inventory Replenishment</p>
-            <p class="ss-desc">Integrating demand forecasting with evidence-grounded explanations</p>
+            <p class="ss-desc">Demand Forecasting &amp; Inventory Decision Support</p>
+            <p class="ss-desc">Historical M5 data · Simulated replenishment · Evidence-grounded insights</p>
         </div>
         <div class="ss-header-spacer" aria-hidden="true"></div>
     </div>
@@ -200,4 +200,3 @@ def render_footer() -> None:
                 .replace("__ADVISOR__", escape(ADVISOR_NAME))
                 .replace("__ADVISOR_EMAIL__", advisor_email))
     st.html(html)
-
