@@ -2099,9 +2099,8 @@ if active_section == "Inventory Planning":
     if runway_clear_col.button("Clear all", key="runway_clear_all"):
         st.session_state["runway_selected_products"] = []
 
-    runway_controls = st.columns(2)
-
-    runway_products = runway_controls[0].multiselect(
+    # Selection comes first; the day control follows directly below at full width.
+    runway_products = st.multiselect(
         "Products to compare (3–8 recommended)",
         options=chosen_product_options,
         max_selections=8,
@@ -2109,7 +2108,7 @@ if active_section == "Inventory Planning":
         help="The five defaults illustrate a mix of stock conditions. Add or remove items (up to eight), or use Reset all to start over."
     )
 
-    runway_day = runway_controls[1].slider(
+    runway_day = st.slider(
         "Inspect forecast day",
         min_value=1,
         max_value=runway_horizon,
