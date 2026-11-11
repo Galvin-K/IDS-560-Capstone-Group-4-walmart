@@ -38,7 +38,7 @@ def render_model_summary() -> None:
         c1, c2, c3 = st.columns(3, gap="small")
         c1.metric("LightGBM WAPE", "71.62%", help="Weighted Absolute Percentage Error: lower is better.")
         c2.metric("Recent Mean WAPE", "74.58%", help="The recent seven-day average baseline.")
-        c3.metric("Lower error", "2.96 pp", help="74.58% − 71.62% = 2.96 percentage points.")
+        c3.metric("Lower error", "2.96 percentage points", help="74.58% − 71.62% = 2.96 percentage points.")
         st.write(
             "**LightGBM had 2.96 percentage points lower WAPE** than the recent seven-day "
             "mean baseline. Its signed bias was closer to zero (**−0.70%** versus **−1.75%**)."
