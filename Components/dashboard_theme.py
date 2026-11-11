@@ -32,6 +32,16 @@ def render_dashboard_theme() -> None:
 .main h3 {font-size:1.14rem!important;font-weight:620!important;}
 .main p {line-height:1.6;}
 [data-testid="stCaptionContainer"] p {color:var(--ds-muted)!important;font-size:.85rem!important;}
+/* Consistent section grouping, easier to scan than plain continuous text */
+.main [data-testid="stHeadingWithActionElements"]:has(h2){
+  margin-bottom:0.85rem!important;
+}
+.main [data-testid="stHeadingWithActionElements"]:has(h2) h2 {
+  font-size:1.38rem!important;
+}
+.main [data-testid="stHeadingWithActionElements"]:has(h3) {
+  margin-top:.75rem!important;
+}
 /* Refined sections: a navy guide line and subtle separation instead of empty headings */
 .main [data-testid="stHeadingWithActionElements"]:has(h2) {
   border-left:3px solid #3465a5; padding:8px 12px 8px 13px; margin-top:1.25rem; background:#edf3fb; border-radius:0 8px 8px 0;
@@ -48,7 +58,9 @@ def render_dashboard_theme() -> None:
   padding:.66rem .82rem!important; border-radius:10px!important; background:transparent!important;
   min-height:40px!important; width:100%; transition:background .15s ease;
 }
-[data-testid="stSidebar"] [data-testid="stRadio"] label [data-baseweb="radio"] {display:none!important;}
+[data-testid="stSidebar"] [data-testid="stRadio"] label [data-baseweb="radio"],
+[data-testid="stSidebar"] [data-testid="stRadio"] label [role="radio"],
+[data-testid="stSidebar"] [data-testid="stRadio"] label > div:first-child:has(input) {display:none!important;}
 [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {background:#fff!important;border-color:var(--ds-line)!important;}
 [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked),
 [data-testid="stSidebar"] [data-testid="stRadio"] label:has([aria-checked="true"]) {
@@ -76,7 +88,7 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
 .ds-banner {
  display:flex;justify-content:space-between;align-items:center;gap:20px;
  background:linear-gradient(110deg,#172e64,#254981);color:#fff;
- border-radius:12px;padding:18px 23px;margin-bottom:20px;position:relative;overflow:hidden;
+ border-radius:12px;padding:22px 27px;margin:0 -14px 26px;width:calc(100% + 28px);position:relative;overflow:hidden;
 }
 .ds-banner::after {content:"";position:absolute;width:12px;height:140%;background:var(--ds-yellow);right:38px;top:-20%;transform:skew(-31deg);}
 .ds-banner-main {position:relative;z-index:1;display:flex;align-items:center;gap:19px;min-width:0;}
@@ -87,7 +99,7 @@ div.stButton>button[kind="primary"],button[data-testid="stFormSubmitButton"] {ba
 .ds-banner-subtitle {font-size:12px;color:#dfe9fc;margin-top:4px;}
 .ds-banner-badge {color:#dfe9fc;font-size:11px;margin-right:48px;z-index:1;white-space:nowrap;}
 .smartstock-footer {margin-top:6.5rem!important;}
-@media(max-width:780px){.ds-banner{padding:16px}.ds-banner-main{gap:11px;flex-wrap:wrap}.ds-banner-rule,.ds-banner-badge{display:none}.ds-banner-title{font-size:19px}.ds-banner::after{right:7px;opacity:.5}}
+@media(max-width:780px){.ds-banner{padding:16px;margin-left:0;width:100%;}.ds-banner-main{gap:11px;flex-wrap:wrap}.ds-banner-rule,.ds-banner-badge{display:none}.ds-banner-title{font-size:19px}.ds-banner::after{right:7px;opacity:.5}}
 @media(prefers-reduced-motion:reduce){[data-testid="stSidebar"] [data-testid="stRadio"] label {transition:none!important;}}
 </style>
 """, unsafe_allow_html=True)
