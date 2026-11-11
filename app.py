@@ -385,6 +385,149 @@ valid_all_items = set(store_df["item_id"].dropna().unique())
 if st.session_state.get("runway_scaled_product") not in valid_all_items:
     st.session_state["runway_scaled_product"] = sorted(valid_all_items)[0]
 
+# Shared seven-day inventory preparation. Both views must work independently.
+import hashlib
+import math
+inv_lead_days = st.session_state.get("inv_overview_lead_days", 2)
+
+inv_data = (
+    store_df
+).copy()
+
+inv_data["forecast"] = (
+    inv_data["forecast"].fillna(0).clip(lower=0)
+)
+inv_data["p90"] = (
+    inv_data["p90"].fillna(0).clip(lower=0)
+)
+
+# UNIFIED_INVENTORY_V1
+# Simulated stock scenarios are assigned consistently
+# from each product ID and its demand forecast.
+
+import hashlib
+import math
+
+def inventory_scenario(item_id):
+    digest = hashlib.sha256(
+        str(item_id).encode("utf-8")
+    ).digest()
+    return digest[0] % 3
+
+inv_items = (
+    inv_data.groupby(
+        ["item_id", "dept_id", "store_id"],
+        as_index=False
+    )
+    .agg(
+        demand=("forecast", "sum"),
+        daily_p90_sum=("p90", "sum")
+    )
+)
+
+inv_items["scenario_code"] = (
+    inv_items["item_id"].map(inventory_scenario)
+)
+
+inv_items = apply_inventory(
+    inv_items, uploaded_inventory, effective_inventory_mode,
+    st.session_state["inventory_overrides"], missing_policy=missing_inventory_policy
+)
+
+inv_items = add_m5_prices(inv_items)
+
+inv_items["gap"] = (
+    inv_items["demand"]
+    - inv_items["starting_stock"]
+).clip(lower=0)
+
+inv_items["units_to_cover"] = (
+    inv_items["gap"].apply(math.ceil)
+)
+
+inv_items["high_demand_gap"] = (
+    inv_items["daily_p90_sum"]
+    - inv_items["starting_stock"]
+).clip(lower=0)
+
+inv_short = inv_items["gap"] > 0
+
+inv_monitor = (
+    ~inv_short
+    & (inv_items["high_demand_gap"] > 0)
+)
+
+inv_excess = (
+    ~inv_short
+    & ~inv_monitor
+    & (inv_items["starting_stock"] > 0)
+    & (
+        inv_items["starting_stock"]
+        >= 2 * inv_items["demand"]
+    )
+)
+
+inv_items["Status"] = "Covered"
+
+inv_items.loc[
+    inv_excess, "Status"
+] = "Possible excess"
+
+inv_items.loc[
+    inv_monitor, "Status"
+] = "Monitor high demand"
+
+inv_items.loc[
+    inv_short, "Status"
+] = "Point-forecast shortage"
+
+inv_items["priority"] = 3
+inv_items.loc[inv_excess, "priority"] = 2
+inv_items.loc[inv_monitor, "priority"] = 1
+inv_items.loc[inv_short, "priority"] = 0
+
+# Calculate each product's expected stockout date.
+
+inv_daily = inv_data.sort_values(
+    ["item_id", "dept_id", "date"]
+).copy()
+
+inv_daily = inv_daily.merge(
+    inv_items[
+        ["item_id", "dept_id", "starting_stock"]
+    ],
+    on=["item_id", "dept_id"],
+    how="left",
+    validate="many_to_one"
+)
+
+inv_daily["running_demand"] = (
+    inv_daily.groupby(
+        ["item_id", "dept_id"]
+    )["forecast"].cumsum()
+)
+
+inv_breach = (
+    inv_daily[
+        inv_daily["running_demand"]
+        > inv_daily["starting_stock"]
+    ]
+    .groupby(
+        ["item_id", "dept_id"],
+        as_index=False
+    )
+    .agg(first_shortage=("date", "min"))
+)
+
+inv_items = inv_items.merge(
+    inv_breach,
+    how="left",
+    on=["item_id", "dept_id"]
+)
+
+
+inv_first_day = inv_data["date"].min()
+
 # 5. PAGE SECTIONS
 # Navigation is handled from the sidebar to match the dashboard mockup.
 
@@ -438,141 +581,6 @@ if active_section == "Executive Overview":
             key="inv_overview_lead_days"
         )
 
-
-    inv_data = (
-        store_df if inv_scope == "All departments" else filtered
-    ).copy()
-
-    inv_data["forecast"] = (
-        inv_data["forecast"].fillna(0).clip(lower=0)
-    )
-    inv_data["p90"] = (
-        inv_data["p90"].fillna(0).clip(lower=0)
-    )
-
-    # UNIFIED_INVENTORY_V1
-    # Simulated stock scenarios are assigned consistently
-    # from each product ID and its demand forecast.
-
-    import hashlib
-    import math
-
-    def inventory_scenario(item_id):
-        digest = hashlib.sha256(
-            str(item_id).encode("utf-8")
-        ).digest()
-        return digest[0] % 3
-
-    inv_items = (
-        inv_data.groupby(
-            ["item_id", "dept_id", "store_id"],
-            as_index=False
-        )
-        .agg(
-            demand=("forecast", "sum"),
-            daily_p90_sum=("p90", "sum")
-        )
-    )
-
-    inv_items["scenario_code"] = (
-        inv_items["item_id"].map(inventory_scenario)
-    )
-
-    inv_items = apply_inventory(
-        inv_items, uploaded_inventory, effective_inventory_mode,
-        st.session_state["inventory_overrides"], missing_policy=missing_inventory_policy
-    )
-
-    inv_items = add_m5_prices(inv_items)
-
-    inv_items["gap"] = (
-        inv_items["demand"]
-        - inv_items["starting_stock"]
-    ).clip(lower=0)
-
-    inv_items["units_to_cover"] = (
-        inv_items["gap"].apply(math.ceil)
-    )
-
-    inv_items["high_demand_gap"] = (
-        inv_items["daily_p90_sum"]
-        - inv_items["starting_stock"]
-    ).clip(lower=0)
-
-    inv_short = inv_items["gap"] > 0
-
-    inv_monitor = (
-        ~inv_short
-        & (inv_items["high_demand_gap"] > 0)
-    )
-
-    inv_excess = (
-        ~inv_short
-        & ~inv_monitor
-        & (inv_items["starting_stock"] > 0)
-        & (
-            inv_items["starting_stock"]
-            >= 2 * inv_items["demand"]
-        )
-    )
-
-    inv_items["Status"] = "Covered"
-
-    inv_items.loc[
-        inv_excess, "Status"
-    ] = "Possible excess"
-
-    inv_items.loc[
-        inv_monitor, "Status"
-    ] = "Monitor high demand"
-
-    inv_items.loc[
-        inv_short, "Status"
-    ] = "Point-forecast shortage"
-
-    inv_items["priority"] = 3
-    inv_items.loc[inv_excess, "priority"] = 2
-    inv_items.loc[inv_monitor, "priority"] = 1
-    inv_items.loc[inv_short, "priority"] = 0
-
-    # Calculate each product's expected stockout date.
-
-    inv_daily = inv_data.sort_values(
-        ["item_id", "dept_id", "date"]
-    ).copy()
-
-    inv_daily = inv_daily.merge(
-        inv_items[
-            ["item_id", "dept_id", "starting_stock"]
-        ],
-        on=["item_id", "dept_id"],
-        how="left",
-        validate="many_to_one"
-    )
-
-    inv_daily["running_demand"] = (
-        inv_daily.groupby(
-            ["item_id", "dept_id"]
-        )["forecast"].cumsum()
-    )
-
-    inv_breach = (
-        inv_daily[
-            inv_daily["running_demand"]
-            > inv_daily["starting_stock"]
-        ]
-        .groupby(
-            ["item_id", "dept_id"],
-            as_index=False
-        )
-        .agg(first_shortage=("date", "min"))
-    )
-
-    inv_items = inv_items.merge(
-        inv_breach,
-        how="left",
-        on=["item_id", "dept_id"]
-    )
 
     # Calculate illustrative lead-time sales at risk.
 
