@@ -1933,7 +1933,15 @@ if active_section == "Inventory Planning":
                                       help="Target minus stock on hand and stock already on order; zero for held items.")
                 # Order approval status is separate from forecast reliability.
                 # This label is based on the precomputed hold decision, not confidence.
-                st.markdown("**Order status**")
+                st.markdown(
+                    '**Order status '
+                    '<span title="A hold is a system-generated restriction that prevents a suggested order from being approved until the flagged issue has been reviewed. It is separate from forecast confidence." '
+                    'aria-label="What is a hold?" role="img" tabindex="0" '
+                    'style="display:inline-block;cursor:help;color:#506584;font-size:0.88rem;'
+                    'border:1px solid #9AABC3;border-radius:50%;width:17px;height:17px;'
+                    'line-height:15px;text-align:center;vertical-align:middle;">i</span>',
+                    unsafe_allow_html=True,
+                )
                 if v4_selected['hold']:
                     review_steps = manager_review_steps(
                         f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
@@ -1951,8 +1959,9 @@ if active_section == "Inventory Planning":
                     )
                 else:
                     st.success(
-                        "**No hold** — No automatic manager-approval hold was triggered "
-                        "for this historical recommendation."
+                        "**No hold** — No additional manager review is required by the system. "
+                        "The suggested order can proceed through the normal approval process "
+                        "(historical simulation only)."
                     )
                 # Keep forecast confidence separate from the ordering hold decision.
                 # The hold warning above determines whether an order may proceed.
