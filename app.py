@@ -1486,7 +1486,7 @@ if active_section == "Executive Overview":
 
 if active_section == "Demand Forecasting":
     st.header("Demand Forecasting")
-    readable_caption("Choose the forecast period in each section below. Changing one chart will not change the others or your replenishment plan.")
+    readable_caption("Choose a forecast period for the department views and a separate period for product forecasts. The replenishment plan stays unchanged.")
     daily_14_data = load_14day_daily_forecasts()
     forecast_14_store = (daily_14_data.loc[daily_14_data["store_id"].eq(store)].copy()
                          if daily_14_data is not None else None)
@@ -1534,8 +1534,10 @@ if active_section == "Demand Forecasting":
         "the selected department's included products."
     )
 
-    department_daily_horizon = demand_section_period("Department daily chart period", "department_daily_horizon")
-    department_daily_source = demand_section_data(department_daily_horizon)
+    # Reuse the department-comparison horizon so both department charts
+    # always describe the same forecast period.
+    department_daily_horizon = dept_horizon
+    department_daily_source = forecast_view_df
     daily_chart_dept = st.selectbox("Department to chart", dept_options, key="daily_chart_dept")
     daily_dept_filtered = department_daily_source[department_daily_source["dept_id"] == daily_chart_dept]
     daily = (
