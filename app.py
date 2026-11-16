@@ -2091,7 +2091,7 @@ if active_section == "Inventory Planning":
         "We start with estimates and let you enter a different stock level for any product."
     )
 
-    render_section_heading("Prioritized Inventory Action List")
+    render_section_heading("Products That May Run Short")
     action_horizon = st.radio(
         "Action list forecast period", [7, 14], horizontal=True,
         format_func=lambda days: f"{days} days", key="action_list_horizon",
@@ -2220,129 +2220,103 @@ if active_section == "Inventory Planning":
         "the same estimate or manual override in both views."
     )
 
-    # ORDER_LIST_V2
+    # The seven-day estimated-order list was removed because its gap-only
+    # quantities could conflict with the safety-stock-aware 14-day policy.
+    # Forecasted stockout dates remain in the shortage-monitoring table above.
 
-    render_section_heading("Estimated Order List")
-
-    readable_caption(
-        "Historical planning example as of December 31, 2015. "
-        "Order quantities cover the seven-day point-forecast gap. "
-        "Stock and lead time are estimated. Dollar values use historical selling prices."
+    st.divider()
+    render_section_heading("Recommended Replenishment Orders")
+    st.write(
+        "Use this 14-day list to review suggested order quantities, safety stock, "
+        "and items requiring manager approval. Products marked for review have "
+        "zero immediately suggested units until the issue is checked."
     )
-
-    inv_show_orders_only = st.checkbox(
-        "Needs action only",
-        value=True,
-        key="inv_orders_only"
-    )
-
-    inv_order_search = st.text_input(
-        "Search order list by product ID",
-        key="inv_order_search"
-    )
-
-    inv_orders = inv_items.copy()
-
-    if inv_show_orders_only:
-        inv_orders = inv_orders[
-            inv_orders["units_to_cover"] > 0
-        ]
-
-    if inv_order_search.strip():
-        inv_orders = inv_orders[
-            inv_orders["item_id"].str.contains(
-                inv_order_search.strip(),
-                case=False,
-                regex=False
+    order_ready, order_message = offline_policy_status()
+    if order_ready:
+        try:
+            order_policy_all = load_offline_policy()
+            order_policy = order_policy_all.loc[
+                order_policy_all["store_id"].eq(str(store))
+            ].reset_index(drop=True)
+            order_policy = order_policy.merge(
+                inv_items[["item_id", "store_id", "starting_stock"]],
+                on=["item_id", "store_id"], how="inner", validate="one_to_one"
             )
-        ]
-
-    inv_orders = inv_orders.sort_values(
-        ["priority", "first_shortage", "gap", "item_id"],
-        ascending=[True, True, False, True],
-        na_position="last"
-    ).copy()
-
-    inv_orders["Days of cover"] = (
-        inv_orders["first_shortage"] - inv_first_day
-    ).dt.days.apply(
-        lambda days: (
-            "7+" if pd.isna(days)
-            else str(max(0, int(days)))
-        )
-    )
-
-    inv_orders["Runs out"] = (
-        inv_orders["first_shortage"]
-        .dt.strftime("%b %d")
-        .fillna("—")
-    )
-
-    inv_orders["Order by"] = (
-        (
-            inv_orders["first_shortage"]
-            - pd.Timedelta(days=inv_lead_days)
-        )
-        .dt.strftime("%b %d, %Y")
-        .fillna("—")
-    )
-
-    inv_orders["Order qty"] = (
-        inv_orders["units_to_cover"].astype(int)
-    )
-
-    inv_orders["M5 price value"] = (
-        inv_orders["Order qty"] * inv_orders["sell_price"]
-    ).round(2)
-
-    inv_order_table = inv_orders[
-        [
-            "item_id",
-            "dept_id",
-            "Status",
-            "Days of cover",
-            "Runs out",
-            "Order by",
-            "Order qty",
-            "M5 price value"
-        ]
-    ].rename(
-        columns={
-            "item_id": "Item",
-            "dept_id": "Department",
-            "M5 price value": "Price",
-        }
-    )
-
-    st.dataframe(
-        inv_order_table,
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            "Price": st.column_config.NumberColumn(
-                "Price",
-                format="$%.2f"
-            )
-        }
-    )
-
-    st.download_button(
-        "Download Order List CSV",
-        inv_order_table.to_csv(index=False),
-        file_name="estimated_order_list.csv",
-        mime="text/csv",
-        key="inv_order_download"
-    )
-
-    readable_caption(
-        "Days of cover counts complete forecast days before "
-        "the first expected shortage. An order-by date before "
-        "the forecast origin indicates an item requiring "
-        "earlier attention. Order quantities and price-based values are "
-        "estimates, not validated replenishment decisions. "
-        "Sales at risk is based on predicted lead-time shortfall "
-        "valued at each product's historical selling price. These are not supplier costs."
-    )
+            if order_policy.empty:
+                st.info("No 14-day policy results are available for this store.")
+            else:
+                order_calculations = [
+                    apply_precomputed_policy(row, on_hand=float(row["starting_stock"]))
+                    for _, row in order_policy.iterrows()
+                ]
+                order_policy["suggested_units"] = [
+                    result["order_qty"] for result in order_calculations
+                ]
+                order_policy["if_confirmed"] = [
+                    result["if_confirmed_order_qty"]
+                    if result["if_confirmed_order_qty"] is not None else 0
+                    for result in order_calculations
+                ]
+                order_policy["review_status"] = order_policy["hold"].map(
+                    lambda held: "Manager review" if held else "No hold"
+                )
+                order_search = st.text_input(
+                    "Search recommended orders by product ID",
+                    key="recommended_order_product_search",
+                )
+                order_attention_only = st.checkbox(
+                    "Show suggested orders and items needing review only",
+                    value=True, key="recommended_orders_attention_only"
+                )
+                filtered_policy = order_policy
+                if order_attention_only:
+                    filtered_policy = filtered_policy.loc[
+                        filtered_policy["suggested_units"].gt(0)
+                        | filtered_policy["hold"]
+                    ]
+                if order_search.strip():
+                    filtered_policy = filtered_policy.loc[
+                        filtered_policy["item_id"].str.contains(
+                            order_search.strip(), case=False, regex=False
+                        )
+                    ]
+                filtered_policy = filtered_policy.sort_values(
+                    ["suggested_units", "demand_14d"],
+                    ascending=[False, False]
+                )
+                order_display = filtered_policy[[
+                    "item_id", "demand_14d", "starting_stock", "safety_stock",
+                    "order_up_to", "suggested_units", "confidence", "review_status",
+                    "if_confirmed"
+                ]].rename(columns={
+                    "item_id": "Product",
+                    "demand_14d": "Expected 14-Day Sales",
+                    "starting_stock": "Starting Stock",
+                    "safety_stock": "Safety Stock",
+                    "order_up_to": "Target Stock",
+                    "suggested_units": "Suggested Order",
+                    "confidence": "Confidence",
+                    "review_status": "Order Status",
+                    "if_confirmed": "If Hold Cleared",
+                })
+                st.dataframe(order_display, hide_index=True, use_container_width=True)
+                st.download_button(
+                    "Download 14-day recommended orders CSV",
+                    order_display.to_csv(index=False),
+                    file_name=f"recommended_orders_14d_{store}.csv",
+                    mime="text/csv", key=f"recommended_orders_download_{store}"
+                )
+                readable_caption(
+                    "Suggested orders use a 14-day demand forecast plus safety stock, "
+                    "less estimated on-hand stock. Incoming stock is assumed zero in "
+                    "this store-wide list. For product-specific incoming orders, "
+                    "open Product Inventory Details below. These are planning "
+                    "estimates, not actual purchase orders."
+                )
+        except (ValueError, KeyError, FileNotFoundError, TypeError, ImportError) as exc:
+            st.error(f"Cannot load 14-day ordering recommendations: {type(exc).__name__}: {exc}")
+    else:
+        st.info(order_message + ". The 14-day ordering CSV is needed for recommendations.")
 
     st.divider()
 
@@ -2544,39 +2518,6 @@ if active_section == "Inventory Planning":
                     "This is historical decision support, not a validated purchase order."
                 )
 
-            with st.expander("Store-wide 14-day suggested orders (all products)", expanded=False):
-                readable_caption("This list ranks products by suggested order quantity. A hold means a manager "
-                           "must review the product before placing an order. The conditional amount is "
-                           "what we would order after that hold clears.")
-                # Same estimated/manual stock figures used by the 7-day store panel.
-                store_policy = policy_rows.reset_index(drop=True).merge(
-                    inv_items[["item_id", "store_id", "starting_stock", "inventory_source"]],
-                    on=["item_id", "store_id"], how="inner", validate="one_to_one"
-                )
-                if not store_policy.empty:
-                    calculated = [apply_precomputed_policy(r, on_hand=float(r["starting_stock"]))
-                                  for _, r in store_policy.iterrows()]
-                    store_policy["recommended_order"] = [r["order_qty"] for r in calculated]
-                    store_policy["conditional_order_if_confirmed"] = [
-                        r["if_confirmed_order_qty"] if r["if_confirmed_order_qty"] is not None else 0
-                        for r in calculated
-                    ]
-                    display = store_policy[["item_id", "demand_14d", "starting_stock", "safety_stock",
-                                            "order_up_to", "recommended_order", "confidence",
-                                            "hold", "conditional_order_if_confirmed", "flags"]].copy()
-                    display = display.sort_values(
-                        ["recommended_order", "demand_14d"], ascending=[False, False]
-                    )
-                    st.dataframe(display, hide_index=True, use_container_width=True)
-                    st.download_button(
-                        "Download 14-day policy list", display.to_csv(index=False),
-                        file_name=f"v4_14_day_policy_{store}.csv", mime="text/csv",
-                        key=f"v4_policy_download_{store}"
-                    )
-                    readable_caption("For this store-wide table, on-order quantities are assumed zero. "
-                               "Manual stock overrides are reflected when applied.")
-                else:
-                    st.info("No inventory rows match the store's offline policy table.")
         except (ValueError, KeyError, FileNotFoundError, TypeError, ImportError) as exc:
             st.error(f"Cannot load precomputed v4 inventory decisions: {type(exc).__name__}: {exc}")
 
