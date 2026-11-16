@@ -511,6 +511,25 @@ def calculate_gap_values(demand, starting_stock, sell_price, lead_time_demand):
             "priced_items": int(valid.sum()), "total_items": int(len(valid))}
 
 
+def hold_reason_labels(flags):
+    """Translate precomputed policy flags to concise manager-facing labels."""
+    import re
+    codes = set(re.findall(
+        r"NEW_ITEM|POSSIBLE_STOCKOUT|POSSIBLY_DISCONTINUED|STALE_SEGMENT",
+        str(flags).upper(),
+    ))
+    labels = []
+    if "NEW_ITEM" in codes:
+        labels.append("New item")
+    if "POSSIBLE_STOCKOUT" in codes:
+        labels.append("Possible stockout")
+    if "POSSIBLY_DISCONTINUED" in codes:
+        labels.append("Possibly discontinued")
+    if "STALE_SEGMENT" in codes:
+        labels.append("Outdated demand classification")
+    return labels or ["Other review reason"]
+
+
 def manager_review_steps(flags):
     """Map v4 review codes to concrete store-manager checks."""
     import re
@@ -2254,8 +2273,9 @@ if active_section == "Inventory Planning":
                 ]
                 order_policy["if_confirmed"] = [
                     result["if_confirmed_order_qty"]
-                    if result["if_confirmed_order_qty"] is not None else 0
-                    for result in order_calculations
+                    if bool(row["hold"]) and result["if_confirmed_order_qty"] is not None
+                    else None
+                    for (_, row), result in zip(order_policy.iterrows(), order_calculations)
                 ]
                 order_policy["review_status"] = order_policy["hold"].map(
                     lambda held: "Manager review" if held else "No hold"
@@ -2297,15 +2317,120 @@ if active_section == "Inventory Planning":
                     "suggested_units": "Suggested Order",
                     "confidence": "Confidence",
                     "review_status": "Order Status",
-                    "if_confirmed": "If Hold Cleared",
+                    "if_confirmed": "Units if Approved",
                 })
-                st.dataframe(order_display, hide_index=True, use_container_width=True)
+                st.dataframe(
+                    order_display, hide_index=True, use_container_width=True,
+                    column_config={"Units if Approved": st.column_config.NumberColumn(
+                        "Units if Approved",
+                        help="Conditional order quantity if a manager clears an item hold. "
+                             "Blank for items without a hold.",
+                        format="%d",
+                    )},
+                )
+                readable_caption(
+                    "Held items show zero under Suggested Order. Units if Approved is "
+                    "the conditional quantity after manager review; blank means no hold."
+                )
                 st.download_button(
                     "Download 14-day recommended orders CSV",
                     order_display.to_csv(index=False),
                     file_name=f"recommended_orders_14d_{store}.csv",
                     mime="text/csv", key=f"recommended_orders_download_{store}"
                 )
+                # Compact review queue, drawn from the same current-store policy
+                # as the main order table. No additional ordering rule is applied.
+                st.markdown("#### Manager Review Queue")
+                readable_caption(
+                    "Review products on hold, filter by reason, and open an item below "
+                    "for the specific checks required before approval."
+                )
+                held_policy = order_policy.loc[order_policy["hold"].eq(True)].copy()
+                if held_policy.empty:
+                    st.success("No products currently require manager review for this store and planning date.")
+                else:
+                    held_policy["review_labels"] = held_policy.apply(
+                        lambda row: hold_reason_labels(
+                            f"{row.get('flags', '')} {row.get('hold_reasons', '')}"
+                        ), axis=1
+                    )
+                    held_policy["Review Reason"] = held_policy["review_labels"].map(
+                        lambda labels: ", ".join(labels)
+                    )
+                    queue_reason_options = ["All reasons", "New item", "Possible stockout",
+                                            "Possibly discontinued", "Outdated demand classification",
+                                            "Other review reason"]
+                    present_reasons = set(
+                        label for labels in held_policy["review_labels"] for label in labels
+                    )
+                    queue_reason_options = [
+                        option for option in queue_reason_options
+                        if option == "All reasons" or option in present_reasons
+                    ]
+                    reason_col, search_col = st.columns([1, 1.4])
+                    with reason_col:
+                        queue_reason = st.selectbox(
+                            "Review reason", queue_reason_options,
+                            key=f"review_queue_reason_{store}",
+                        )
+                    with search_col:
+                        queue_search = st.text_input(
+                            "Find a held product", key=f"review_queue_search_{store}",
+                        )
+                    review_matches = held_policy
+                    if queue_reason != "All reasons":
+                        review_matches = review_matches.loc[
+                            review_matches["review_labels"].map(
+                                lambda labels: queue_reason in labels
+                            )
+                        ]
+                    if queue_search.strip():
+                        review_matches = review_matches.loc[
+                            review_matches["item_id"].str.contains(
+                                queue_search.strip(), case=False, regex=False
+                            )
+                        ]
+                    review_matches = review_matches.sort_values(
+                        ["if_confirmed", "demand_14d", "item_id"],
+                        ascending=[False, False, True], na_position="last",
+                    )
+                    st.caption(
+                        f"{len(review_matches):,} matching products · "
+                        f"{len(held_policy):,} held products in {store}"
+                    )
+                    if review_matches.empty:
+                        st.info("No held products match these filters.")
+                    else:
+                        queue_display = review_matches[[
+                            "item_id", "Review Reason", "if_confirmed", "confidence"
+                        ]].rename(columns={
+                            "item_id": "Product", "if_confirmed": "Units if Approved",
+                            "confidence": "Forecast Confidence",
+                        })
+                        st.dataframe(
+                            queue_display, use_container_width=True, hide_index=True,
+                            height=min(420, 45 + 35 * len(queue_display)),
+                            column_config={"Units if Approved": st.column_config.NumberColumn(
+                                "Units if Approved", format="%d",
+                                help="Suggested units only after a manager clears the hold."
+                            )},
+                        )
+                        selected_review_item = st.selectbox(
+                            "Product to review", review_matches["item_id"].tolist(),
+                            key=f"review_queue_item_{store}_{queue_reason}",
+                        )
+                        def open_review_product():
+                            focus_product(selected_review_item)
+                            st.session_state["review_queue_opened"] = selected_review_item
+                        st.button(
+                            "Open selected product's review details",
+                            on_click=open_review_product,
+                            key=f"review_queue_open_{store}", type="secondary",
+                        )
+                        if st.session_state.get("review_queue_opened") == selected_review_item:
+                            st.success(f"Selected {selected_review_item} for review.")
+                            st.markdown("[Go to Product Inventory Details](#product-inventory-details)")
+                
                 readable_caption(
                     "Suggested orders use a 14-day demand forecast plus safety stock, "
                     "less estimated on-hand stock. Incoming stock is assumed zero in "
@@ -2457,11 +2582,16 @@ if active_section == "Inventory Planning":
                             "Confirm the hold reason, verify available and incoming stock, and approve the order only after the issue is resolved."
                         ]
                     review_text = "\n".join(f"- {step}" for step in review_steps)
+                    hold_labels = hold_reason_labels(
+                        f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
+                    )
+                    conditional_units = int(v4_selected.get("if_confirmed_order_qty") or 0)
                     st.warning(
-                        "**Manager review required** — Complete these checks before releasing the order:\n\n"
-                        f"{review_text}\n\n"
-                        "**Suggested quantity if the hold is cleared:** "
-                        f"{v4_selected['if_confirmed_order_qty']:,} units."
+                        "**Manager review required**\n\n"
+                        f"**Reason:** {', '.join(hold_labels)}\n\n"
+                        f"**Manager action:**\n{review_text}\n\n"
+                        f"**Units if approved:** {conditional_units:,} "
+                        f"{'unit' if conditional_units == 1 else 'units'} (not yet ordered)."
                     )
                 else:
                     st.success(
