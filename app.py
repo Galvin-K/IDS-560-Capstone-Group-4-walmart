@@ -342,6 +342,20 @@ def render_unified_project_header():
         encoded = base64.b64encode(path.read_bytes()).decode("ascii")
         return f"data:{mime};base64,{encoded}"
 
+    # Use the real UIC logo already stored in the repository's Assets folder.
+    # This is independent of the team portraits/QR asset directory.
+    uic_logo_path = Path(__file__).resolve().parent / "Assets" / "UIC_logo.png"
+    if uic_logo_path.is_file():
+        uic_logo_data = base64.b64encode(uic_logo_path.read_bytes()).decode("ascii")
+        uic_logo_markup = (
+            '<img class="uh-uic-logo" src="data:image/png;base64,'
+            + uic_logo_data
+            + '" alt="University of Illinois Chicago logo">'
+        )
+    else:
+        # Keep an accessible text fallback, but never substitute a drawn logo.
+        uic_logo_markup = '<span class="uh-uic-fallback">University of Illinois Chicago</span>'
+
     cards = []
     for member in team_members:
         name = safe(member.get("name", "Team member"))
@@ -382,9 +396,10 @@ def render_unified_project_header():
       white-space:nowrap}
     .unified-walmart-header .uh-teamarea {padding:19px 24px 16px}
     .unified-walmart-header .uh-course {display:flex;align-items:center;gap:15px;flex-wrap:wrap;margin-bottom:18px}
-    .unified-walmart-header .uh-uic {background:#fff;color:#15366d;border-radius:5px;
-      padding:7px 11px;font-size:12px;font-weight:800;letter-spacing:.02em;line-height:1.13}
-    .unified-walmart-header .uh-uic b {color:#c8102e;font-size:17px}
+    .unified-walmart-header .uh-uic-logo {width:185px;max-width:100%;height:49px;
+      object-fit:contain;object-position:left center;background:#fff;
+      border-radius:5px;padding:5px 9px;display:block;flex-shrink:0}
+    .unified-walmart-header .uh-uic-fallback {color:#fff;font-weight:700;font-size:13px}
     .unified-walmart-header .uh-courseinfo {flex:1;min-width:200px}
     .unified-walmart-header .uh-courseinfo strong {font-size:16px}
     .unified-walmart-header .uh-courseinfo small {display:block;color:#e1e9f9;font-size:12px;margin-top:3px}
@@ -423,7 +438,7 @@ def render_unified_project_header():
         <div class="uh-project">IDS 560 · Academic project</div>
       </div>
       <div class="uh-teamarea">
-        <div class="uh-course"><div class="uh-uic"><b>UIC</b> &nbsp; UNIVERSITY OF<br> ILLINOIS CHICAGO</div>
+        <div class="uh-course">__UIC_LOGO__
           <div class="uh-courseinfo"><strong>University of Illinois Chicago · IDS 560 Analytics Capstone</strong>
             <small>Fall 2026 · Capstone project team</small></div>
           <a class="uh-github" href="__REPO__" target="_blank" rel="noopener noreferrer">GitHub Repository ↗</a>
@@ -434,7 +449,8 @@ def render_unified_project_header():
           <span>University of Illinois Chicago · IDS 560 · Fall 2026</span></div>
       </div>
     </section>'''
-    markup = (markup.replace("__REPO__", safe(repo_url))
+    markup = (markup.replace("__UIC_LOGO__", uic_logo_markup)
+                    .replace("__REPO__", safe(repo_url))
                     .replace("__CARDS__", cards_html)
                     .replace("__ADVISOR__", safe(advisor))
                     .replace("__EMAIL__", safe(advisor_email)))
