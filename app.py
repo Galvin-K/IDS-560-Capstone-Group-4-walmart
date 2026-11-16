@@ -688,7 +688,7 @@ st.markdown(
     "and review suggested orders for your store. You can change starting stock when you know the actual quantity."
 )
 readable_caption(
-    "Built from historical Walmart M5 sales data. Forecasts shown here begin on January 1, 2016."
+    "Based on historical Walmart sales. Forecasts shown here begin January 1, 2016."
 )
 
 with st.expander("Which planning period should I use?", expanded=False):
@@ -720,17 +720,17 @@ with st.expander("What do these dashboard terms mean?", expanded=False):
 
 with st.expander("About the Forecast & Data", expanded=False):
     st.markdown(
-        "**Forecast:** Seven-day LightGBM forecasts for January 1–7, 2016, based on "
-        "historical Walmart M5 data, with separate daily 14-day forecasts and a precomputed 14-day inventory "
-        "planning policy covering January 1–14, 2016. Both are historical outputs "
-        "for the model sample, not live forecasts.\n\n"
-        "**Inventory:** Estimated starting stock uses predefined forecast-based "
-        "assumptions; it is not observed Walmart inventory. Product-level manual "
-        "stock overrides are available in Inventory Planning.\n\n"
-        "**Interpretation:** Stock gaps and M5-price-based values are estimates; "
-        "supplier lead times, actual on-hand inventories, and replenishment policies "
-        "are not verified. This is a capstone decision-support application, "
-        "not an official Walmart operational system."
+        "**Where does our data come from?**\n\n"
+        "We use the **Walmart M5 forecasting dataset**, which records daily product sales, "
+        "weekly selling prices, and calendar information for 10 stores in "
+        "California, Texas, and Wisconsin.\n\n"
+        "We use these records to forecast demand and estimate inventory needs. "
+        "The dataset does **not** provide actual stock on hand, supplier delivery times, "
+        "or purchase orders, so the inventory-planning inputs are estimates. "
+        "You can enter a product's actual starting stock in Inventory Planning.\n\n"
+        "The forecasts displayed here begin **January 1, 2016**. Seven-day demand views "
+        "and the separate 14-day replenishment plan use historical model outputs, "
+        "not live inventory records."
     )
 
 # 4. SIDEBAR NAVIGATION & FILTERS
@@ -800,7 +800,7 @@ item_data = filtered[filtered["item_id"] == item].sort_values("date").copy()
 uploaded_inventory = None
 effective_inventory_mode = "Simulated inventory"
 missing_inventory_policy = "Use simulated inventory"
-with st.sidebar.expander("Inventory data source", expanded=False):
+with st.sidebar.expander("How we estimate inventory", expanded=False):
     readable_caption(
         "Estimated inventory uses forecast-based starting-stock assumptions, "
         "not actual Walmart on-hand records. You can manually adjust an "
@@ -1051,7 +1051,7 @@ if active_section == "Executive Overview":
                  "Longer delivery times require a separate forecast-based assessment."
         )
         readable_caption(
-            "Dollar values use each product's historical M5 selling price, "
+            "Dollar values use each product's historical selling price, "
             "not the supplier's purchase cost."
         )
 
@@ -1175,7 +1175,7 @@ if active_section == "Executive Overview":
     readable_caption(
         "The seven-day value covers whole units needed to close the forecast gap. "
         "Sales at risk counts only expected shortages before a delivery could arrive. "
-        "Both use M5 selling prices, not supplier costs."
+        "Both use historical selling prices, not supplier costs."
     )
     with st.expander("How we calculate these seven-day indicators", expanded=False):
         st.write(
@@ -1186,13 +1186,13 @@ if active_section == "Executive Overview":
         )
         st.write(
             f"**Why the dollar totals differ:** The full seven-day gap value sums rounded-up "
-            f"shortage units at each product's M5 price. Sales at risk looks only at the "
+            f"shortage units at each product's historical selling price. Sales at risk looks only at the "
             f"first {inv_lead_days} day(s), using forecast shortage units before the assumed "
             "delivery could arrive. Neither amount represents a purchase cost or realized lost sales."
         )
         readable_caption(
             f"Price coverage: {seven_day_values['priced_items']:,} of "
-            f"{seven_day_values['total_items']:,} item-store products have a usable M5 price."
+            f"{seven_day_values['total_items']:,} item-store products have a recorded selling price."
         )
 
     # PHASE4: Separate the evaluated 14-day inventory policy from seven-day gaps.
@@ -1429,7 +1429,7 @@ if active_section == "Executive Overview":
         "Units to cover address "
         "point-forecast gaps, not validated purchase orders. "
         "Figures exclude products outside the forecasting "
-        "sample. Dollar values use historical M5 selling prices, not supplier costs."
+        "sample. Dollar values use historical selling prices, not supplier costs."
     )
 
     st.divider()
@@ -1494,7 +1494,7 @@ if active_section == "Executive Overview":
 
     readable_caption(
         "This seven-day ranking estimates the retail value of predicted demand exceeding starting stock, "
-        "using historical M5 selling prices and assuming no replenishment during the seven days. "
+        "using historical selling prices and assuming no replenishment during the seven days. "
         "It is different from the shorter lead-time sales-at-risk KPI above. "
         "Missing-price items have no dollar estimate; these are not confirmed lost sales."
     )
@@ -2087,7 +2087,7 @@ if active_section == "Inventory Planning":
         "Use the 14-day replenishment plan to review suggested orders, safety stock, and manager holds."
     )
     readable_caption(
-        "Our historical M5 data does not include actual stock on hand or supplier lead times. "
+        "The historical sales dataset does not include actual stock on hand or supplier lead times. "
         "We start with estimates and let you enter a different stock level for any product."
     )
 
@@ -2227,7 +2227,7 @@ if active_section == "Inventory Planning":
     readable_caption(
         "Historical planning example as of December 31, 2015. "
         "Order quantities cover the seven-day point-forecast gap. "
-        "Stock and lead time are estimated. Dollar values use historical M5 selling prices."
+        "Stock and lead time are estimated. Dollar values use historical selling prices."
     )
 
     inv_show_orders_only = st.checkbox(
@@ -2341,7 +2341,7 @@ if active_section == "Inventory Planning":
         "earlier attention. Order quantities and price-based values are "
         "estimates, not validated replenishment decisions. "
         "Sales at risk is based on predicted lead-time shortfall "
-        "valued at each product's M5 selling price. Dollar values do not represent supplier costs."
+        "valued at each product's historical selling price. These are not supplier costs."
     )
 
     st.divider()
