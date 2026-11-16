@@ -311,15 +311,137 @@ def manager_review_steps(flags):
     return steps
 
 
-# 3. HEADER
-
+# 3. UNIFIED WALMART + UIC TEAM HEADER
+# One continuous card, preserving Walmart branding at the top and the UIC
+# team member photos, LinkedIn/QR links, GitHub and advisor underneath.
+# Uses the team data/assets already installed in Components/footer.py;
+# no changes to that module or any other repository file are needed.
 render_dashboard_theme()
 
-# One unified header: the existing UIC team component already contains the
-# project title, course, university, GitHub, team portraits, and advisor.
-# Do not render the separate navy banner above it: that duplicates the title
-# and leaves an awkward gap between two header blocks.
-render_footer()
+
+def render_unified_project_header():
+    import base64
+    import html
+    from Components import footer as team_info
+
+    safe = lambda value: html.escape(str(value), quote=True)
+    team_members = getattr(team_info, "TEAM", [])
+    asset_dir = getattr(team_info, "ASSET_DIR", Path(__file__).resolve().parent / "assets" / "team")
+    repo_url = getattr(team_info, "GITHUB_URL", "https://github.com/Galvin-K/IDS-560-Capstone-Group-4-walmart/")
+    advisor = getattr(team_info, "ADVISOR_NAME", "Professor Fatemeh Sarayloo")
+    advisor_email = getattr(team_info, "ADVISOR_EMAIL", "fsaraylo@uic.edu")
+
+    def embed_image(filename, default_mime):
+        if not filename:
+            return None
+        path = asset_dir / str(filename)
+        if not path.is_file():
+            return None
+        mime = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".webp": "image/webp", ".svg": "image/svg+xml"}.get(path.suffix.lower(), default_mime)
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        return f"data:{mime};base64,{encoded}"
+
+    cards = []
+    for member in team_members:
+        name = safe(member.get("name", "Team member"))
+        email = safe(member.get("email", ""))
+        pic = embed_image(member.get("photo"), "image/webp")
+        qr = embed_image(member.get("qr"), "image/png")
+        url = str(member.get("linkedin") or "")
+        linkedin = safe(url) if url.startswith("https://") else ""
+        photo_html = (f'<img class="uh-photo" src="{pic}" alt="Portrait of {name}">' if pic
+                      else '<span class="uh-photo uh-placeholder">●</span>')
+        qr_html = (f'<a href="{linkedin}" target="_blank" rel="noopener noreferrer">'
+                   f'<img class="uh-qr" src="{qr}" alt="LinkedIn QR for {name}"></a>'
+                   if qr and linkedin else
+                   (f'<img class="uh-qr" src="{qr}" alt="QR code for {name}">' if qr else ""))
+        link_html = (f'<a href="{linkedin}" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>'
+                     if linkedin else '<span>LinkedIn via QR</span>')
+        cards.append(f'''<div class="uh-person">{photo_html}<strong>{name}</strong>
+            <a class="uh-email" href="mailto:{email}">{email}</a>
+            <div class="uh-links">{link_html}{qr_html}</div></div>''')
+    cards_html = "".join(cards)
+    # Single HTML block prevents the large Streamlit spacing seen between
+    # the old independently rendered Walmart banner and team/footer card.
+    markup = r'''<style>
+    .unified-walmart-header, .unified-walmart-header * {box-sizing:border-box}
+    .unified-walmart-header {background:#1f3368;color:#fff;border-radius:13px;
+      overflow:hidden;margin:0 0 21px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;
+      box-shadow:0 2px 8px rgba(14,34,80,.07)}
+    .unified-walmart-header .uh-banner {display:flex;align-items:center;gap:22px;
+      padding:22px 24px;background:linear-gradient(105deg,#192c5f,#304e85);
+      border-bottom:1px solid rgba(255,255,255,.23);position:relative}
+    .unified-walmart-header .uh-brand {display:flex;align-items:center;gap:9px;
+      font-size:20px;font-weight:800;white-space:nowrap}
+    .unified-walmart-header .uh-spark {font-size:31px;color:#ffc529;line-height:1}
+    .unified-walmart-header .uh-rule {height:48px;width:1px;background:#8194bc}
+    .unified-walmart-header .uh-title {font-size:21px;font-weight:760;line-height:1.3}
+    .unified-walmart-header .uh-subtitle {font-size:12px;color:#e1e9f9;margin-top:4px}
+    .unified-walmart-header .uh-project {font-size:11px;color:#e1e9f9;margin-left:auto;
+      white-space:nowrap}
+    .unified-walmart-header .uh-teamarea {padding:19px 24px 16px}
+    .unified-walmart-header .uh-course {display:flex;align-items:center;gap:15px;flex-wrap:wrap;margin-bottom:18px}
+    .unified-walmart-header .uh-uic {background:#fff;color:#15366d;border-radius:5px;
+      padding:7px 11px;font-size:12px;font-weight:800;letter-spacing:.02em;line-height:1.13}
+    .unified-walmart-header .uh-uic b {color:#c8102e;font-size:17px}
+    .unified-walmart-header .uh-courseinfo {flex:1;min-width:200px}
+    .unified-walmart-header .uh-courseinfo strong {font-size:16px}
+    .unified-walmart-header .uh-courseinfo small {display:block;color:#e1e9f9;font-size:12px;margin-top:3px}
+    .unified-walmart-header .uh-github {background:#ffc529;color:#09224c;text-decoration:none;
+      border-radius:8px;font-size:12px;font-weight:750;padding:11px 14px;white-space:nowrap}
+    .unified-walmart-header .uh-teamtitle {font-size:16px;font-weight:760;margin:3px 0 11px}
+    .unified-walmart-header .uh-grid {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}
+    .unified-walmart-header .uh-person {min-width:0;display:flex;flex-direction:column;align-items:center;
+      text-align:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);
+      padding:11px 7px 12px;border-radius:9px;gap:5px}
+    .unified-walmart-header .uh-photo {width:64px;height:64px;object-fit:cover;object-position:center 33%;
+      border:2px solid #fff;border-radius:50%;background:#dce6f8}
+    .unified-walmart-header .uh-placeholder {display:grid;place-items:center;color:#6c86b7}
+    .unified-walmart-header .uh-person strong {font-size:12px}
+    .unified-walmart-header .uh-email {font-size:11px;color:#e8efff;overflow-wrap:anywhere}
+    .unified-walmart-header .uh-links {display:flex;align-items:center;gap:10px;min-height:18px}
+    .unified-walmart-header .uh-links a,.unified-walmart-header .uh-links span {color:#e8efff;font-size:11px}
+    .unified-walmart-header .uh-qr {height:17px;width:17px;object-fit:contain;border-radius:2px;
+      background:white}
+    .unified-walmart-header .uh-bottom {display:flex;justify-content:space-between;gap:15px;
+      flex-wrap:wrap;border-top:1px solid rgba(255,255,255,.16);margin-top:14px;padding-top:11px;
+      font-size:11px;color:#e1e9f9}
+    .unified-walmart-header .uh-bottom a{color:#e1e9f9}
+    @media(max-width:930px){.unified-walmart-header .uh-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+    @media(max-width:610px){.unified-walmart-header .uh-banner{flex-wrap:wrap;padding:17px}
+      .unified-walmart-header .uh-rule{display:none}.unified-walmart-header .uh-project{margin-left:0}
+      .unified-walmart-header .uh-teamarea{padding:16px}
+      .unified-walmart-header .uh-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    </style>
+    <section class="unified-walmart-header" aria-label="Walmart M5 inventory dashboard and university capstone team">
+      <div class="uh-banner">
+        <div class="uh-brand">Walmart M5 <span class="uh-spark" aria-hidden="true">✳</span></div>
+        <div class="uh-rule"></div>
+        <div><div class="uh-title">Retail Inventory Decision Support</div>
+          <div class="uh-subtitle">Forecasting · Inventory planning · Evidence-grounded insights</div></div>
+        <div class="uh-project">IDS 560 · Academic project</div>
+      </div>
+      <div class="uh-teamarea">
+        <div class="uh-course"><div class="uh-uic"><b>UIC</b> &nbsp; UNIVERSITY OF<br> ILLINOIS CHICAGO</div>
+          <div class="uh-courseinfo"><strong>University of Illinois Chicago · IDS 560 Analytics Capstone</strong>
+            <small>Fall 2026 · Capstone project team</small></div>
+          <a class="uh-github" href="__REPO__" target="_blank" rel="noopener noreferrer">GitHub Repository ↗</a>
+        </div>
+        <div class="uh-teamtitle">Meet Our Team</div>
+        <div class="uh-grid">__CARDS__</div>
+        <div class="uh-bottom"><span><b>Faculty Advisor:</b> __ADVISOR__ · <a href="mailto:__EMAIL__">__EMAIL__</a></span>
+          <span>University of Illinois Chicago · IDS 560 · Fall 2026</span></div>
+      </div>
+    </section>'''
+    markup = (markup.replace("__REPO__", safe(repo_url))
+                    .replace("__CARDS__", cards_html)
+                    .replace("__ADVISOR__", safe(advisor))
+                    .replace("__EMAIL__", safe(advisor_email)))
+    st.html(markup)
+
+
+render_unified_project_header()
 
 
 st.markdown(
