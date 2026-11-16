@@ -1015,7 +1015,23 @@ inv_first_day = inv_data["date"].min()
 
 if active_section == "Executive Overview":
     st.header("Executive Overview")
-    render_overview_intro(store)
+    # The shared intro component also emits a legacy data-scope caption under
+    # the navigation guide. Its content belongs with the calculation details.
+    # Suppress only that one note; leave header, team, and guide unchanged.
+    from unittest.mock import patch
+    def _without_guide_scope(original):
+        def _render(*args, **kwargs):
+            if args and isinstance(args[0], str):
+                text = args[0].lower()
+                if "data scope:" in text and ("m5" in text or "inventory" in text):
+                    return None
+            return original(*args, **kwargs)
+        return _render
+    with patch.object(st, "caption", _without_guide_scope(st.caption)), \
+         patch.object(st, "markdown", _without_guide_scope(st.markdown)), \
+         patch.object(st, "write", _without_guide_scope(st.write)), \
+         patch.object(st, "html", _without_guide_scope(st.html)):
+        render_overview_intro(store)
     dept = dept_options[0]  # Legacy default; Executive Overview covers all departments.
     filtered = store_df.copy()
     item = sorted(filtered["item_id"].dropna().unique().tolist())[0]
@@ -1030,230 +1046,8 @@ if active_section == "Executive Overview":
         if total_days > 0 else 0
     )
 
-    readable_caption(
-        f"Store: {store} | All departments | "
-        f"7-day forecast: {total_demand:,.0f} units "
-        f"across {total_products:,} sampled products."
-    )
-    st.divider()
-
-    # INVENTORY_OVERVIEW_V1
-    # Seven-day forecast-based inventory simulation
-    import math
-
-    render_section_heading("7-Day Demand & Stock Gap Overview")
-    readable_caption(
-        "Identify products whose forecast demand may exceed starting stock."
-    )
-
-    readable_caption(
-        "Delivery estimate: 7 days by default (adjustable below)."
-    )
-    with st.expander("Inventory assumptions", expanded=False):
-        inv_scope = "All departments"
-
-        st.write(
-            "**Expected delivery time:** We assume a supplier takes seven days to deliver. "
-            "If your supplier delivers sooner, choose a shorter period below. "
-            "This changes the lead-time shortage and sales-at-risk figures, "
-            "but not the separate 14-day replenishment recommendations."
-        )
-        inv_lead_days = st.selectbox(
-            "Expected delivery time (days)",
-            options=list(range(1, 8)), index=6,
-            format_func=lambda days: f"{days} days (default)" if days == 7 else f"{days} days",
-            key="inv_overview_lead_days",
-            help="Only the first seven forecast days are used in this stock-risk view. "
-                 "Longer delivery times require a separate forecast-based assessment."
-        )
-        readable_caption(
-            "Dollar estimates use historical retail selling prices, not wholesale costs."
-        )
-
-    if inv_lead_days != 7:
-        st.caption(
-            f"Sales at risk now uses a {inv_lead_days}-day delivery estimate. "
-            "The 14-day order plan remains based on its fixed 7-day lead time "
-            "and 7-day stock review period."
-        )
-
-    # Calculate illustrative lead-time sales at risk.
-
-    inv_first_day = inv_data["date"].min()
-
-    inv_lead_data = inv_data[
-        inv_data["date"]
-        < inv_first_day
-        + pd.Timedelta(days=inv_lead_days)
-    ]
-
-    inv_lead_demand = (
-        inv_lead_data.groupby(
-            ["item_id", "dept_id"],
-            as_index=False
-        )["forecast"].sum()
-    )
-
-    inv_lead_demand = inv_lead_demand.merge(
-        inv_items[
-            ["item_id", "dept_id", "starting_stock"]
-        ],
-        on=["item_id", "dept_id"],
-        how="left",
-        validate="one_to_one"
-    )
-
-    inv_lead_demand["simulated_lost_units"] = (
-        inv_lead_demand["forecast"]
-        - inv_lead_demand["starting_stock"]
-    ).clip(lower=0)
-
-    inv_lead_demand = add_m5_prices(inv_lead_demand.assign(store_id=store))
-    # Calculate the two price-based indicators from a common item-level table.
-    # Gap value = rounded full-period units to cover × historical selling price.
-    # Sales at risk = lead-time shortfall × historical selling price (not a cost).
-    priced_comparison = inv_items[["item_id", "demand", "starting_stock", "sell_price"]].merge(
-        inv_lead_demand[["item_id", "forecast"]].rename(columns={"forecast": "lead_demand"}),
-        on="item_id", how="left", validate="one_to_one"
-    )
-    seven_day_values = calculate_gap_values(
-        priced_comparison["demand"], priced_comparison["starting_stock"],
-        priced_comparison["sell_price"], priced_comparison["lead_demand"]
-    )
-    inv_sales_at_risk = seven_day_values["at_risk_value"]
-
-    # Calculate inventory KPI values
-
-    inv_total = len(inv_items)
-    inv_action = int(inv_short.sum())
-
-    inv_cover = int(
-        inv_items["units_to_cover"].sum()
-    )
-
-    inv_gap = float(inv_items["gap"].sum())
-
-    inv_covered = (
-        100 * (inv_total - inv_action) / inv_total
-        if inv_total else 0
-    )
-
-    inv_excess_count = int(inv_excess.sum())
-
-    if inv_action:
-        st.warning(
-            f"{inv_action:,} of {inv_total:,} included items "
-            "have an estimated point-forecast shortage "
-            "within seven days."
-        )
-    else:
-        st.success(
-            "No estimated point-forecast shortages "
-            "within seven days."
-        )
-
-    # Six inventory KPI cards
-
-    inv_kpis = (
-        list(st.columns(3))
-        + list(st.columns(3))
-    )
-
-    inv_labels = [
-        "Items with 7-day gap",
-        "7-day gap units",
-        "7-day units-to-cover value",
-        "Sales at risk during lead time",
-        "Items with enough stock",
-        "Possible excess stock"
-    ]
-
-    inv_values = [
-        f"{inv_action:,} / {inv_total:,}",
-        f"{inv_cover:,}",
-        (f"${seven_day_values['gap_value']:,.0f}"
-         if pd.notna(seven_day_values["gap_value"]) else "Price file needed"),
-        (f"${inv_sales_at_risk:,.0f}" if pd.notna(inv_sales_at_risk) else "Price file needed"),
-        f"{inv_covered:.1f}%",
-        f"{inv_excess_count:,}"
-    ]
-
-    for inv_col, inv_label, inv_value in zip(
-        inv_kpis, inv_labels, inv_values
-    ):
-        inv_col.metric(inv_label, inv_value)
-
-    if load_m5_prices() is None:
-        st.info("To display product-specific dollar values, upload "
-                "forecasting/m5_prices_asof_2015_12_31.csv.gz (generated from M5 sell_prices.csv).")
-
-    readable_caption(
-        "Gap value covers the full seven days; sales at risk counts only the shortfall "
-        "before the expected delivery. Both use historical selling prices."
-    )
-    with st.expander("How we calculate these seven-day indicators", expanded=False):
-        st.write(
-            "We subtract estimated starting stock from seven-day predicted demand for each product. "
-            "We round positive gaps up to whole units. We label stock as possible excess when it is "
-            "at least twice the predicted demand. The upper forecast scenarios add daily P90 figures; "
-            "they are not validated seven-day uncertainty limits."
-        )
-        st.write(
-            f"**Why the dollar totals differ:** The full seven-day gap value sums rounded-up "
-            f"shortage units at each product's historical selling price. Sales at risk looks only at the "
-            f"first {inv_lead_days} day(s), using forecast shortage units before the assumed "
-            "delivery could arrive. Neither amount represents a purchase cost or realized lost sales."
-        )
-        readable_caption(
-            f"Price coverage: {seven_day_values['priced_items']:,} of "
-            f"{seven_day_values['total_items']:,} item-store products have a recorded selling price."
-        )
-
-    # PHASE4: Separate the evaluated 14-day inventory policy from seven-day gaps.
-    # This panel only reads a compact precomputed table: it never starts M5
-    # loading, a model or the RAG reranker. Incoming orders assumed zero.
-    render_section_heading("14-Day Replenishment Summary")
-    readable_caption(
-        "Review suggested order quantities, including safety stock and items that need manager approval."
-    )
-    policy_ready, policy_note = offline_policy_status()
-    if not policy_ready:
-        st.info("14-day policy table unavailable. The seven-day demand-gap summary above remains usable.")
-    else:
-        try:
-            policy_for_store = load_offline_policy()
-            policy_for_store = policy_for_store[
-                policy_for_store["store_id"].eq(str(store))
-            ].reset_index(drop=True)
-            stock_for_policy = policy_for_store.merge(
-                inv_items[["store_id", "item_id", "starting_stock"]],
-                on=["store_id", "item_id"], how="inner", validate="one_to_one"
-            )
-            if stock_for_policy.empty:
-                st.info("No overlapping 14-day policy and inventory records for this store.")
-            else:
-                decisions = [
-                    apply_precomputed_policy(record, on_hand=float(record["starting_stock"]))
-                    for _, record in stock_for_policy.iterrows()
-                ]
-                held_items = sum(bool(r["hold"]) for r in decisions)
-                to_order_items = sum(int(r["order_qty"]) > 0 for r in decisions)
-                to_order_units = sum(int(r["order_qty"]) for r in decisions)
-                forecasts_14d = float(stock_for_policy["demand_14d"].sum())
-                kpis14 = st.columns(4)
-                kpis14[0].metric("14-day predicted demand", f"{forecasts_14d:,.0f} units")
-                kpis14[1].metric("Items recommended to order", f"{to_order_items:,}")
-                kpis14[2].metric("14-day order units", f"{to_order_units:,}")
-                kpis14[3].metric("Items on review hold", f"{held_items:,}")
-                readable_caption(
-                    "Suggested orders include safety stock. Items on hold need manager review before ordering. "
-                    "For incoming orders and hold reasons, open Inventory Planning."
-                )
-        except (ValueError, KeyError, TypeError, FileNotFoundError, ImportError) as exc:
-            st.warning(f"14-day summary unavailable: {type(exc).__name__}: {exc}")
-
-    # Prioritized inventory action list
-
+    # First, compare stores and choose the location to inspect.
+    inv_scope = "All departments"
     # STORE_COMPARISON_V1
 
     render_section_heading("Compare Stores")
@@ -1444,6 +1238,229 @@ if active_section == "Executive Overview":
     )
 
     st.divider()
+
+    readable_caption(
+        f"Selected store: {store} · 7-day forecast: {total_demand:,.0f} units "
+        f"across {total_products:,} included products."
+    )
+
+    # Next, inspect potential seven-day stock gaps for the selected store.
+    # INVENTORY_OVERVIEW_V1
+    import math
+    render_section_heading("7-Day Demand & Stock Gap Overview")
+    readable_caption(
+        "Identify products whose forecast demand may exceed starting stock."
+    )
+
+    readable_caption(
+        "Delivery estimate: 7 days by default (adjustable below)."
+    )
+    with st.expander("Inventory assumptions", expanded=False):
+        st.write(
+            "**Expected delivery time:** We assume a supplier takes seven days to deliver. "
+            "If your supplier delivers sooner, choose a shorter period below. "
+            "This changes the lead-time shortage and sales-at-risk figures, "
+            "but not the separate 14-day replenishment recommendations."
+        )
+        inv_lead_days = st.selectbox(
+            "Expected delivery time (days)",
+            options=list(range(1, 8)), index=6,
+            format_func=lambda days: f"{days} days (default)" if days == 7 else f"{days} days",
+            key="inv_overview_lead_days",
+            help="Only the first seven forecast days are used in this stock-risk view. "
+                 "Longer delivery times require a separate forecast-based assessment."
+        )
+        readable_caption(
+            "Dollar estimates use historical retail selling prices, not wholesale costs."
+        )
+
+    if inv_lead_days != 7:
+        st.caption(
+            f"Sales at risk now uses a {inv_lead_days}-day delivery estimate. "
+            "The 14-day order plan remains based on its fixed 7-day lead time "
+            "and 7-day stock review period."
+        )
+
+    # Calculate illustrative lead-time sales at risk.
+
+    inv_first_day = inv_data["date"].min()
+
+    inv_lead_data = inv_data[
+        inv_data["date"]
+        < inv_first_day
+        + pd.Timedelta(days=inv_lead_days)
+    ]
+
+    inv_lead_demand = (
+        inv_lead_data.groupby(
+            ["item_id", "dept_id"],
+            as_index=False
+        )["forecast"].sum()
+    )
+
+    inv_lead_demand = inv_lead_demand.merge(
+        inv_items[
+            ["item_id", "dept_id", "starting_stock"]
+        ],
+        on=["item_id", "dept_id"],
+        how="left",
+        validate="one_to_one"
+    )
+
+    inv_lead_demand["simulated_lost_units"] = (
+        inv_lead_demand["forecast"]
+        - inv_lead_demand["starting_stock"]
+    ).clip(lower=0)
+
+    inv_lead_demand = add_m5_prices(inv_lead_demand.assign(store_id=store))
+    # Calculate the two price-based indicators from a common item-level table.
+    # Gap value = rounded full-period units to cover × historical selling price.
+    # Sales at risk = lead-time shortfall × historical selling price (not a cost).
+    priced_comparison = inv_items[["item_id", "demand", "starting_stock", "sell_price"]].merge(
+        inv_lead_demand[["item_id", "forecast"]].rename(columns={"forecast": "lead_demand"}),
+        on="item_id", how="left", validate="one_to_one"
+    )
+    seven_day_values = calculate_gap_values(
+        priced_comparison["demand"], priced_comparison["starting_stock"],
+        priced_comparison["sell_price"], priced_comparison["lead_demand"]
+    )
+    inv_sales_at_risk = seven_day_values["at_risk_value"]
+
+    # Calculate inventory KPI values
+
+    inv_total = len(inv_items)
+    inv_action = int(inv_short.sum())
+
+    inv_cover = int(
+        inv_items["units_to_cover"].sum()
+    )
+
+    inv_gap = float(inv_items["gap"].sum())
+
+    inv_covered = (
+        100 * (inv_total - inv_action) / inv_total
+        if inv_total else 0
+    )
+
+    inv_excess_count = int(inv_excess.sum())
+
+    if inv_action:
+        st.warning(
+            f"{inv_action:,} of {inv_total:,} included items "
+            "have an estimated point-forecast shortage "
+            "within seven days."
+        )
+    else:
+        st.success(
+            "No estimated point-forecast shortages "
+            "within seven days."
+        )
+
+    # Six inventory KPI cards
+
+    inv_kpis = (
+        list(st.columns(3))
+        + list(st.columns(3))
+    )
+
+    inv_labels = [
+        "Items with 7-day gap",
+        "7-day gap units",
+        "7-day units-to-cover value",
+        "Sales at risk during lead time",
+        "Items with enough stock",
+        "Possible excess stock"
+    ]
+
+    inv_values = [
+        f"{inv_action:,} / {inv_total:,}",
+        f"{inv_cover:,}",
+        (f"${seven_day_values['gap_value']:,.0f}"
+         if pd.notna(seven_day_values["gap_value"]) else "Price file needed"),
+        (f"${inv_sales_at_risk:,.0f}" if pd.notna(inv_sales_at_risk) else "Price file needed"),
+        f"{inv_covered:.1f}%",
+        f"{inv_excess_count:,}"
+    ]
+
+    for inv_col, inv_label, inv_value in zip(
+        inv_kpis, inv_labels, inv_values
+    ):
+        inv_col.metric(inv_label, inv_value)
+
+    if load_m5_prices() is None:
+        st.info("To display product-specific dollar values, upload "
+                "forecasting/m5_prices_asof_2015_12_31.csv.gz (generated from M5 sell_prices.csv).")
+
+    readable_caption(
+        "Gap value covers the full seven days; sales at risk counts only the shortfall "
+        "before the expected delivery. Both use historical selling prices."
+    )
+    with st.expander("How we calculate these seven-day indicators", expanded=False):
+        st.caption(
+            "Data scope: Historical Walmart M5 forecasts. Starting stock is estimated, "
+            "and dollar values use historical retail selling prices rather than supplier costs."
+        )
+        st.write(
+            "We subtract estimated starting stock from seven-day predicted demand for each product. "
+            "We round positive gaps up to whole units. We label stock as possible excess when it is "
+            "at least twice the predicted demand. The upper forecast scenarios add daily P90 figures; "
+            "they are not validated seven-day uncertainty limits."
+        )
+        st.write(
+            f"**Why the dollar totals differ:** The full seven-day gap value sums rounded-up "
+            f"shortage units at each product's historical selling price. Sales at risk looks only at the "
+            f"first {inv_lead_days} day(s), using forecast shortage units before the assumed "
+            "delivery could arrive. Neither amount represents a purchase cost or realized lost sales."
+        )
+        readable_caption(
+            f"Price coverage: {seven_day_values['priced_items']:,} of "
+            f"{seven_day_values['total_items']:,} item-store products have a recorded selling price."
+        )
+
+    # PHASE4: Separate the evaluated 14-day inventory policy from seven-day gaps.
+    # This panel only reads a compact precomputed table: it never starts M5
+    # loading, a model or the RAG reranker. Incoming orders assumed zero.
+    render_section_heading("14-Day Replenishment Summary")
+    readable_caption(
+        "Review suggested order quantities, including safety stock and items that need manager approval."
+    )
+    policy_ready, policy_note = offline_policy_status()
+    if not policy_ready:
+        st.info("14-day policy table unavailable. The seven-day demand-gap summary above remains usable.")
+    else:
+        try:
+            policy_for_store = load_offline_policy()
+            policy_for_store = policy_for_store[
+                policy_for_store["store_id"].eq(str(store))
+            ].reset_index(drop=True)
+            stock_for_policy = policy_for_store.merge(
+                inv_items[["store_id", "item_id", "starting_stock"]],
+                on=["store_id", "item_id"], how="inner", validate="one_to_one"
+            )
+            if stock_for_policy.empty:
+                st.info("No overlapping 14-day policy and inventory records for this store.")
+            else:
+                decisions = [
+                    apply_precomputed_policy(record, on_hand=float(record["starting_stock"]))
+                    for _, record in stock_for_policy.iterrows()
+                ]
+                held_items = sum(bool(r["hold"]) for r in decisions)
+                to_order_items = sum(int(r["order_qty"]) > 0 for r in decisions)
+                to_order_units = sum(int(r["order_qty"]) for r in decisions)
+                forecasts_14d = float(stock_for_policy["demand_14d"].sum())
+                kpis14 = st.columns(4)
+                kpis14[0].metric("14-day predicted demand", f"{forecasts_14d:,.0f} units")
+                kpis14[1].metric("Items recommended to order", f"{to_order_items:,}")
+                kpis14[2].metric("14-day order units", f"{to_order_units:,}")
+                kpis14[3].metric("Items on review hold", f"{held_items:,}")
+                readable_caption(
+                    "Suggested orders include safety stock. Items on hold need manager review before ordering. "
+                    "For incoming orders and hold reasons, open Inventory Planning."
+                )
+        except (ValueError, KeyError, TypeError, FileNotFoundError, ImportError) as exc:
+            st.warning(f"14-day summary unavailable: {type(exc).__name__}: {exc}")
+
+    # Prioritized inventory action list
 
     render_section_heading("7-Day Demand-Gap Priorities")
 
