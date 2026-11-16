@@ -3045,153 +3045,118 @@ if active_section == "AI Assistant":
             height=90
         )
 
-        search_clicked = st.form_submit_button(
-            "Find Historical Evidence"
-        )
-        ask_clicked = st.form_submit_button("Ask AI Assistant")
+        ask_col, evidence_col = st.columns(2)
+        with ask_col:
+            ask_clicked = st.form_submit_button(
+                "Ask AI Assistant", type="primary", use_container_width=True
+            )
+        with evidence_col:
+            search_clicked = st.form_submit_button(
+                "Find Historical Evidence", use_container_width=True
+            )
 
+    # Persist assistant results across Streamlit reruns. Both submit buttons
+    # refresh evidence, but opening evidence must not erase an existing answer.
     if search_clicked or ask_clicked:
         if not user_question.strip():
             st.warning("Please enter a question.")
         else:
-            requested_filters = resolve_question(user_question, df, scope_choice)
-            active_scope = "Question-based scope"
+            question = user_question.strip()
+            previous = st.session_state.get("assistant_result_v2", {})
+            same_question = (previous.get("question") == question
+                             and previous.get("scope_choice") == scope_choice)
+            requested_filters = resolve_question(question, df, scope_choice)
             scoped_context, scoped_rows = scope_summary(
                 df, scope=scope_choice, uploaded=uploaded_inventory,
                 mode=effective_inventory_mode,
                 overrides=st.session_state["inventory_overrides"],
                 missing_policy=missing_inventory_policy,
-                question=user_question, filters=requested_filters
+                question=question, filters=requested_filters
             )
-            readable_caption(
-                "Resolved scope — " +
-                "Stores: " + (", ".join(requested_filters["stores"]) or "All") +
-                " | Departments: " + (", ".join(requested_filters["departments"]) or "All") +
-                " | Products: " + (", ".join(requested_filters["items"]) or "All")
+            structured_lookup, structured_table = lookup_question_forecasts(
+                question, scoped_rows, df,
+                load_14day_daily_forecasts() if (
+                    "14-day" in question.lower() or "14 day" in question.lower()
+                    or "two weeks" in question.lower()) else None
             )
-            if requested_filters["hint"]:
-                st.info(requested_filters["hint"])
-            st.subheader("Forecast & Inventory Context")
-            readable_caption(f"Scope used: {active_scope}. Calculated directly from forecast and inventory data.")
-            # Scan-friendly metrics; preserve the full calculation output for auditability.
-            n_series = len(scoped_rows)
             total_forecast = float(scoped_rows["demand"].sum())
             total_stock = int(scoped_rows["starting_stock"].sum())
             total_gap = float(scoped_rows["gap"].sum())
             affected_items = int((scoped_rows["gap"] > 0).sum())
-            k1, k2, k3, k4 = st.columns(4)
-            k1.metric("7-day forecast", f"{total_forecast:,.2f}", help="Forecast units for the chosen scope")
-            k2.metric("Starting stock", f"{total_stock:,}", help="Estimated or manually overridden stock")
-            k3.metric("Item-level shortage", f"{total_gap:,.2f}", help="Sum of positive item-store forecast gaps")
-            k4.metric("Items with shortage", f"{affected_items:,}", help=f"Out of {n_series:,} item-store series")
-            readable_caption(
-                f"Scope: {active_scope} | {n_series:,} item-store series | "
-                "Historical M5 sample; inventory is estimated or manually overridden. "
-                "No live stock or validated purchase orders."
-            )
+            store_gaps = None
             if scoped_rows["store_id"].nunique() > 1:
                 store_gaps = (
                     scoped_rows.groupby("store_id", as_index=False)
                     .agg(forecast=("demand", "sum"), shortage=("gap", "sum"),
                          total_item_series=("item_id", "count"),
                          item_series_with_shortage=("gap", lambda g: int((g > 0).sum())))
-                    .sort_values(["shortage", "store_id"], ascending=[False, True])
-                    .head(10)
+                    .sort_values(["shortage", "store_id"], ascending=[False, True]).head(10)
                 )
-                st.markdown("**Store shortage comparison**")
-                st.dataframe(store_gaps.round({"forecast": 2, "shortage": 2}), hide_index=True, width="stretch")
-                readable_caption("Total item series includes all forecasted products; item series with shortage counts only positive gaps.")
-            with st.expander("Detailed forecast calculations and limitations", expanded=False):
-                st.text(scoped_context)
-            # Direct numerical lookup uses the exported LightGBM data, not RAG
-            # documents. This supports store/category/item comparisons without
-            # asking the language model to invent missing historical statistics.
-            structured_lookup, structured_table = lookup_question_forecasts(
-                user_question, scoped_rows, df,
-                load_14day_daily_forecasts() if (
-                    "14-day" in user_question.lower() or "14 day" in user_question.lower()
-                    or "two weeks" in user_question.lower()) else None
-            )
-            if structured_lookup is not None:
-                st.markdown("**Verified numerical lookup**")
-                if structured_lookup["status"] == "ok":
-                    st.dataframe(structured_table, use_container_width=True,
-                                 hide_index=True)
-                    readable_caption(structured_lookup["message"])
-                else:
-                    st.info(structured_lookup["message"])
-            search_query = user_question
-            requested_states = {s.split("_")[0] for s in requested_filters["stores"]}
-            # Only restrict historical evidence to a state if exactly one state
-            # was explicitly requested. Otherwise permit cross-state retrieval.
-            evidence_state = next(iter(requested_states)) if len(requested_states) == 1 else None
-            requested_categories = {
-                d.split("_")[0].upper() for d in requested_filters["departments"]
-                if d.split("_")[0].upper() in ("FOODS", "HOBBIES", "HOUSEHOLD")
-            }
-            # A broad or mixed-category request must not be narrowed by the sidebar.
-            evidence_category = (next(iter(requested_categories))
-                                 if len(requested_categories) == 1 else None)
 
-            try:
-                # Numerical forecast questions already have exact results from
-                # the forecast CSV. Do not require semantic retrieval to succeed.
-                direct_forecast_answer = bool(
-                    ask_clicked and structured_lookup is not None
-                    and structured_lookup["status"] == "ok"
-                )
-                if direct_forecast_answer:
-                    evidence = pd.DataFrame(columns=["title", "doc_type", "published", "score", "text"])
-                    retrieved_with_v4 = v4_retrieval_available
-                    readable_caption(
-                        "This numerical answer comes from the forecast file. "
-                        "Document retrieval is unnecessary for these totals."
-                    )
-                else:
-                    with st.spinner("Searching historical evidence..."):
+            # Retain citations and answer for the SAME question. Search-only
+            # must not remove an explanation or silently renumber its sources.
+            evidence = previous.get("evidence") if same_question else None
+            retrieved_with_v4 = bool(previous.get("retrieved_with_v4", False)) if same_question else False
+            retrieval_error = previous.get("retrieval_error") if same_question else None
+            if evidence is None:
+                requested_states = {v.split("_")[0] for v in requested_filters["stores"]}
+                evidence_state = next(iter(requested_states)) if len(requested_states) == 1 else None
+                requested_categories = {
+                    dept.split("_")[0].upper() for dept in requested_filters["departments"]
+                    if dept.split("_")[0].upper() in ("FOODS", "HOBBIES", "HOUSEHOLD")
+                }
+                evidence_category = (next(iter(requested_categories))
+                                     if len(requested_categories) == 1 else None)
+                try:
+                    with st.spinner("Finding dated historical evidence..."):
                         evidence, retrieved_with_v4 = retrieve_dashboard_evidence(
-                            question=search_query,
-                            cutoff=decision_date,
-                            state=evidence_state,
-                            category=evidence_category,
+                            question=question, cutoff=decision_date,
+                            state=evidence_state, category=evidence_category,
                             max_passages=evidence_k,
                             category_filter=evidence_category_filter,
                             min_similarity=min_similarity,
                         )
+                    retrieval_error = None
+                except Exception as error:
+                    evidence = pd.DataFrame(columns=["title", "doc_type", "published", "score", "text"])
+                    retrieval_error = f"{type(error).__name__}: {error}"
 
-                if evidence.empty and not direct_forecast_answer:
-                    st.warning("No eligible historical evidence met the current date, location, category, and similarity filters. Forecast numbers remain available above; do not infer historical causes from absent evidence.")
-                elif not evidence.empty:
-                    st.success(f"Found {len(evidence)} candidate historical passages (maximum {evidence_k}); review relevance before drawing conclusions.")
-                    if retrieved_with_v4 and "relevance" not in evidence.columns:
-                        st.warning("v4 retrieval was requested, but no reranker relevance scores were returned; confirm backend configuration.")
+            result = {
+                "question": question, "scope_choice": scope_choice,
+                "requested_filters": requested_filters,
+                "structured_lookup": structured_lookup,
+                "structured_table": structured_table,
+                "scope_context": scoped_context,
+                "n_series": len(scoped_rows),
+                "total_forecast": total_forecast, "total_stock": total_stock,
+                "total_gap": total_gap, "affected_items": affected_items,
+                "store_gaps": store_gaps,
+                "evidence": evidence, "retrieved_with_v4": retrieved_with_v4,
+                "retrieval_error": retrieval_error,
+                "answer": previous.get("answer") if same_question else None,
+                "answer_error": previous.get("answer_error") if same_question else None,
+            }
+            # Store interim results even if an external LLM call fails.
+            st.session_state["assistant_result_v2"] = result
 
-                if ask_clicked:
-                    import os
-                    
-
-                    key = st.secrets.get("OPENROUTER_API_KEY", os.environ.get("OPENROUTER_API_KEY"))
-
-                    if not key:
-                        st.error("OpenRouter key is not configured in Streamlit Secrets.")
-                    else:
-                        references = []
-
-                        for n, (_, r) in enumerate(evidence.iterrows(), 1):
-                            references.append(
-                                f"[{n}] {r['title']}\n"
-                                f"Published: {r['published']}\n"
-                                f"Document type: {r['doc_type']}\n"
-                                f"Evidence: {str(r['text'])[:1500]}"
-                            )
-
-                        # Compact, explicit numerical facts for the AI assistant, separate from the audit detail.
-                        if scoped_rows["store_id"].nunique() > 1:
-                            top_store_context = store_gaps.head(3).to_string(index=False)
-                        else:
-                            top_store_context = "No all-store ranking in the chosen scope."
-
-                        prompt = (
+            if ask_clicked:
+                import os
+                key = st.secrets.get("OPENROUTER_API_KEY", os.environ.get("OPENROUTER_API_KEY"))
+                if not key:
+                    result["answer_error"] = "OpenRouter API key is not configured in Streamlit Secrets."
+                else:
+                    references = []
+                    for n, (_, passage) in enumerate(evidence.iterrows(), 1):
+                        references.append(
+                            f"[{n}] {passage['title']}\n"
+                            f"Published: {passage['published']}\n"
+                            f"Document type: {passage['doc_type']}\n"
+                            f"Evidence: {str(passage['text'])[:1500]}"
+                        )
+                    top_store_context = (store_gaps.head(3).to_string(index=False)
+                                         if store_gaps is not None
+                                         else "No all-store ranking in the chosen scope.")
+                    prompt = (
                             "You are a forecasting decision-support assistant for a HISTORICAL academic Walmart M5 project. "
                             "Answer the user's question at the resolved question-based scope. Never inherit sidebar filters. "
                             "Use the supplied structured forecast/inventory context for all numerical claims. "
@@ -3228,87 +3193,92 @@ if active_section == "AI Assistant":
                             "Historical retrieved evidence:\n" + "\n\n".join(references)
                         )
 
-                        try:
-                            with st.spinner("Generating AI explanation..."):
-                                configured_model = st.secrets.get(
-                                    "OPENROUTER_MODEL", os.environ.get(
-                                        "OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL
-                                    )
+                    try:
+                        with st.spinner("Generating an evidence-grounded explanation..."):
+                            configured_model = st.secrets.get(
+                                "OPENROUTER_MODEL", os.environ.get(
+                                    "OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL
                                 )
-                                answer_text = generate_answer(
-                                    prompt, key=key, model=configured_model
-                                )
-                            st.subheader("AI Explanation")
-                            if answer_text:
-                                st.markdown(answer_text)
-                            else:
-                                st.warning("The AI assistant returned no answer.")
-                        except Exception as e:
-                            import traceback
-                            traceback.print_exc()
-                            st.warning(
-                                "The AI assistant is temporarily unavailable "
-                                f"({type(e).__name__}). "
-                                "You can still review the evidence below."
                             )
+                            result["answer"] = generate_answer(
+                                prompt, key=key, model=configured_model
+                            )
+                        result["answer_error"] = None
+                    except Exception as error:
+                        result["answer_error"] = ("The AI Assistant could not generate a response "
+                                                  f"({type(error).__name__}).")
+                st.session_state["assistant_result_v2"] = result
 
-                if not evidence.empty:
+    assistant_result = st.session_state.get("assistant_result_v2")
+    if assistant_result:
+        result = assistant_result
+        filters = result["requested_filters"]
+        st.markdown("### Answer & supporting evidence")
+        st.caption(f"Question: {result['question']}")
+        if result.get("answer"):
+            st.markdown(result["answer"])
+        elif result.get("answer_error"):
+            st.warning(result["answer_error"])
+        else:
+            st.info("Historical evidence is ready below. Click **Ask AI Assistant** "
+                    "to generate an explanation based on these sources and the forecast data.")
 
-                    with st.expander(f"Historical evidence ({len(evidence)} retrieved passages)", expanded=False):
-                        readable_caption(
-                            "Historical background only. Scores represent "
-                            + ("v4 reranker relevance" if retrieved_with_v4 and "relevance" in evidence.columns
-                               else "hybrid v3 ranking score (not a relevance threshold)")
-                            + "; they do not validate inventory shortages or prove causality."
-                        )
-                        summary = evidence[
-                            ["title", "doc_type", "published", "score"]
-                        ].copy()
+        evidence = result["evidence"]
+        retrieved_with_v4 = result["retrieved_with_v4"]
+        if result.get("retrieval_error"):
+            st.warning(f"Historical evidence could not be loaded: {result['retrieval_error']}")
+        elif evidence is None or evidence.empty:
+            st.caption("No eligible historical sources were retrieved. Numerical forecast "
+                       "results are still available, but historical causes are not verified.")
+        else:
+            source_kind = ("v4 reranker" if retrieved_with_v4 and "relevance" in evidence.columns
+                           else "v3 fallback ranking")
+            with st.expander(f"Supporting historical evidence ({len(evidence)} passages · {source_kind})",
+                             expanded=True):
+                st.caption("These passages provide context, not proof of why a forecast "
+                           "differs. Check their relevance before citing them.")
+                summary = evidence[["title", "doc_type", "published", "score"]].copy()
+                summary["score"] = pd.to_numeric(summary["score"], errors="coerce").round(3)
+                st.dataframe(summary, hide_index=True, use_container_width=True)
+                for n, (_, passage) in enumerate(evidence.iterrows(), 1):
+                    with st.expander(f"[{n}] {passage['title']}"):
+                        st.write("Source type:", passage["doc_type"])
+                        st.write("Published:", passage["published"])
+                        st.write("Relevance score:" if retrieved_with_v4 and "relevance" in evidence.columns
+                                 else "Ranking score (not a relevance probability):",
+                                 round(float(passage["score"]), 3))
+                        url = passage.get("url")
+                        if isinstance(url, str) and url.startswith(("https://", "http://")):
+                            st.write("Source URL:", url)
+                        st.write(passage["text"])
 
-                        summary["score"] = summary["score"].round(3)
-
-                        st.dataframe(
-                            summary,
-                            hide_index=True,
-                            use_container_width=True
-                        )
-
-                        # Show full evidence with source details
-                        for number, (_, passage) in enumerate(
-                            evidence.iterrows(), start=1
-                        ):
-                            title = passage["title"]
-
-                            with st.expander(
-                                f"[{number}] {title}"
-                            ):
-                                st.write(
-                                    "Source type:",
-                                    passage["doc_type"]
-                                )
-                                st.write(
-                                    "Published:",
-                                    passage["published"]
-                                )
-                                st.write(
-                                    "Reranker relevance:" if retrieved_with_v4 and "relevance" in evidence.columns
-                                    else "Hybrid ranking score:",
-                                    round(float(passage["score"]), 3)
-                                )
-                                if "url" in passage and pd.notna(passage["url"]) and str(passage["url"]).startswith(("https://", "http://")):
-                                    st.write("Source URL:", passage["url"])
-                                st.write(passage["text"])
-
-                        st.info(
-                            "These passages provide historical context for the AI Assistant. "
-                            "They may describe broader state or category trends rather than "
-                            "a specific product and do not establish causality."
-                        )
-            except Exception as error:
-                st.error(
-                    f"Evidence retrieval error: "
-                    f"{type(error).__name__}: {error}"
-                )
+        with st.expander("Forecast numbers and calculation details", expanded=False):
+            st.caption("These figures use the scope resolved from the question, not the sidebar store.")
+            if filters.get("hint"):
+                st.info(filters["hint"])
+            st.caption("Stores: " + (", ".join(filters["stores"]) or "All"))
+            st.caption("Departments: " + (", ".join(filters["departments"]) or "All"))
+            st.caption("Products: " + (", ".join(filters["items"]) or "All"))
+            structured_lookup = result["structured_lookup"]
+            if structured_lookup is not None:
+                st.markdown("**Direct forecast-data lookup**")
+                if structured_lookup["status"] == "ok":
+                    st.dataframe(result["structured_table"], hide_index=True,
+                                 use_container_width=True)
+                st.caption(structured_lookup["message"])
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("7-day forecast", f"{result['total_forecast']:,.2f}")
+            k2.metric("Estimated starting stock", f"{result['total_stock']:,}")
+            k3.metric("Estimated shortage", f"{result['total_gap']:,.2f}")
+            k4.metric("Item-store series with shortage", f"{result['affected_items']:,}")
+            store_gaps = result["store_gaps"]
+            if store_gaps is not None:
+                st.markdown("**Store shortage comparison**")
+                st.dataframe(store_gaps.round({"forecast": 2, "shortage": 2}),
+                             hide_index=True, use_container_width=True)
+            st.caption(f"{result['n_series']:,} item-store series; stock is simulated or manually entered.")
+            with st.expander("Full calculation audit"):
+                st.text(result["scope_context"])
 
     with st.expander("How the AI Assistant Works", expanded=False):
         st.markdown(
