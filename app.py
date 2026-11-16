@@ -16,7 +16,7 @@ from analysis_scope import SCOPES, resolve_question, scope_summary
 from Components.overview_intro import render_overview_intro
 from Components.model_summary import render_model_summary
 from Components.footer import render_footer
-from Components.dashboard_theme import render_dashboard_theme, render_dashboard_banner, render_section_heading
+from Components.dashboard_theme import render_dashboard_theme, render_section_heading
 
 # OpenRouter-backed AI generation. Kept in app.py so the deployment does not
 # require an additional llm_provider.py module or extra third-party packages.
@@ -314,11 +314,11 @@ def manager_review_steps(flags):
 # 3. HEADER
 
 render_dashboard_theme()
-render_dashboard_banner()
 
-# Show the existing project/team card directly beneath the dashboard banner.
-# It already includes the university, course, project team, advisor, and links;
-# no duplicate headings or collapsible section are necessary.
+# One unified header: the existing UIC team component already contains the
+# project title, course, university, GitHub, team portraits, and advisor.
+# Do not render the separate navy banner above it: that duplicates the title
+# and leaves an awkward gap between two header blocks.
 render_footer()
 
 
