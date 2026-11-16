@@ -2278,7 +2278,7 @@ if active_section == "Inventory Planning":
                     for (_, row), result in zip(order_policy.iterrows(), order_calculations)
                 ]
                 order_policy["review_status"] = order_policy["hold"].map(
-                    lambda held: "Manager review" if held else "No hold"
+                    lambda held: "🟠 Yes" if held else "🟢 No"
                 )
                 order_search = st.text_input(
                     "Search recommended orders by product ID",
@@ -2306,31 +2306,31 @@ if active_section == "Inventory Planning":
                 )
                 order_display = filtered_policy[[
                     "item_id", "demand_14d", "starting_stock", "safety_stock",
-                    "order_up_to", "suggested_units", "confidence", "review_status",
-                    "if_confirmed"
+                    "order_up_to", "confidence", "suggested_units", "review_status",
                 ]].rename(columns={
                     "item_id": "Product",
                     "demand_14d": "Expected 14-Day Sales",
                     "starting_stock": "Starting Stock",
                     "safety_stock": "Safety Stock",
                     "order_up_to": "Target Stock",
-                    "suggested_units": "Suggested Order",
                     "confidence": "Confidence",
-                    "review_status": "Order Status",
-                    "if_confirmed": "Units if Approved",
+                    "suggested_units": "Suggested Order",
+                    "review_status": "Review",
                 })
                 st.dataframe(
                     order_display, hide_index=True, use_container_width=True,
-                    column_config={"Units if Approved": st.column_config.NumberColumn(
-                        "Units if Approved",
-                        help="Conditional order quantity if a manager clears an item hold. "
-                             "Blank for items without a hold.",
-                        format="%d",
-                    )},
+                    column_config={
+                        "Review": st.column_config.TextColumn(
+                            "Review",
+                            help="🟠 Yes: a manager must check the product before ordering. "
+                                 "🟢 No: no additional review hold is triggered.",
+                        ),
+                    },
                 )
                 readable_caption(
-                    "Held items show zero under Suggested Order. Units if Approved is "
-                    "the conditional quantity after manager review; blank means no hold."
+                    "Review: 🟠 Yes = manager review required; 🟢 No = no review hold. "
+                    "Held products show zero under Suggested Order; see the Manager "
+                    "Review Queue below for their conditional quantity and review reason."
                 )
                 st.download_button(
                     "Download 14-day recommended orders CSV",
