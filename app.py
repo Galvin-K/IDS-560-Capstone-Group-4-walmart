@@ -849,7 +849,7 @@ if st.session_state.get("runway_scaled_product") not in valid_all_items:
 # Shared seven-day inventory preparation. Both views must work independently.
 import hashlib
 import math
-inv_lead_days = st.session_state.get("inv_overview_lead_days", 2)
+inv_lead_days = st.session_state.get("inv_overview_lead_days", 7)
 
 inv_data = (
     store_df
@@ -1029,19 +1029,38 @@ if active_section == "Executive Overview":
         "Identify products that may run short based on expected demand and estimated inventory."
     )
 
+    readable_caption(
+        "Delivery time defaults to 7 days. To use a shorter delivery estimate, "
+        "open Inventory assumptions below."
+    )
     with st.expander("Inventory assumptions", expanded=False):
         inv_scope = "All departments"
 
-        readable_caption(
-            "We value units using each product's M5 selling price as of December 31, 2015. "
-            "This is a historical retail-price proxy, not a supplier purchase cost."
+        st.write(
+            "**Expected delivery time:** We assume a supplier takes seven days to deliver. "
+            "If your supplier delivers sooner, choose a shorter period below. "
+            "This changes the lead-time shortage and sales-at-risk figures, "
+            "but not the separate 14-day replenishment recommendations."
         )
         inv_lead_days = st.selectbox(
-            "Assumed lead time (days)",
-            options=list(range(1, 8)), index=1,
-            key="inv_overview_lead_days"
+            "Expected delivery time (days)",
+            options=list(range(1, 8)), index=6,
+            format_func=lambda days: f"{days} days (default)" if days == 7 else f"{days} days",
+            key="inv_overview_lead_days",
+            help="Only the first seven forecast days are used in this stock-risk view. "
+                 "Longer delivery times require a separate forecast-based assessment."
+        )
+        readable_caption(
+            "Dollar values use each product's historical M5 selling price, "
+            "not the supplier's purchase cost."
         )
 
+    if inv_lead_days != 7:
+        st.caption(
+            f"Sales at risk now uses a {inv_lead_days}-day delivery estimate. "
+            "The 14-day order plan remains based on its fixed 7-day lead time "
+            "and 7-day stock review period."
+        )
 
     # Calculate illustrative lead-time sales at risk.
 
