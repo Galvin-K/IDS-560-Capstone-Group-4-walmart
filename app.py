@@ -18,6 +18,65 @@ from Components.model_summary import render_model_summary
 from Components.footer import render_footer
 from Components.dashboard_theme import render_dashboard_theme, render_dashboard_banner, render_section_heading
 
+# OpenRouter-backed AI generation. Kept in app.py so the deployment does not
+# require an additional llm_provider.py module or extra third-party packages.
+# The retrieval backend, evidence filters, and ordering policy are unchanged.
+DEFAULT_OPENROUTER_MODEL = "anthropic/claude-haiku-5.5"
+
+
+def generate_answer(prompt: str, *, key: str,
+                    model: str = DEFAULT_OPENROUTER_MODEL) -> str:
+    """Generate a grounded manager-facing response with the notebook's LLM.
+
+    OpenRouter uses the OpenAI-compatible chat-completions API. Use Python's
+    standard library to avoid changing the project's requirements.txt.
+    """
+    import json
+    from urllib.request import Request, urlopen
+    from urllib.error import HTTPError, URLError
+
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("The AI question context must be nonempty.")
+    if not key:
+        raise ValueError("OPENROUTER_API_KEY is missing.")
+    request_body = {
+        "model": model,
+        "temperature": 0,
+        "max_tokens": 1800,
+        "messages": [
+            {"role": "system", "content": (
+                "You are SmartStock AI's historical retail decision-support assistant. "
+                "Follow the supplied evidence and numerical constraints. "
+                "Do not invent values, citations, live inventory, or order approvals."
+            )},
+            {"role": "user", "content": prompt},
+        ],
+    }
+    request = Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=json.dumps(request_body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://ids-560-capstone-group-4-walmart.streamlit.app/",
+            "X-Title": "SmartStock AI - IDS 560",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=90) as response:
+            data = json.load(response)
+    except HTTPError as exc:
+        # Do not expose response headers, request details or credentials.
+        raise RuntimeError(f"AI model request failed (HTTP {exc.code}).") from exc
+    except (URLError, TimeoutError) as exc:
+        raise RuntimeError("AI model provider could not be reached.") from exc
+    choices = data.get("choices", [])
+    if not choices:
+        return ""
+    return str(choices[0].get("message", {}).get("content") or "").strip()
+
+
 
 def readable_caption(message: object) -> None:
     """Display supporting dashboard text with readable contrast.
@@ -256,6 +315,13 @@ def manager_review_steps(flags):
 
 render_dashboard_theme()
 render_dashboard_banner()
+
+# Course and team information: moved from the old footer to the top.
+st.markdown("**University of Illinois Chicago · IDS 560 Analytics Capstone · Fall 2026**")
+st.markdown("**Project team:** Keta Patel · Galvin Kao · Tyler Yuen · Mengxi Fan · Mengyi Wang  |  **Advisor:** Professor Fatemeh Sarayloo")
+with st.expander("Team profiles, contacts & GitHub", expanded=False):
+    render_footer()
+
 
 st.markdown(
     "**Plan inventory with fewer surprises.** Check expected sales, spot products that may run short, "
@@ -991,33 +1057,36 @@ if active_section == "Executive Overview":
 
     render_section_heading("7-Day Demand-Gap Priorities")
 
+    # Seven-day sales exposure = UNROUNDED seven-day forecast gap * M5 price.
+    # This is distinct from the lead-time KPI and whole-unit ordering value.
+    # Unknown M5 prices remain missing rather than being assigned a placeholder.
     priority_count = st.selectbox(
         "Number of priorities to display",
-        options=[5, 10, 20, 50],
-        index=1,
+        options=[10, 20, 50, "All"],
+        index=0,
         key="executive_top_priorities_count",
     )
-
-    urgent = (
-        inv_items[inv_items["gap"] > 0]
-        .sort_values(["first_shortage", "gap"], ascending=[True, False])
-        .head(priority_count)
-        .copy()
-    )
+    urgent = inv_items.loc[inv_items["gap"] > 0].copy()
+    urgent["sales_at_risk_usd"] = (
+        urgent["gap"].clip(lower=0) * urgent["sell_price"]
+    ).round(2)
+    urgent = urgent.sort_values(
+        ["sales_at_risk_usd", "gap", "item_id"],
+        ascending=[False, False, True], na_position="last"
+    ).reset_index(drop=True)
+    if priority_count != "All":
+        urgent = urgent.head(int(priority_count)).copy()
     if urgent.empty:
         st.success("No point-forecast shortages in this selection.")
     else:
-        urgent["estimated_order_cost"] = (
-            urgent["units_to_cover"].astype(int) * urgent["sell_price"]
-        ).round(2)
         priorities_display = urgent[
-            ["item_id", "dept_id", "gap", "units_to_cover", "estimated_order_cost"]
+            ["item_id", "dept_id", "gap", "units_to_cover", "sales_at_risk_usd"]
         ].rename(columns={
             "item_id": "Product",
             "dept_id": "Department",
             "gap": "Demand Gap (Units)",
             "units_to_cover": "7-Day Gap Units",
-            "estimated_order_cost": "7-Day Gap Value at M5 Price ($)",
+            "sales_at_risk_usd": "7-Day Sales at Risk ($)",
         }).round(2)
         readable_caption("Click a product row to load it into Demand Forecasting and Inventory Planning.")
         priority_event = st.dataframe(
@@ -1045,9 +1114,10 @@ if active_section == "Executive Overview":
             )
 
     readable_caption(
-        "Seven-day gap values use M5 selling prices (not wholesale costs) and do not include safety stock; "
-        "they are not purchase recommendations. "
-        "Find the 14-day replenishment decisions and detailed order lists in Inventory Planning."
+        "This seven-day ranking estimates the retail value of predicted demand exceeding starting stock, "
+        "using historical M5 selling prices and assuming no replenishment during the seven days. "
+        "It is different from the shorter lead-time sales-at-risk KPI above. "
+        "Missing-price items have no dollar estimate; these are not confirmed lost sales."
     )
 
 # ============================================================
@@ -2664,7 +2734,7 @@ if active_section == "AI Assistant":
         search_clicked = st.form_submit_button(
             "Find Historical Evidence"
         )
-        ask_clicked = st.form_submit_button("Ask Gemini + RAG")
+        ask_clicked = st.form_submit_button("Ask AI Assistant")
 
     if search_clicked or ask_clicked:
         if not user_question.strip():
@@ -2753,12 +2823,12 @@ if active_section == "AI Assistant":
 
                 if ask_clicked:
                     import os
-                    from google import genai
+                    
 
-                    key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
+                    key = st.secrets.get("OPENROUTER_API_KEY", os.environ.get("OPENROUTER_API_KEY"))
 
                     if not key:
-                        st.error("Gemini key is not available to Streamlit.")
+                        st.error("OpenRouter key is not configured in Streamlit Secrets.")
                     else:
                         references = []
 
@@ -2770,7 +2840,7 @@ if active_section == "AI Assistant":
                                 f"Evidence: {str(r['text'])[:1500]}"
                             )
 
-                        # Compact, explicit numerical facts for Gemini, separate from the audit detail.
+                        # Compact, explicit numerical facts for the AI assistant, separate from the audit detail.
                         if scoped_rows["store_id"].nunique() > 1:
                             top_store_context = store_gaps.head(3).to_string(index=False)
                         else:
@@ -2809,26 +2879,25 @@ if active_section == "AI Assistant":
                         )
 
                         try:
-                            with st.spinner("Generating Gemini explanation..."):
-                                gemini_client = genai.Client(api_key=key)
-
-                                answer = gemini_client.models.generate_content(
-                                    model=os.environ.get("GEMINI_MODEL", "gemini-3.6-flash"),
-                                    contents=prompt
+                            with st.spinner("Generating AI explanation..."):
+                                configured_model = st.secrets.get(
+                                    "OPENROUTER_MODEL", os.environ.get(
+                                        "OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL
+                                    )
                                 )
-
-                            st.subheader("Gemini Explanation")
-
-                            if answer.text:
-                                st.markdown(answer.text)
+                                answer_text = generate_answer(
+                                    prompt, key=key, model=configured_model
+                                )
+                            st.subheader("AI Explanation")
+                            if answer_text:
+                                st.markdown(answer_text)
                             else:
-                                st.warning("Gemini returned no answer.")
-
+                                st.warning("The AI assistant returned no answer.")
                         except Exception as e:
                             import traceback
                             traceback.print_exc()
                             st.warning(
-                                "Gemini is temporarily unavailable "
+                                "The AI assistant is temporarily unavailable "
                                 f"({type(e).__name__}). "
                                 "You can still review the evidence below."
                             )
@@ -2930,4 +2999,4 @@ if active_section == "AI Assistant":
             "Managers should verify suggested orders and review flagged items before acting."
         )
 
-render_footer()
+
