@@ -386,6 +386,10 @@ def render_unified_project_header():
     .unified-walmart-header .uh-banner {display:flex;align-items:center;gap:22px;
       padding:22px 24px;background:linear-gradient(105deg,#192c5f,#304e85);
       border-bottom:1px solid rgba(255,255,255,.23);position:relative}
+    /* Restore the original Walmart banner's gold diagonal accent on the far right. */
+    .unified-walmart-header .uh-banner::after {content:"";position:absolute;
+      right:24px;top:0;bottom:0;width:15px;background:#ffc529;
+      transform:skewX(-31deg);pointer-events:none}
     .unified-walmart-header .uh-brand {display:flex;align-items:center;gap:9px;
       font-size:20px;font-weight:800;white-space:nowrap}
     .unified-walmart-header .uh-spark {font-size:31px;color:#ffc529;line-height:1}
