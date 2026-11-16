@@ -316,11 +316,10 @@ def manager_review_steps(flags):
 render_dashboard_theme()
 render_dashboard_banner()
 
-# Course and team information: moved from the old footer to the top.
-st.markdown("**University of Illinois Chicago · IDS 560 Analytics Capstone · Fall 2026**")
-st.markdown("**Project team:** Keta Patel · Galvin Kao · Tyler Yuen · Mengxi Fan · Mengyi Wang  |  **Advisor:** Professor Fatemeh Sarayloo")
-with st.expander("Team profiles, contacts & GitHub", expanded=False):
-    render_footer()
+# Show the existing project/team card directly beneath the dashboard banner.
+# It already includes the university, course, project team, advisor, and links;
+# no duplicate headings or collapsible section are necessary.
+render_footer()
 
 
 st.markdown(
