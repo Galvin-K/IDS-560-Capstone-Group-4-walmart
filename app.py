@@ -1525,6 +1525,65 @@ if active_section == "Demand Forecasting":
     fig_depts = go.Figure(go.Bar(x=dept_summary["dept_id"], y=dept_summary["predicted_demand"], marker_color="#0071ce"))
     fig_depts.update_layout(title="Demand by department", xaxis_title="Department", yaxis_title=f"{dept_horizon}-day predicted units", height=360)
     st.plotly_chart(fig_depts, use_container_width=True)
+    # Daily aggregated demand forecast
+
+    render_section_heading("Department daily demand chart")
+
+    st.write(
+        "Total predicted units sold each day across "
+        "the selected department's included products."
+    )
+
+    department_daily_horizon = demand_section_period("Department daily chart period", "department_daily_horizon")
+    department_daily_source = demand_section_data(department_daily_horizon)
+    daily_chart_dept = st.selectbox("Department to chart", dept_options, key="daily_chart_dept")
+    daily_dept_filtered = department_daily_source[department_daily_source["dept_id"] == daily_chart_dept]
+    daily = (
+        daily_dept_filtered.groupby("date", as_index=False)["forecast"]
+        .sum()
+        .sort_values("date")
+    )
+
+    # Convert datetime to categorical labels
+    # This prevents unusually thin bars
+
+    daily["date_label"] = (
+        daily["date"].dt.strftime("%b %d")
+    )
+
+    fig_overview = go.Figure()
+
+    fig_overview.add_trace(
+        go.Bar(
+            x=daily["date_label"],
+            y=daily["forecast"],
+            name="Predicted Demand",
+            marker_color="#0071ce",
+            text=daily["forecast"].round(1),
+            textposition="outside",
+            width=0.6
+        )
+    )
+
+    fig_overview.update_layout(
+        title=f"{department_daily_horizon}-Day Predicted Demand",
+        xaxis_title="Forecast Date",
+        yaxis_title="Predicted Units per Day",
+        xaxis_type="category",
+        bargap=0.25,
+        height=430,
+        margin=dict(t=65, b=55),
+        yaxis=dict(rangemode="tozero"),
+        showlegend=False
+    )
+
+    st.plotly_chart(
+        fig_overview,
+        use_container_width=True
+    )
+
+    st.divider()
+
     render_section_heading("Product-level demand forecast")
     product_horizon = demand_section_period("Product forecast period", "product_forecast_horizon")
     product_view_df = demand_section_data(product_horizon)
@@ -1691,64 +1750,6 @@ if active_section == "Demand Forecasting":
             "not guaranteed sales limits. We use the model's pooled prediction ranges; "
             "these are individual daily estimates, not a calibrated range for total demand across the selected period."
         )
-
-    st.divider()
-
-    # Daily aggregated demand forecast
-
-    render_section_heading("Department daily demand chart")
-
-    st.write(
-        "Total predicted units sold each day across "
-        "the selected department's included products."
-    )
-
-    department_daily_horizon = demand_section_period("Department daily chart period", "department_daily_horizon")
-    department_daily_source = demand_section_data(department_daily_horizon)
-    daily_dept_filtered = department_daily_source[department_daily_source["dept_id"] == forecast_dept]
-    daily = (
-        daily_dept_filtered.groupby("date", as_index=False)["forecast"]
-        .sum()
-        .sort_values("date")
-    )
-
-    # Convert datetime to categorical labels
-    # This prevents unusually thin bars
-
-    daily["date_label"] = (
-        daily["date"].dt.strftime("%b %d")
-    )
-
-    fig_overview = go.Figure()
-
-    fig_overview.add_trace(
-        go.Bar(
-            x=daily["date_label"],
-            y=daily["forecast"],
-            name="Predicted Demand",
-            marker_color="#0071ce",
-            text=daily["forecast"].round(1),
-            textposition="outside",
-            width=0.6
-        )
-    )
-
-    fig_overview.update_layout(
-        title=f"{department_daily_horizon}-Day Predicted Demand",
-        xaxis_title="Forecast Date",
-        yaxis_title="Predicted Units per Day",
-        xaxis_type="category",
-        bargap=0.25,
-        height=430,
-        margin=dict(t=65, b=55),
-        yaxis=dict(rangemode="tozero"),
-        showlegend=False
-    )
-
-    st.plotly_chart(
-        fig_overview,
-        use_container_width=True
-    )
 
     st.divider()
 
