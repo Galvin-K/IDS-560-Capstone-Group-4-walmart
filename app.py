@@ -78,6 +78,132 @@ def generate_answer(prompt: str, *, key: str,
 
 
 
+# The nine-check framework is adapted from M5_RAG_3_agent_v4.ipynb.
+# Its order-specific checks are N/A for general forecast or historical questions.
+def check_assistant_response(answer, prompt, evidence, decision_date, filters=None,
+                             expected_order=None):
+    """Return a conservative automated validation audit; None means not applicable.
+
+    Automated heuristics cannot establish truth or causal support. They can detect
+    unsupported citation IDs, future-dated cited sources, many invented numbers,
+    and mismatches to structured order results when an order is supplied.
+    """
+    import re
+    from datetime import date
+
+    answer = str(answer or '')
+    filters = filters or {}
+    rows = [] if evidence is None else evidence.to_dict('records')
+    cite_matches = re.findall(r'\[(?:E)?(\d+)\]', answer, flags=re.I)
+    citation_indices = sorted({int(c) for c in cite_matches})
+    invalid = [n for n in citation_indices if n < 1 or n > len(rows)]
+    result = {
+        'quantity_correct': None,
+        'citations_valid': len(invalid) == 0,
+        'no_future_sources': True,
+        'reasons_cited': None,
+        'names_state_category': None,
+        'flags_reported': None,
+        'no_unsupported_claims': True,
+        'numbers_verified': True,
+        'confidence_stated': None,
+    }
+    for n in citation_indices:
+        if 1 <= n <= len(rows):
+            published = pd.to_datetime(rows[n-1].get('published'), errors='coerce')
+            # Unknown source dates should not be silently treated as verified.
+            if pd.isna(published) or published.date() > pd.Timestamp(decision_date).date():
+                result['no_future_sources'] = False
+
+    # Don't mistake citation IDs, item/store IDs, and known calendar dates for
+    # numerical claims. The research notebook uses a similar numeric heuristic.
+    def numeric_values(text):
+        text = re.sub(r'\[(?:E)?\d+\]', ' ', str(text), flags=re.I)
+        text = re.sub(r'\b\d{4}-\d{2}-\d{2}\b', ' ', text)
+        text = re.sub(r'\b[A-Za-z][A-Za-z0-9]*_(?:[A-Za-z0-9]+_)*\d+\b', ' ', text)
+        values = []
+        for match in re.finditer(r'(?<![\w.])[-−+]?\d[\d,]*(?:\.\d+)?', text):
+            raw = match.group().replace(',', '').replace('−', '-').lstrip('+')
+            try:
+                v = float(raw)
+            except ValueError:
+                continue
+            dec = len(raw.split('.')[1]) if '.' in raw else 0
+            if dec == 0 and (abs(v) <= 31 or 1990 <= abs(v) <= 2035):
+                continue
+            values.append((v, dec))
+        return values
+
+    known = [abs(v) for v, _ in numeric_values(prompt)]
+    unknown = []
+    for value, decimals in numeric_values(answer):
+        a = abs(value)
+        tol = 0.5 * 10 ** (-decimals) + 1e-8
+        if not any(abs(a - b) <= tol or abs(a-100*b) <= tol or
+                   abs(a / 100 - b) <= tol / 100 for b in known):
+            unknown.append(value)
+    result['numbers_verified'] = not unknown
+
+    bullets = [l.strip() for l in answer.splitlines()
+               if l.lstrip().startswith(('- ', '* ', '• '))]
+    if bullets and len(rows):
+        result['reasons_cited'] = (sum(bool(re.search(r'\[(?:E)?\d+\]', b, re.I))
+                                       for b in bullets) / len(bullets)) >= 0.8
+    # The notebook checks state/category naming for item-specific orders.
+    # For a scoped QA question, apply it only when both are unambiguous.
+    store_ids = list(filters.get('stores') or [])
+    departments = list(filters.get('departments') or [])
+    states = {store.split('_')[0] for store in store_ids}
+    categories = {dept.split('_')[0] for dept in departments}
+    if len(states) == 1 and len(categories) == 1:
+        state_names = {'CA': 'California', 'TX': 'Texas', 'WI': 'Wisconsin'}
+        category_words = {'FOODS': 'food', 'HOBBIES': 'hobb', 'HOUSEHOLD': 'household'}
+        state = next(iter(states)); category = next(iter(categories))
+        state_term = state_names.get(state, state).lower()
+        category_term = category_words.get(category, category.lower())
+        lower = answer.lower()
+        result['names_state_category'] = (state_term in lower or
+            bool(re.search(r'\b' + re.escape(state) + r'_\d+\b', answer))) and category_term in lower
+
+    # Flags and quantity are checked only if the assistant actually receives a
+    # computed order profile. The generic QA tab does not currently supply one.
+    if expected_order:
+        import math
+        match = re.search(r'(?im)^\s*(?:\*\*)?Recommendation(?:\*\*)?:\s*(.*)$', answer)
+        rec = match.group(1) if match else ''
+        rec_values = {int(float(x)) for x in re.findall(r'\b\d+(?:\.\d+)?\b', rec)}
+        needed = {int(expected_order['order_qty'])}
+        if expected_order.get('hold'):
+            needed.add(int(expected_order['if_confirmed_order_qty']))
+        result['quantity_correct'] = needed.issubset(rec_values)
+        flags = expected_order.get('flags') or []
+        flag_words = {'NEW_ITEM': ('new item', 'new product', 'launch'),
+                      'POSSIBLE_STOCKOUT': ('stockout', 'stock-out', 'shelf'),
+                      'POSSIBLY_DISCONTINUED': ('discontinu', 'still carr', 'still sold')}
+        result['flags_reported'] = all(any(w in answer.lower() for w in flag_words.get(str(flag), (str(flag).lower(),)))
+                                       for flag in flags) and (not expected_order.get('hold') or 'hold' in answer.lower())
+        confidence = expected_order.get('confidence')
+        if confidence:
+            result['confidence_stated'] = bool(re.search(r'Forecast confidence:\s*\**' + re.escape(confidence), answer, re.I))
+
+    # Check external factual claims in bullet points; do not treat a statement
+    # about missing evidence as an unsupported factual claim.
+    external = re.compile(r'\b(?:storm|snow|weather|rain|SNAP|inflation|unemployment|promotion|economic|hurricane)\b', re.I)
+    negative = re.compile(r'\b(?:no|not|cannot|unavailable|missing|without)\b', re.I)
+    result['no_unsupported_claims'] = not any(external.search(b) and not negative.search(b)
+        and not re.search(r'\[(?:E)?\d+\]', b, re.I) for b in bullets)
+    critical = ('quantity_correct', 'citations_valid', 'no_future_sources',
+                'flags_reported', 'numbers_verified')
+    failed_critical = [k for k in critical if result[k] is False]
+    failed_other = [k for k, val in result.items() if val is False and k not in critical]
+    result['critical_failures'] = failed_critical
+    result['other_failures'] = failed_other
+    result['unknown_numbers'] = unknown[:15]
+    result['explanation_check'] = ('Needs correction' if failed_critical else
+                                   'Review suggested' if failed_other else 'Checks passed')
+    return result
+
+
 def readable_caption(message: object) -> None:
     """Display supporting dashboard text with readable contrast.
 
@@ -1680,6 +1806,31 @@ if active_section == "Model Insights":
             "`M5_RAG_4_evaluation_v4.ipynb`."
         )
 
+    st.subheader("Inventory Risk Detection: Historical Flagging Evaluation")
+    readable_caption(
+        "The research evaluated whether review flags identified products that might "
+        "not be actively selling. These numbers are from the notebook's historical "
+        "evaluation, not from live inventory monitoring."
+    )
+    f1, prec, reduction = st.columns(3)
+    f1.metric("Flagging F1", "0.58", help="F1 balances precision and recall on historical test cases.")
+    prec.metric("Flagging precision", "0.57", help="About 57% of the flagged cases matched the evaluation's defined outcome.")
+    reduction.metric("Fewer orders held", "33%", help="Relative to the previous 14-plus zero-sales-days rule.")
+    with st.expander("How the item-review flags were evaluated", expanded=False):
+        st.markdown(
+            "The new policy distinguishes **new items**, **possible stockouts**, and "
+            "**possibly discontinued items**. It reduces the number of orders held "
+            "for review compared with the original 14-day zero-sales rule while "
+            "maintaining similar F1 in the research evaluation."
+        )
+        readable_caption(
+            "For a held item, the app displays zero immediately approved units "
+            "and separately shows the conditional amount if a manager confirms the item. "
+            "The flags are signals for review, not proof that shelves are empty or "
+            "the item has been discontinued. Source: `M5_RAG_3_agent_v4.ipynb` "
+            "and the team's final presentation, slide 25."
+        )
+
     # Extra diagnostics supplement the headline model-selection WAPE comparison.
     st.subheader("4. Additional Seven-Day Diagnostics")
     a, b, c = st.columns(3)
@@ -3176,6 +3327,8 @@ if active_section == "AI Assistant":
                 "retrieval_error": retrieval_error,
                 "answer": previous.get("answer") if same_question else None,
                 "answer_error": previous.get("answer_error") if same_question else None,
+                "validation": previous.get("validation") if same_question else None,
+                "validation_retried": previous.get("validation_retried", False) if same_question else False,
             }
             # Store interim results even if an external LLM call fails.
             st.session_state["assistant_result_v2"] = result
@@ -3241,10 +3394,42 @@ if active_section == "AI Assistant":
                                     "OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL
                                 )
                             )
-                            result["answer"] = generate_answer(
-                                prompt, key=key, model=configured_model
+                            candidate = generate_answer(prompt, key=key, model=configured_model)
+                            audit = check_assistant_response(
+                                candidate, prompt, evidence, decision_date, requested_filters
                             )
-                        result["answer_error"] = None
+                            result["validation_retried"] = False
+                            # Retry once only for substantive critical failures.
+                            if audit["critical_failures"]:
+                                result["validation_retried"] = True
+                                correction = (
+                                    prompt + "\n\nYour previous response failed these automated checks: "
+                                    + ", ".join(audit["critical_failures"])
+                                    + ". Unverified numbers: " + str(audit["unknown_numbers"])
+                                    + ". Rewrite the complete answer. Quote only numbers in the supplied "
+                                    "structured facts; cite ONLY supplied passages using [1], [2], etc.; "
+                                    "do not invent external events or calculate new percentages.\n\n"
+                                    "Previous answer:\n" + candidate[:3500]
+                                )
+                                candidate = generate_answer(correction, key=key, model=configured_model)
+                                audit = check_assistant_response(
+                                    candidate, prompt, evidence, decision_date, requested_filters
+                                )
+                            result["validation"] = audit
+                            if audit["critical_failures"]:
+                                # Do not show a failed generated response as verified.
+                                result["answer"] = (
+                                    "I couldn't verify the generated explanation against the "
+                                    "supplied forecast figures and source dates. "
+                                    "Please use the verified numerical lookup and source excerpts below "
+                                    "rather than relying on an unverified explanation."
+                                )
+                                result["answer_error"] = (
+                                    "Automated checks still failed after one correction attempt."
+                                )
+                            else:
+                                result["answer"] = candidate
+                                result["answer_error"] = None
                     except Exception as error:
                         result["answer_error"] = ("The AI Assistant could not generate a response "
                                                   f"({type(error).__name__}).")
@@ -3266,6 +3451,38 @@ if active_section == "AI Assistant":
             else:
                 st.info("Historical evidence is available below. Select **Ask AI Assistant** "
                         "to generate an explanation.")
+            if result.get("answer_error") and result.get("answer"):
+                st.warning(result["answer_error"])
+
+        validation = result.get("validation")
+        if validation:
+            with st.expander("AI response checks (automatic; not human verification)", expanded=False):
+                status = validation["explanation_check"]
+                st.write(f"**Status:** {status}" +
+                         (" · one correction attempt" if result.get("validation_retried") else ""))
+                label_map = {
+                    "quantity_correct": "Suggested order matches computed quantity",
+                    "citations_valid": "Citation numbers exist in retrieved sources",
+                    "no_future_sources": "Cited sources predate the decision",
+                    "reasons_cited": "Most bullet-point reasons cite sources",
+                    "names_state_category": "Store state and category named",
+                    "flags_reported": "Order holds and flags described",
+                    "no_unsupported_claims": "No obvious uncited outside claims in bullet points",
+                    "numbers_verified": "Numerical claims match supplied values",
+                    "confidence_stated": "Item forecast confidence matches policy",
+                }
+                check_rows = [
+                    {"Check": label_map[name],
+                     "Result": "Not applicable" if value is None else
+                               ("Pass" if value else "Review")}
+                    for name, value in validation.items() if name in label_map
+                ]
+                st.dataframe(pd.DataFrame(check_rows), hide_index=True,
+                             use_container_width=True)
+                st.caption("These checks are adapted from the research notebook. "
+                           "The general question-answering mode has no computed order profile, "
+                           "so order-specific checks are not applicable. Automatic rules can "
+                           "miss incorrect claims and should not replace human review.")
 
         evidence = result["evidence"]
         retrieved_with_v4 = result["retrieved_with_v4"]
