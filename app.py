@@ -707,7 +707,7 @@ st.markdown(
     "and review suggested orders for your store. You can change starting stock when you know the actual quantity."
 )
 readable_caption(
-    "Based on historical Walmart sales. Forecasts shown here begin January 1, 2016."
+    "Historical Walmart sales data · Forecast period begins January 1, 2016."
 )
 
 with st.expander("Which planning period should I use?", expanded=False):
@@ -747,9 +747,8 @@ with st.expander("About the Forecast & Data", expanded=False):
         "The dataset does **not** provide actual stock on hand, supplier delivery times, "
         "or purchase orders, so the inventory-planning inputs are estimates. "
         "You can enter a product's actual starting stock in Inventory Planning.\n\n"
-        "The forecasts displayed here begin **January 1, 2016**. Seven-day demand views "
-        "and the separate 14-day replenishment plan use historical model outputs, "
-        "not live inventory records."
+        "Use the 7-day view to assess potential shortages and the 14-day plan for "
+        "suggested replenishment orders."
     )
 
 # 4. SIDEBAR NAVIGATION & FILTERS
@@ -821,8 +820,7 @@ effective_inventory_mode = "Simulated inventory"
 missing_inventory_policy = "Use simulated inventory"
 with st.sidebar.expander("How we estimate inventory", expanded=False):
     readable_caption(
-        "Estimated inventory uses forecast-based starting-stock assumptions, "
-        "not actual Walmart on-hand records. You can manually adjust an "
+        "Starting inventory uses forecast-based estimates. You can manually adjust an "
         "individual product's stock in Inventory Planning."
     )
 
@@ -1045,12 +1043,11 @@ if active_section == "Executive Overview":
 
     render_section_heading("7-Day Demand & Stock Gap Overview")
     readable_caption(
-        "Identify products that may run short based on expected demand and estimated inventory."
+        "Identify products whose forecast demand may exceed starting stock."
     )
 
     readable_caption(
-        "Delivery time defaults to 7 days. To use a shorter delivery estimate, "
-        "open Inventory assumptions below."
+        "Delivery estimate: 7 days by default (adjustable below)."
     )
     with st.expander("Inventory assumptions", expanded=False):
         inv_scope = "All departments"
@@ -1070,8 +1067,7 @@ if active_section == "Executive Overview":
                  "Longer delivery times require a separate forecast-based assessment."
         )
         readable_caption(
-            "Dollar values use each product's historical selling price, "
-            "not the supplier's purchase cost."
+            "Dollar estimates use historical retail selling prices, not wholesale costs."
         )
 
     if inv_lead_days != 7:
@@ -1192,9 +1188,8 @@ if active_section == "Executive Overview":
                 "forecasting/m5_prices_asof_2015_12_31.csv.gz (generated from M5 sell_prices.csv).")
 
     readable_caption(
-        "The seven-day value covers whole units needed to close the forecast gap. "
-        "Sales at risk counts only expected shortages before a delivery could arrive. "
-        "Both use historical selling prices, not supplier costs."
+        "Gap value covers the full seven days; sales at risk counts only the shortfall "
+        "before the expected delivery. Both use historical selling prices."
     )
     with st.expander("How we calculate these seven-day indicators", expanded=False):
         st.write(
@@ -1444,11 +1439,8 @@ if active_section == "Executive Overview":
                         )
 
     readable_caption(
-        "Inventory uses estimated starting stock unless manually changed. "
-        "Units to cover address "
-        "point-forecast gaps, not validated purchase orders. "
-        "Figures exclude products outside the forecasting "
-        "sample. Dollar values use historical selling prices, not supplier costs."
+        "Comparisons include only products in our forecast sample. "
+        "A stock gap indicates a potential shortage, not a suggested order."
     )
 
     st.divider()
@@ -1512,10 +1504,9 @@ if active_section == "Executive Overview":
             )
 
     readable_caption(
-        "This seven-day ranking estimates the retail value of predicted demand exceeding starting stock, "
-        "using historical selling prices and assuming no replenishment during the seven days. "
-        "It is different from the shorter lead-time sales-at-risk KPI above. "
-        "Missing-price items have no dollar estimate; these are not confirmed lost sales."
+        "Ranked by the seven-day value of forecast demand above starting stock. "
+        "This differs from sales at risk, which covers only the expected delivery period. "
+        "Products without a recorded price have no dollar estimate."
     )
 
 # ============================================================
@@ -1821,7 +1812,7 @@ if active_section == "Model Insights":
                  help="Forecast error measured in units, giving larger misses more weight.")
         c.metric("P10–P90 coverage", "77.7%",
                  help="Share of actual daily observations within prediction bounds; target was 80%.")
-        readable_caption("2016 held-out 50% sample; these are historical diagnostics, not live results.")
+        readable_caption("2016 held-out sample (15,245 item–store series).")
 
         st.subheader("5. Forecast Error Across 7, 14 and 28 Days")
         poster_horizons = pd.DataFrame({
@@ -1848,7 +1839,6 @@ if active_section == "Model Insights":
             "with safety stock for replenishment decisions."
         )
         readable_caption(
-            "2016 held-out test, 50% item-store sample. "
             "Source: `04_M5_LightGBM_Final_Forecasting.ipynb`."
         )
 
@@ -1866,8 +1856,7 @@ if active_section == "Model Insights":
         with st.expander(" Explore detailed model comparisons and segment results", expanded=False):
             st.subheader("1. Which forecasting method performed best?")
             st.markdown("**Historical test: comparing five forecast methods**")
-            readable_caption("2016 held-out test, 50% item-store sample. These are aggregate results, not live product predictions. "
-                       "TSB and SES were exploratory comparisons; LightGBM remains our selected model.")
+            readable_caption("TSB and SES were exploratory comparisons; LightGBM remains the selected forecast model.")
             comparison_horizon = st.radio(
                 "Comparison period", [7, 14, 28],
                 format_func=lambda d: f"{d} days", horizontal=True,
@@ -2021,19 +2010,17 @@ if active_section == "Model Insights":
 
             readable_caption(
                 "**Notebook filenames:** `03_M5_Statistical_Model_Exploration.ipynb`; "
-                "`04_M5_LightGBM_Final_Forecasting.ipynb`. "
-                "All charts above report historical research results, not live accuracy or order costs."
+                "`04_M5_LightGBM_Final_Forecasting.ipynb`."
             )
 
     with ai_tab:
         st.markdown("## RAG, AI Assistant & Inventory Risk")
-        st.write("Research evaluation of evidence retrieval, answer quality, and manager-review flags. These results are from historical notebook tests, not live dashboard measurements.")
+        st.write("Historical research evaluation of retrieval, answer quality, and manager-review flags (not live dashboard measurements).")
 
         st.subheader("AI Assistant: Held-Out Research Evaluation")
         readable_caption(
             "Our research compared four AI approaches on 36 new 2016 cases, "
-            "with two runs per system (72 runs each). These are automatically "
-            "scored research-agent results, not measurements of this live dashboard."
+            "with two runs per system (72 runs each), scored automatically."
         )
         agent_eval = pd.DataFrame({
             "Approach": ["Direct LLM", "Basic RAG", "RAG agent", "Agent + validation"],
@@ -2105,20 +2092,14 @@ if active_section == "Inventory Planning":
         "Use the seven-day stock check to see which products might run short. "
         "Use the 14-day replenishment plan to review suggested orders, safety stock, and manager holds."
     )
-    readable_caption(
-        "The historical sales dataset does not include actual stock on hand or supplier lead times. "
-        "We start with estimates and let you enter a different stock level for any product."
-    )
-
     render_section_heading("Products That May Run Short")
     action_horizon = st.radio(
         "Action list forecast period", [7, 14], horizontal=True,
         format_func=lambda days: f"{days} days", key="action_list_horizon",
     )
     readable_caption(
-        f"{action_horizon}-day stock-gap check (no new deliveries). This list highlights "
-        "potential shortages; use the separate 14-day replenishment plan for ordering "
-        "recommendations that include safety stock and review holds."
+        f"{action_horizon}-day shortage screening, assuming no deliveries. "
+        "For suggested order quantities, use Recommended Replenishment Orders below."
     )
     inv_only = st.checkbox(
         "Show shortages and high-demand monitoring only",
@@ -2234,9 +2215,8 @@ if active_section == "Inventory Planning":
         mime="text/csv", key=f"inv_overview_download_{action_horizon}"
     )
     readable_caption(
-        "*High-demand scenario sums individual daily upper estimates; it is not "
-        "a calibrated 7- or 14-day prediction interval. Starting stock remains "
-        "the same estimate or manual override in both views."
+        "*High-demand scenario sums daily upper estimates; it is not a calibrated "
+        "multi-day prediction interval."
     )
 
     # The seven-day estimated-order list was removed because its gap-only
@@ -2432,11 +2412,8 @@ if active_section == "Inventory Planning":
                             st.markdown("[Go to Product Inventory Details](#product-inventory-details)")
                 
                 readable_caption(
-                    "Suggested orders use a 14-day demand forecast plus safety stock, "
-                    "less estimated on-hand stock. Incoming stock is assumed zero in "
-                    "this store-wide list. For product-specific incoming orders, "
-                    "open Product Inventory Details below. These are planning "
-                    "estimates, not actual purchase orders."
+                    "Store-wide orders assume zero incoming units. To include an incoming shipment "
+                    "for a specific product, enter it in Product Inventory Details."
                 )
         except (ValueError, KeyError, FileNotFoundError, TypeError, ImportError) as exc:
             st.error(f"Cannot load 14-day ordering recommendations: {type(exc).__name__}: {exc}")
@@ -2504,7 +2481,7 @@ if active_section == "Inventory Planning":
             if not selected_inventory_row.empty else "Simulated"
         )
         st.metric("Starting Stock (units)", f"{on_hand:,}")
-        readable_caption(f"Inventory source: {'Estimated' if selected_source == 'Simulated' else selected_source}. Adjust starting stock using the manual override above.")
+        readable_caption("Starting stock is estimated unless you use the manual override above.")
 
     with col2:
         st.metric(
@@ -2570,8 +2547,7 @@ if active_section == "Inventory Planning":
                             "A hold is a system-generated restriction that prevents a "
                             "suggested order from being approved until the flagged issue "
                             "has been reviewed. It is separate from forecast confidence.\n\n"
-                            "*This dashboard simulates order decisions and does not "
-                            "block or place real orders.*"
+                            "*The review flag is advisory; it does not process an order.*"
                         )
                 if v4_selected['hold']:
                     review_steps = manager_review_steps(
@@ -2596,8 +2572,7 @@ if active_section == "Inventory Planning":
                 else:
                     st.success(
                         "**No hold** — No additional manager review is required by the system. "
-                        "The suggested order can proceed through the normal approval process "
-                        "(historical simulation only)."
+                        "The suggested quantity is available for normal manager approval."
                     )
                 # Keep forecast confidence separate from the ordering hold decision.
                 # The hold warning above determines whether an order may proceed.
@@ -2641,12 +2616,12 @@ if active_section == "Inventory Planning":
                         readable_caption("Review flags: " + flags.replace("_", " ").title())
                     if holds and holds.lower() != "nan":
                         readable_caption("Hold reasons: " + holds.replace("_", " ").title())
-                readable_caption(
-                    f"Inventory position: {v4_selected['inventory_position']:,.0f} units "
-                    f"({on_hand:,} on hand + {int(policy_on_order):,} on order). "
-                    f"Safety stock method: {v4_selected.get('safety_stock_method','historical v4 policy')}. "
-                    "This is historical decision support, not a validated purchase order."
-                )
+                with st.expander("Order calculation details", expanded=False):
+                    st.write(
+                        f"Inventory position: {v4_selected['inventory_position']:,.0f} units "
+                        f"({on_hand:,} on hand + {int(policy_on_order):,} on order). "
+                        f"Safety stock method: {v4_selected.get('safety_stock_method','historical v4 policy')}."
+                    )
 
         except (ValueError, KeyError, FileNotFoundError, TypeError, ImportError) as exc:
             st.error(f"Cannot load precomputed v4 inventory decisions: {type(exc).__name__}: {exc}")
@@ -2686,9 +2661,8 @@ if active_section == "Inventory Planning":
             "different research scenario is selected."
         )
         readable_caption(
-            "Historical backtest from `M5_RAG_5_benchmark_v4.ipynb`. "
-            "Simulated starting inventory; results are not real Walmart stockouts "
-            "or measured inventory costs."
+            "Historical ordering-policy backtest: `M5_RAG_5_benchmark_v4.ipynb`. "
+            "Coverage and leftover stock are simulation results, not measured inventory costs."
         )
 
     # A separate 7/14-day stock check for the main selected item.
@@ -2818,8 +2792,8 @@ if active_section == "Inventory Planning":
     )
 
     if runway_horizon == 14:
-        readable_caption("The 14-day stock chart uses a separate historical forecast output and keeps "
-                   "starting stock fixed. It does not apply the replenishment order or assume a delivery.")
+        readable_caption("The 14-day stock chart uses its own forecast and shows stock without deliveries "
+                   "or new replenishment orders.")
 
     # Daily stock graphs (not purchase recommendations) use the selected horizon.
     runway_source = (
@@ -3002,9 +2976,8 @@ if active_section == "Inventory Planning":
         )
 
         readable_caption(
-            "Colors reflect estimated stock levels and cumulative "
-            "demand. Summed daily P90 values are illustrative, "
-            "not calibrated multi-day prediction intervals."
+            "Colors compare starting stock with cumulative demand. Summed daily P90 values "
+            "are illustrative, not calibrated multi-day intervals."
         )
 
         with product_inspection_slot:
@@ -3157,16 +3130,12 @@ if active_section == "Inventory Planning":
                 )
 
                 st.info(
-                    "Estimated stock scenarios use predefined assumptions; manual "
-                    "values are user-provided and not independently verified. Summed daily "
-                    "P90 values are not calibrated weekly P90 "
-                    "prediction intervals."
+                    "Manual stock overrides replace these predefined scenarios. "
+                    "Summed daily P90 values are not calibrated multi-day intervals."
                 )
 
             readable_caption(
-                "Potential shortages are calculated when cumulative predicted "
-                "demand exceeds estimated starting inventory. "
-                "These are estimated gaps, not observed lost sales."
+                "A shortage begins when cumulative expected demand exceeds starting stock."
             )
 
             if day_record["point_balance"] < 0:
@@ -3186,11 +3155,7 @@ if active_section == "Inventory Planning":
                 )
 
             readable_caption(
-                "Projected balances are capped at zero for display. "
-                "Unmet demand is not shown as negative physical stock. "
-                "This runway uses the estimated inventory source "
-                "used throughout the dashboard. "
-                ""
+                "Balances stop at zero; unmet demand is shown separately rather than as negative stock."
             )
 
     st.divider()
@@ -3639,7 +3604,7 @@ if active_section == "AI Assistant":
                 st.markdown("**Store shortage comparison**")
                 st.dataframe(store_gaps.round({"forecast": 2, "shortage": 2}),
                              hide_index=True, use_container_width=True)
-            st.caption(f"{result['n_series']:,} item-store series; stock is simulated or manually entered.")
+            st.caption(f"{result['n_series']:,} item-store series in the selected analysis scope.")
             with st.expander("Full calculation audit"):
                 st.text(result["scope_context"])
 
@@ -3671,8 +3636,7 @@ if active_section == "AI Assistant":
             "The additional stock also increased leftover inventory."
         )
         readable_caption(
-            "These are results from our team's historical tests, not measurements "
-            "of current Walmart operations."
+            "Results shown here come from the research evaluation notebooks."
         )
 
         st.markdown(
