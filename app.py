@@ -2989,7 +2989,7 @@ if active_section == "AI Assistant":
     }
     div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="primary"],
     div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-primaryFormSubmit"] {
-        color:#fff !important;background:#b83248 !important;border-color:#b83248 !important;
+        color:#fff !important;background:#1f3368 !important;border-color:#1f3368 !important;
         font-size:15px !important;font-weight:700 !important;min-height:45px !important;
     }
     div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="primary"] p,
