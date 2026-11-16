@@ -2969,31 +2969,72 @@ if active_section == "Inventory Planning":
 # AI ASSISTANT
 
 if active_section == "AI Assistant":
-    st.subheader("Ask about demand and inventory")
-    readable_caption("Ask a question about stores, products, or past sales patterns. "
-               "The assistant checks forecast data and historical references; it does not change orders.")
-
-    with st.expander("Forecast uncertainty notes"):
-        st.write(
-            "Daily P10/P90 values are model uncertainty estimates. "
-            "Their sums across seven days are illustrative scenarios, "
-            "not calibrated multi-day prediction intervals."
-        )
-
-    st.write(
-        "Ask a question about historical demand factors. "
-        "The assistant retrieves evidence available at the "
-        "forecast decision date."
-    )
+    # Restrict style changes to the assistant form and answer card, leaving
+    # other dashboard tabs and their existing design untouched.
+    st.markdown("""<style>
+    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) {
+        border:1px solid #d4dfec !important;
+        background:#fff !important;
+        border-radius:12px !important;
+        padding:20px 22px !important;
+        box-shadow:0 2px 10px rgba(24,50,98,.045);
+    }
+    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) label p {
+        color:#172e58 !important;font-size:15px !important;font-weight:650 !important;
+    }
+    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) textarea {
+        color:#142747 !important;background:#fff !important;
+        font-size:15px !important;line-height:1.6 !important;
+        border-color:#becce0 !important;
+    }
+    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="primary"],
+    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-primaryFormSubmit"] {
+        color:#fff !important;background:#b83248 !important;border-color:#b83248 !important;
+        font-size:15px !important;font-weight:700 !important;min-height:45px !important;
+    }
+    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="primary"] p,
+    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-primaryFormSubmit"] p {
+        color:#fff !important;font-size:15px !important;font-weight:700 !important;
+    }
+    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="secondary"],
+    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-secondaryFormSubmit"] {
+        background:#fff !important;color:#1c386b !important;
+        border:1px solid #a9bcd6 !important;font-size:15px !important;
+        font-weight:650 !important;min-height:45px !important;
+    }
+    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="secondary"] p,
+    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-secondaryFormSubmit"] p {
+        color:#1c386b !important;font-size:15px !important;font-weight:650 !important;
+    }
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] p,
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] li {
+        color:#1c2f50 !important;font-size:16px !important;line-height:1.8 !important;
+    }
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] strong {
+        color:#142a54 !important;
+    }
+    .st-key-ai_response_card {background:#fff !important;
+        border:1px solid #d9e2ef !important;border-radius:12px !important;
+        box-shadow:0 2px 10px rgba(24,50,98,.045);padding:12px 18px !important;}
+    </style>""", unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#142a54;font-size:29px;line-height:1.3;font-weight:750;'
+                'margin:8px 0 7px">AI Assistant</h2>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#3c516f;font-size:16px;line-height:1.6;'
+                'margin:0 0 15px">Ask about product demand, store comparisons, and past sales patterns. '
+                'Explore the forecast figures alongside dated historical evidence.</p>',
+                unsafe_allow_html=True)
 
     decision_date = pd.Timestamp(
         df["forecast_origin"].max()
     ).normalize()
-
-    readable_caption(
-        f"Assistant scope is determined by the question, not dashboard filters. "
-        f"Historical evidence cutoff: {decision_date.date()}"
-    )
+    with st.expander("About the data and AI answers", expanded=False):
+        readable_caption(
+            "The assistant answers based on the scope in your question, not the sidebar store. "
+            f"Historical sources are limited to {decision_date.date()} or earlier. "
+            "It provides decision support, not automatic order approvals."
+        )
+        st.write("Daily P10–P90 forecasts describe uncertainty; adding daily bounds "
+                 "does not produce a calibrated multi-day prediction interval.")
 
     scope_choice = st.selectbox("Analysis scope", SCOPES, index=0, key="assistant_scope")
 
@@ -3213,15 +3254,18 @@ if active_section == "AI Assistant":
     if assistant_result:
         result = assistant_result
         filters = result["requested_filters"]
-        st.markdown("### Answer & supporting evidence")
-        st.caption(f"Question: {result['question']}")
-        if result.get("answer"):
-            st.markdown(result["answer"])
-        elif result.get("answer_error"):
-            st.warning(result["answer_error"])
-        else:
-            st.info("Historical evidence is ready below. Click **Ask AI Assistant** "
-                    "to generate an explanation based on these sources and the forecast data.")
+        st.markdown('<h3 style="color:#142a54;font-size:23px;font-weight:750;'
+                    'margin:20px 0 10px">Answer</h3>', unsafe_allow_html=True)
+        with st.container(key="ai_response_card", border=True):
+            st.markdown(f"**Your question:** {result['question']}")
+            st.divider()
+            if result.get("answer"):
+                st.markdown(result["answer"])
+            elif result.get("answer_error"):
+                st.warning(result["answer_error"])
+            else:
+                st.info("Historical evidence is available below. Select **Ask AI Assistant** "
+                        "to generate an explanation.")
 
         evidence = result["evidence"]
         retrieved_with_v4 = result["retrieved_with_v4"]
