@@ -2036,7 +2036,7 @@ if active_section == "Inventory Planning":
     ])
 
     with stock_tab:
-        render_section_heading("Shortage Screening — 7 or 14 Days")
+        render_section_heading("Urgent Shortage Monitoring — 7 Days by Default")
         action_horizon = st.radio(
             "Shortage check period", [7, 14], horizontal=True,
             format_func=lambda days: f"{days} days", key="action_list_horizon",
@@ -2165,10 +2165,6 @@ if active_section == "Inventory Planning":
         # The seven-day estimated-order list was removed because its gap-only
         # quantities could conflict with the safety-stock-aware 14-day policy.
         # Forecasted stockout dates remain in the shortage-monitoring table above.
-
-    # Reserve the end of Stock Monitoring for the runway visualization.
-    # Its calculations depend on product settings prepared later below.
-    runway_slot = stock_tab.container()
 
     with stock_tab:
         render_section_heading("Routine Replenishment Plan — Next 14 Days")
@@ -2389,6 +2385,10 @@ if active_section == "Inventory Planning":
                 st.error(f"Cannot load 14-day ordering recommendations: {type(exc).__name__}: {exc}")
         else:
             st.info(order_message + ". The 14-day ordering CSV is needed for recommendations.")
+
+    # Display the runway AFTER the routine replenishment table. Its code executes
+    # later so it can reuse the existing inventory inputs and session state.
+    runway_slot = stock_tab.container()
 
     with replenish_tab:
         selected_held = st.session_state.get(f"review_queue_selected_{store}", [])
