@@ -1005,7 +1005,7 @@ if active_section == "Executive Overview":
             st.write("Review expected sales and possible shortages. Some demand charts also offer 14 days.")
         with col_order:
             st.markdown("**14 days — Plan replenishment**")
-            st.write("Review how much to order, including extra safety stock and items needing a manager's check.")
+            st.write("Cover demand until the next delivery and review, including safety stock and manager holds.")
         readable_caption("Model Insights includes historical 28-day evaluation results; replenishment recommendations remain based on 14 days.")
 
 
@@ -2366,31 +2366,14 @@ if active_section == "Inventory Planning":
                                 help="Choose one item for its order details or several for the same simulated review decision.",
                             )
                             if selected_review_items:
-                                chosen_first = selected_review_items[0]
                                 st.caption(
-                                    f"Order details below show **{chosen_first}**. "
+                                    f"Order details below show **{selected_review_items[0]}**. "
                                     + (f"Decisions will apply to all {len(selected_review_items)} selected products."
                                        if len(selected_review_items) > 1 else
-                                       "Manager decisions are temporary and do not place an order.")
-                                )
-                                decision_cols = st.columns(3)
-                                decision_cols[0].button(
-                                    "Approve selected", key=f"queue_approve_{store}",
-                                    on_click=record_selected_manager_decisions, args=(store, "Approved"),
-                                    type="primary", use_container_width=True,
-                                )
-                                decision_cols[1].button(
-                                    "Do not approve", key=f"queue_reject_{store}",
-                                    on_click=record_selected_manager_decisions, args=(store, "Rejected"),
-                                    use_container_width=True,
-                                )
-                                decision_cols[2].button(
-                                    "Reset selected", key=f"queue_reset_{store}",
-                                    on_click=record_selected_manager_decisions, args=(store, "Pending"),
-                                    use_container_width=True,
+                                       "Approval controls are at the end of this tab.")
                                 )
                             else:
-                                st.caption("Select one or more held products above to review an order and decide.")
+                                st.caption("Choose held products to review. Product-level order details remain available below even without a selection.")
                     readable_caption(
                         "Store-wide order quantities use simulated stock; the selected product's stock can be changed below."
                     )
@@ -2401,16 +2384,32 @@ if active_section == "Inventory Planning":
 
     with replenish_tab:
         selected_held = st.session_state.get(f"review_queue_selected_{store}", [])
-        if selected_held:
-            item = str(selected_held[0])
+        # Keep the selected-product plan visible before any review-queue selection.
+        # Prefer a high-priority order from the current store; queue picks override it.
+        default_policy_items = (
+            order_policy.sort_values(["demand_14d", "item_id"], ascending=[False, True])["item_id"].tolist()
+            if "order_policy" in locals() and not order_policy.empty else []
+        )
+        default_product = (default_policy_items[0] if default_policy_items else
+                           (str(store_df["item_id"].dropna().iloc[0]) if not store_df.empty else None))
+        if selected_held or default_product:
+            item = str(selected_held[0] if selected_held else default_product)
             dept_rows = store_df.loc[store_df["item_id"].eq(item), "dept_id"]
             dept = str(dept_rows.iloc[0]) if not dept_rows.empty else ""
             item_data = store_df.loc[store_df["item_id"].eq(item)].sort_values("date").copy()
             predicted_total = float(item_data["forecast"].sum())
             st.divider()
             render_section_heading("14-Day Replenishment | Selected Product")
-            st.caption(f"**{item}** · {dept} · {store} · Selected from Manager Review Queue")
-            st.caption("The order covers expected sales over 14 days: 7-day delivery lead time + 7-day review period.")
+            source_label = "Selected from Manager Review Queue" if selected_held else "Default product (select a held item in the queue to change it)"
+            st.caption(f"**{item}** · {dept} · {store} · {source_label}")
+            st.info(
+                "**Why 14 days?** The seven-day stock check shows possible shortages before "
+                "the next delivery. Replenishment instead uses a **14-day protection period**: "
+                "7 days until delivery + 7 days until the following stock review. "
+                "Therefore, the order calculation uses expected demand for all 14 days, "
+                "plus safety stock, minus available and incoming inventory. "
+                "These are two different decisions—not two contradictory forecasts."
+            )
             with st.expander("Set or override inventory for this product", expanded=False):
                 selected_key = (str(store), str(item))
                 override_enabled = st.checkbox(
@@ -2463,7 +2462,7 @@ if active_section == "Inventory Planning":
                 if not selected_inventory_row.empty else "Simulated"
             )
             st.caption(f"Starting stock: **{on_hand:,} units** ({selected_source}) · "
-                       f"7-day forecast: **{predicted_total:,.2f} units**")
+                       f"7-day demand (monitoring only): **{predicted_total:,.2f} units**")
 
             # REAL 14-DAY POLICY — precomputed using the team's v4 LightGBM model,
             # M5 history, safety stock, confidence and hold/review rules. The only
@@ -2483,7 +2482,7 @@ if active_section == "Inventory Planning":
                         key=f"v4_precomputed_on_order_{store}_{item}",
                         help="Units already ordered for the selected product, not included in current on-hand stock."
                     )
-                    ordering_cols[1].caption("Planning horizon: 14 days (7-day delivery + 7-day review period).")
+                    ordering_cols[1].caption("The order protects the full 14 days until the next delivery-and-review cycle.")
                     try:
                         v4_selected = offline_v4_recommendation(
                             item=item, store=store, on_hand=on_hand, on_order=int(policy_on_order)
@@ -2610,19 +2609,57 @@ if active_section == "Inventory Planning":
                     st.error(f"Cannot load precomputed v4 inventory decisions: {type(exc).__name__}: {exc}")
 
 
+    # Manager decision belongs at the END, after product calculations, confidence,
+    # and evidence. Decisions apply to the chosen held items only.
+    with replenish_tab:
+        st.divider()
+        st.markdown("#### Manager Decision")
+        selected_for_decision = st.session_state.get(f"review_queue_selected_{store}", [])
+        if selected_for_decision:
+            st.write(
+                f"Review the figures and hold reasons above before deciding for "
+                f"**{len(selected_for_decision)} selected product(s)**."
+            )
+            st.caption(
+                "Need supporting context? Open **AI Assistant** in the sidebar and ask about "
+                "the product or demand patterns. AI responses are advisory and may not "
+                "include the latest manager-review flags."
+            )
+            decision_cols = st.columns(3)
+            decision_cols[0].button(
+                "Approve selected", key=f"queue_approve_{store}",
+                on_click=record_selected_manager_decisions, args=(store, "Approved"),
+                type="primary", use_container_width=True,
+            )
+            decision_cols[1].button(
+                "Do not approve", key=f"queue_reject_{store}",
+                on_click=record_selected_manager_decisions, args=(store, "Rejected"),
+                use_container_width=True,
+            )
+            decision_cols[2].button(
+                "Reset selected", key=f"queue_reset_{store}",
+                on_click=record_selected_manager_decisions, args=(store, "Pending"),
+                use_container_width=True,
+            )
+            st.caption("Demo only: decisions update this session's order quantities; no purchase is submitted.")
+        else:
+            st.info("Select one or more held products in the review queue to enable approval decisions.")
+            st.caption("You can still review the default product's 14-day calculation above.")
+
     # Stock Monitoring continues with a multi-product runway comparison.
     with runway_slot:
         render_section_heading("When Could Each Product Run Out?")
-        runway_horizon = st.radio(
-            "Choose the stock projection period",
-            [7, 14],
-            format_func=lambda days: f"Next {days} days",
-            horizontal=True,
-            key="inventory_chart_horizon",
+        # Single time control: start at day 7; the same slider extends to day 14.
+        # Only load the 14-day series if the user moves beyond the 7-day view.
+        runway_day = st.slider(
+            "Inspect forecast day", min_value=1, max_value=14, value=7,
+            key="runway_inspect_day",
+            help="Starts at day 7. Move right to inspect up to 14 days; no deliveries are assumed.",
         )
-        runway_14_data = load_14day_daily_forecasts() if runway_horizon == 14 else None
-        if runway_horizon == 14 and runway_14_data is None:
-            st.warning("Upload the compact 14-day daily forecast to enable longer stock projections.")
+        runway_horizon = runway_day
+        runway_14_data = load_14day_daily_forecasts() if runway_day > 7 else None
+        if runway_day > 7 and runway_14_data is None:
+            st.warning("The 14-day daily forecast file is missing. Showing the available seven-day projection.")
             runway_horizon = 7
         readable_caption(
             "Compare 3–8 products; green = covered, yellow = monitor, red = projected gap. "
@@ -2675,7 +2712,7 @@ if active_section == "Inventory Planning":
         if runway_clear_col.button("Clear all", key="runway_clear_all"):
             st.session_state["runway_selected_products"] = []
 
-        # Selection comes first; the day control follows directly below at full width.
+        # Choose products; the one forecast-day slider above governs the horizon.
         runway_products = st.multiselect(
             "Products to compare (3–8 recommended)",
             options=chosen_product_options,
@@ -2684,22 +2721,14 @@ if active_section == "Inventory Planning":
             help="The five defaults illustrate a mix of stock conditions. Add or remove items (up to eight), or use Reset all to start over."
         )
 
-        runway_day = st.slider(
-            "Inspect forecast day",
-            min_value=1,
-            max_value=runway_horizon,
-            value=runway_horizon,
-            key=f"runway_scaled_day_{runway_horizon}"
-        )
-
-        if runway_horizon == 14:
-            readable_caption("The 14-day stock chart uses its own forecast and shows stock without deliveries "
-                       "or new replenishment orders.")
+        if runway_horizon > 7:
+            readable_caption("Beyond day 7, this stock comparison uses the separate 14-day "
+                             "daily forecast export; no deliveries or new orders are assumed.")
 
         # Daily stock graphs (not purchase recommendations) use the selected horizon.
         runway_source = (
             inv_data[["item_id", "date", "forecast", "p90"]].copy()
-            if runway_horizon == 7 else
+            if runway_horizon <= 7 else
             runway_14_data.loc[runway_14_data["store_id"].eq(store),
                                ["item_id", "date", "forecast", "p90"]].copy()
         )
@@ -2707,6 +2736,11 @@ if active_section == "Inventory Planning":
         runway_source["date"] = pd.to_datetime(
             runway_source["date"]
         )
+        # Use only days visible on the slider, not the complete export.
+        runway_source = runway_source.sort_values(["item_id", "date"])
+        runway_source = runway_source.loc[
+            runway_source.groupby("item_id").cumcount().lt(runway_horizon)
+        ].copy()
 
         runway_source["forecast"] = (
             runway_source["forecast"].fillna(0).clip(lower=0)
