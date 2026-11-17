@@ -3797,24 +3797,16 @@ if active_section == "AI Assistant":
                 "reasons_cited", "names_state_category", "flags_reported",
                 "no_unsupported_claims", "numbers_verified", "confidence_stated",
             )
-            applicable = [validation.get(k) for k in check_keys
-                          if validation.get(k) is not None]
-            passes = sum(v is True for v in applicable)
-            reviews = sum(v is False for v in applicable)
-            skipped = len(check_keys) - len(applicable)
-            if reviews:
-                st.warning(
-                    f"AI explanation checks: {passes}/{len(applicable)} passed; "
-                    f"{reviews} need review. Open **AI response checks** below "
-                    "to see what needs attention. Automated checks do not "
-                    "verify that an order is safe to approve."
-                )
+            # Show the count out of all nine configured checks. Checks marked
+            # not applicable remain visible in the detailed expander below.
+            passes = sum(validation.get(k) is True for k in check_keys)
+            total_checks = len(check_keys)
+            if passes == total_checks:
+                st.success(f"AI explanation checks: {passes}/{total_checks} passed.")
             else:
-                extra = f" ({skipped} not applicable)" if skipped else ""
-                st.info(
-                    f"AI explanation checks: {passes}/{len(applicable)} passed"
-                    f"{extra}. See **AI response checks** below for details. "
-                    "These checks do not replace manager verification."
+                st.warning(
+                    f"AI explanation checks: {passes}/{total_checks} passed. "
+                    "See **AI response checks** below to review."
                 )
             with st.expander("AI response checks (automatic; not human verification)", expanded=False):
                 status = validation["explanation_check"]
