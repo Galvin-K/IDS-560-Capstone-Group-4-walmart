@@ -2030,21 +2030,15 @@ if active_section == "Model Insights":
 if active_section == "Inventory Planning":
 
     st.header("Inventory Planning")
-    readable_caption("Shortage monitoring flags products that may run short (7 or 14 days, no deliveries). "
-                     "The separate 14-day replenishment policy calculates suggested orders and manager holds.")
     stock_tab, replenish_tab = st.tabs([
         "Monitoring & Ordering", "Review & Approval"
     ])
 
     with stock_tab:
-        render_section_heading("Urgent Shortage Monitoring — 7 Days by Default")
+        render_section_heading("Shortage Monitoring")
         action_horizon = st.radio(
             "Shortage check period", [7, 14], horizontal=True,
             format_func=lambda days: f"{days} days", key="action_list_horizon",
-        )
-        readable_caption(
-            f"{action_horizon}-day shortage screening, assuming no deliveries. "
-            "Routine order recommendations appear below."
         )
         inv_only = st.checkbox(
             "Show shortages and high-demand monitoring only",
@@ -2170,14 +2164,22 @@ if active_section == "Inventory Planning":
             "multi-day prediction interval."
         )
 
+        readable_caption(
+            "The 7-day view highlights products needing urgent stock checks before the next "
+            "delivery. The 14-day view shows a longer shortage outlook; the routine "
+            "replenishment plan below calculates suggested order quantities."
+        )
+
         # The seven-day estimated-order list was removed because its gap-only
         # quantities could conflict with the safety-stock-aware 14-day policy.
         # Forecasted stockout dates remain in the shortage-monitoring table above.
 
     with stock_tab:
         render_section_heading("Routine Replenishment Plan — Next 14 Days")
-        st.write(
-            "Store-wide ordering recommendations; held items need manager review."
+        readable_caption(
+            "Suggested orders cover the regular 14-day planning cycle and include safety "
+            "stock. Forecast confidence shows how reliable predictions have been; order "
+            "holds flag items requiring manager approval before ordering."
         )
         order_ready, order_message = offline_policy_status()
         if order_ready:
