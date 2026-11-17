@@ -1001,12 +1001,12 @@ if active_section == "Executive Overview":
     with st.expander("Which planning period should I use?", expanded=False):
         col_week, col_order = st.columns(2)
         with col_week:
-            st.markdown("**7 days — Check this week's demand**")
-            st.write("Review expected sales and possible shortages. Some demand charts also offer 14 days.")
+            st.markdown("**7 days — Urgent shortage watch**")
+            st.write("Spot products that could run short soon and prioritize immediate checks.")
         with col_order:
-            st.markdown("**14 days — Plan replenishment**")
-            st.write("Cover demand until the next delivery and review, including safety stock and manager holds.")
-        readable_caption("Model Insights includes historical 28-day evaluation results; replenishment recommendations remain based on 14 days.")
+            st.markdown("**14 days — Routine ordering plan**")
+            st.write("Plan order quantities across the delivery and review cycle, with safety stock and holds.")
+        readable_caption("Shortage urgency and suggested order quantities serve different purposes.")
 
 
     with st.expander("About the Forecast & Data", expanded=False):
@@ -1259,7 +1259,7 @@ if active_section == "Executive Overview":
     # Next, inspect potential seven-day stock gaps for the selected store.
     # INVENTORY_OVERVIEW_V1
     import math
-    render_section_heading("7-Day Demand & Stock Gap Overview")
+    render_section_heading("Urgent Shortage Overview (Next 7 Days)")
     readable_caption(
         "Identify products whose forecast demand may exceed starting stock."
     )
@@ -1432,9 +1432,9 @@ if active_section == "Executive Overview":
     # PHASE4: Separate the evaluated 14-day inventory policy from seven-day gaps.
     # This panel only reads a compact precomputed table: it never starts M5
     # loading, a model or the RAG reranker. Incoming orders assumed zero.
-    render_section_heading("14-Day Replenishment Summary")
+    render_section_heading("Routine Ordering Snapshot (14 Days)")
     readable_caption(
-        "Review suggested order quantities, including safety stock and items that need manager approval."
+        "Routine order recommendations include safety stock and manager-review holds."
     )
     policy_ready, policy_note = offline_policy_status()
     if not policy_ready:
@@ -1474,13 +1474,13 @@ if active_section == "Executive Overview":
 
     # Prioritized inventory action list
 
-    render_section_heading("7-Day Demand-Gap Priorities")
+    render_section_heading("Near-Term Shortage Priorities (Next 7 Days)")
 
     # Seven-day sales exposure = UNROUNDED seven-day forecast gap * M5 price.
     # This is distinct from the lead-time KPI and whole-unit ordering value.
     # Unknown M5 prices remain missing rather than being assigned a placeholder.
     priority_count = st.selectbox(
-        "Number of priorities to display",
+        "Items to show",
         options=[10, 20, 50, "All"],
         index=0,
         key="executive_top_priorities_count",
@@ -2019,20 +2019,20 @@ if active_section == "Model Insights":
 if active_section == "Inventory Planning":
 
     st.header("Inventory Planning")
-    readable_caption("Monitor potential stock gaps or review replenishment decisions for your store.")
+    readable_caption("Spot urgent shortages, then plan routine orders and manager reviews.")
     stock_tab, replenish_tab = st.tabs([
-        "Stock Monitoring", "Replenishment & Review"
+        "Shortage Monitoring", "Ordering & Manager Review"
     ])
 
     with stock_tab:
-        render_section_heading("Products That May Run Short")
+        render_section_heading("Shortage Watch — Urgent Items")
         action_horizon = st.radio(
-            "Action list forecast period", [7, 14], horizontal=True,
+            "Shortage check period", [7, 14], horizontal=True,
             format_func=lambda days: f"{days} days", key="action_list_horizon",
         )
         readable_caption(
             f"{action_horizon}-day shortage screening, assuming no deliveries. "
-            "Order decisions are in Replenishment & Review."
+            "Order quantities are in Ordering & Manager Review."
         )
         inv_only = st.checkbox(
             "Show shortages and high-demand monitoring only",
@@ -2131,7 +2131,7 @@ if active_section == "Inventory Planning":
             action_item_options = inv_list["item_id"].drop_duplicates().tolist()
             action_item_selected = st.selectbox(
                 "Product to inspect", action_item_options, key="action_item_to_inspect",
-                help="Select a product, then open the Replenishment & Review tab to see its 14-day order, confidence and review checks."
+                help="Select a product, then open Ordering & Manager Review to see its order details and review status."
             )
             def open_action_product():
                 focus_product(action_item_selected)
@@ -2139,7 +2139,7 @@ if active_section == "Inventory Planning":
             st.button("Review this product’s order", on_click=open_action_product,
                       key="action_open_details", type="primary")
             if st.session_state.get("action_product_notice") == action_item_selected:
-                st.success(f"Selected {action_item_selected}. Open Replenishment & Review for its order details.")
+                st.success(f"Selected {action_item_selected}. Open Ordering & Manager Review for its order details.")
         st.download_button(
             f"Download {action_horizon}-Day Action List CSV",
             inv_display.to_csv(index=False),
@@ -2160,9 +2160,9 @@ if active_section == "Inventory Planning":
     runway_slot = stock_tab.container()
 
     with replenish_tab:
-        render_section_heading("Recommended Replenishment Orders")
+        render_section_heading("Routine Ordering Plan — Next 14 Days")
         st.write(
-            "Review suggested orders and manager decisions (simulated only)."
+            "Store-wide ordering recommendations; held items need manager review."
         )
         order_ready, order_message = offline_policy_status()
         if order_ready:
@@ -2269,9 +2269,7 @@ if active_section == "Inventory Planning":
                             ),
                         },
                     )
-                    readable_caption(
-                        "Starting Stock is included in the table. Held orders remain zero until approved in the review queue; decisions reset each session."
-                    )
+                    readable_caption("Held orders stay at zero until a manager approves them. Decisions are session-only.")
                     st.download_button(
                         "Download 14-day recommended orders CSV",
                         order_display.to_csv(index=False),
@@ -2374,9 +2372,7 @@ if active_section == "Inventory Planning":
                                     f"Selected: **{st.session_state[selection_key][0]}** · "
                                     "Review its calculation and hold reason below before deciding."
                                 )
-                    readable_caption(
-                        "Store-wide order quantities use simulated stock; the selected product's stock can be changed below."
-                    )
+                    readable_caption("To adjust stock, use the selected product's order details below.")
             except (ValueError, KeyError, FileNotFoundError, TypeError, ImportError) as exc:
                 st.error(f"Cannot load 14-day ordering recommendations: {type(exc).__name__}: {exc}")
         else:
@@ -2399,14 +2395,8 @@ if active_section == "Inventory Planning":
             item_data = store_df.loc[store_df["item_id"].eq(item)].sort_values("date").copy()
             predicted_total = float(item_data["forecast"].sum())
             st.divider()
-            render_section_heading("14-Day Replenishment | Selected Product")
-            source_label = "Selected from Manager Review Queue" if selected_held else "Default product (select a held item in the queue to change it)"
-            st.caption(f"**{item}** · {dept} · {store} · {source_label}")
-            st.caption(
-                "**14-day order plan:** 7 days for delivery + 7 days until the next "
-                "stock review. The suggested quantity covers forecast demand for "
-                "those 14 days, plus safety stock, less stock available or already on order."
-            )
+            render_section_heading("Selected Product — Order Details")
+            st.markdown(f"**{item}** · {dept} · {store}")
             with st.expander("Set or override inventory for this product", expanded=False):
                 selected_key = (str(store), str(item))
                 override_enabled = st.checkbox(
@@ -2458,13 +2448,12 @@ if active_section == "Inventory Planning":
                 selected_inventory_row["inventory_source"].iloc[0]
                 if not selected_inventory_row.empty else "Simulated"
             )
-            st.caption(f"Starting stock: **{on_hand:,} units** ({selected_source}) · "
-                       f"7-day demand (monitoring only): **{predicted_total:,.2f} units**")
+            st.caption(f"Starting stock: **{on_hand:,} units** ({selected_source})")
 
             # REAL 14-DAY POLICY — precomputed using the team's v4 LightGBM model,
             # M5 history, safety stock, confidence and hold/review rules. The only
             # live arithmetic is stock-dependent ordering; do NOT initialize M5 here.
-            readable_caption("Suggested units = 14-day demand + safety stock − starting stock − units already on order.")
+            readable_caption("Order estimate = 14-day demand + safety stock − stock available − incoming orders.")
             offline_available, offline_message = offline_policy_status()
             if not offline_available:
                 st.info(offline_message + ". Upload the generated CSV to forecasting/ to enable this section.")
@@ -2479,7 +2468,7 @@ if active_section == "Inventory Planning":
                         key=f"v4_precomputed_on_order_{store}_{item}",
                         help="Units already ordered for the selected product, not included in current on-hand stock."
                     )
-                    ordering_cols[1].caption("The order protects the full 14 days until the next delivery-and-review cycle.")
+                    # The 14-day protection-period explanation is provided once in the overview guide.
                     try:
                         v4_selected = offline_v4_recommendation(
                             item=item, store=store, on_hand=on_hand, on_order=int(policy_on_order)
