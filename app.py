@@ -995,9 +995,21 @@ if active_section == "Executive Overview":
         )
 
 
+    # Only the Executive Overview navigation/store cards receive white surfaces.
+    # Streamlit assigns st-key-* classes to keyed containers; target both the
+    # container and its theme-dependent inner wrapper for consistent rendering.
     st.markdown("""<style>
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background:#ffffff !important;
+    div[class*="st-key-overview_nav_"] ,
+    div[class*="st-key-overview_store_"] {
+        background-color: #ffffff !important;
+        border-radius: 10px !important;
+    }
+    div[class*="st-key-overview_nav_"] > div,
+    div[class*="st-key-overview_store_"] > div,
+    div[class*="st-key-overview_nav_"] [data-testid="stVerticalBlockBorderWrapper"],
+    div[class*="st-key-overview_store_"] [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #ffffff !important;
+        border-radius: 10px !important;
     }
     </style>""", unsafe_allow_html=True)
 
@@ -1174,7 +1186,7 @@ if active_section == "Executive Overview":
                 order_cost = float(record["estimated_order_cost"])
 
                 with col:
-                    with st.container(border=True):
+                    with st.container(border=True, key=f"overview_store_{store_id}"):
 
                         st.button(
                             store_id,
