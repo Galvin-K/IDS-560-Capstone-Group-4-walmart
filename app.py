@@ -2050,7 +2050,7 @@ if active_section == "Inventory Planning":
                 "Show shortages and high-demand monitoring only",
                 value=True, key="inv_overview_only_14d"
             )
-        inv_search = st.text_input("Search product ID", key="inv_overview_search")
+        inv_search = st.text_input("Search by product ID", key="inv_overview_search")
 
         if action_horizon == 7:
             inv_list = inv_items.copy()
