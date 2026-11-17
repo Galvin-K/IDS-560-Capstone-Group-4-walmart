@@ -1,7 +1,7 @@
 """Date-safe RAG retrieval with an optional exact v4 implementation.
 
 When the team's `rag_common.py` and its artifacts are deployed, full v4
-retrieval can be selected with RAG_USE_V4=1. Otherwise use a working,
+retrieval is automatically selected when v4 artifacts exist (unless disabled). Otherwise use a working,
 independently implemented v3-index HYBRID candidate ranker (dense + lexical).
 The fallback is NOT the team's evaluated v4 reranker and has no calibrated
 no-answer threshold.
@@ -43,7 +43,10 @@ def _v4_requested():
     Import is delayed so retrieval tests and command-line use don't require
     Streamlit or a valid secrets.toml file.
     """
-    default = os.getenv('RAG_USE_V4', '0')
+    # Auto-enable only when both trusted v4 artifacts are deployed.
+    # RAG_USE_V4=0 disables v4; =1 forces a startup attempt and reports errors.
+    auto = (RAG_DIR / 'chunks_v4.pkl').is_file() and (RAG_DIR / 'index_v4.pkl').is_file()
+    default = os.getenv('RAG_USE_V4', '1' if auto else '0')
     try:
         import streamlit as st
         value = st.secrets.get('RAG_USE_V4', default)
@@ -56,7 +59,7 @@ def _v4_requested():
 def _v4():
     """Load official v4 only when operator opts in and dependencies exist."""
     if not _v4_requested():
-        raise RuntimeError('v4 not enabled; set RAG_USE_V4=1 after deployment and testing')
+        raise RuntimeError('v4 disabled or artifacts not present; deploy chunks_v4.pkl and index_v4.pkl')
     if not (RAG_DIR / 'rag_common.py').is_file() and not (ROOT / 'rag_common.py').is_file():
         raise FileNotFoundError('rag_common.py is missing')
     import sys
@@ -64,12 +67,18 @@ def _v4():
         if directory not in sys.path:
             sys.path.insert(0, directory)
     rc = importlib.import_module('rag_common')
-    # The supplied v4 notebooks use this setup contract.
-    rc.setup(m5=False, forecasts=False, library=True)
+    # The notebook defaults to a Google Drive directory. Bind the library-only
+    # loader to the deployed Streamlit RAG/ folder instead.
+    rc.RAG_DIR = str(RAG_DIR.resolve()) + os.sep
+    rc.RAW_DIR = str((RAG_DIR / 'raw').resolve()) + os.sep
+    rc.SETTINGS_FILE = str(RAG_DIR / 'settings_v4.json')
+    rc.setup(m5=False, forecasts=False, library=True, reranker=True)
     if not callable(getattr(rc, 'retrieve', None)):
         raise RuntimeError('rag_common.retrieve unavailable')
     if getattr(rc, 'RERANKER', None) is None:
         raise RuntimeError('Official v4 reranker failed to initialize; using v3 fallback')
+    if getattr(rc, 'embedder', None) is None or getattr(rc, 'KEYWORDS', None) is None:
+        raise RuntimeError('Official v4 dense or TF-IDF search failed to initialize')
     return rc
 
 
@@ -189,7 +198,7 @@ def _retrieve_fallback(query, as_of, state, k, category, min_similarity, categor
     return candidates.loc[chosen].copy()
 
 
-def retrieve(query, as_of, state=None, k=5, category=None,
+def retrieve(query, as_of, state=None, k=8, category=None,
              min_similarity=None, category_filter=True, method='full'):
     """Use official v4 when available; otherwise distinct labeled v3 hybrid.
 
@@ -202,12 +211,15 @@ def retrieve(query, as_of, state=None, k=5, category=None,
         rc = _v4()
         # Method choices are documented by the team's retrieval notebook.
         v4_method = method if method in ('dense','dense+category','hybrid+category','full') else 'full'
-        # Ask the official method for enough candidates to preserve useful
-        # evidence after filtering; the UI-requested limit is applied last.
-        candidate_count = max(int(k), 30) if v4_method == 'full' else int(k)
+        # Pass the relevance threshold into the v4 retrieval function so that
+        # candidates are filtered BEFORE its one-per-document / three-per-type
+        # diversity selection. This prevents low-scoring passages occupying a
+        # diversity slot and leaving fewer final results than necessary.
+        candidate_count = max(1, int(k))
         res = rc.retrieve(str(query), as_of, state, k=candidate_count,
                           category=category if category_filter else None,
-                          method=v4_method)
+                          method=v4_method,
+                          relevance_min=float(getattr(rc, 'RELEVANCE_MIN', 0.015)))
         if not isinstance(res, pd.DataFrame):
             raise TypeError('v4 retrieve() must return a DataFrame')
         res = res.copy()
