@@ -2885,7 +2885,7 @@ if active_section == "Inventory Planning":
             st.warning("The 14-day daily forecast file is missing. Showing the available seven-day projection.")
             runway_horizon = 7
         readable_caption(
-            "Compare 3–8 products; green = covered, yellow = monitor, red = projected gap. "
+            "Compare 3–8 products. "
             "No deliveries assumed."
         )
 
