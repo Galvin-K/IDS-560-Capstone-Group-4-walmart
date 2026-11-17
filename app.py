@@ -801,7 +801,26 @@ if st.session_state.get("main_section_nav") not in [name for name, _ in SECTION_
 
 
 def _open_dashboard_section(section_name):
+    previous = st.session_state.get("main_section_nav")
     st.session_state["main_section_nav"] = section_name
+    if previous != section_name:
+        st.session_state["_scroll_to_top_on_navigation"] = True
+    # If returning from a product-specific AI review, go directly to the
+    # manager's decision tab, not the default monitoring tab.
+    if section_name == "Inventory Planning" and previous == "AI Assistant" and st.session_state.get("assistant_review_return_available"):
+        st.session_state["inventory_active_tab"] = "Review & Approval"
+        st.session_state["inventory_last_tab"] = "Review & Approval"
+
+
+def _back_to_manager_review():
+    st.session_state["inventory_active_tab"] = "Review & Approval"
+    st.session_state["inventory_last_tab"] = "Review & Approval"
+    st.session_state["main_section_nav"] = "Inventory Planning"
+    st.session_state["_scroll_to_top_on_navigation"] = True
+
+
+def _persist_queue_filter(widget_key, saved_key):
+    st.session_state[saved_key] = st.session_state[widget_key]
 
 
 with st.sidebar:
@@ -818,6 +837,14 @@ with st.sidebar:
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
 active_section = st.session_state["main_section_nav"]
+
+# Scroll only on navigation, not on ordinary Streamlit reruns. The component
+# runs in an iframe and tries Streamlit's main scroll container first.
+# Defer the scroll action until AFTER the new section has rendered. The old
+# early iframe ran before layout reconciliation, letting Streamlit restore the
+# previous scroll position afterward.
+_scroll_pending = bool(st.session_state.pop("_scroll_to_top_on_navigation", False))
+
 
 st.sidebar.header("Filters")
 
@@ -908,6 +935,11 @@ def ask_ai_about_selected_order(store_id):
     st.session_state["assistant_handoff_profile"] = dict(current_profile)
     st.session_state.pop("assistant_handoff_error", None)
     st.session_state["main_section_nav"] = "AI Assistant"
+    st.session_state["assistant_review_return_available"] = True
+    st.session_state["assistant_review_return_store"] = str(store_id)
+    st.session_state["assistant_review_return_product"] = product_id
+    st.session_state["inventory_last_tab"] = "Review & Approval"
+    st.session_state["_scroll_to_top_on_navigation"] = True
 
 
 def clear_manager_decisions():
@@ -2139,9 +2171,17 @@ if active_section == "Model Insights":
 if active_section == "Inventory Planning":
 
     st.header("Inventory Planning")
-    stock_tab, replenish_tab = st.tabs([
-        "Monitoring & Ordering", "Review & Approval"
-    ])
+    # Streamlit >= 1.55 supports a stateful, programmatically selectable tab.
+    # Restore the last tab after navigating to AI Assistant (Streamlit clears
+    # widget keys when the widget is not rendered on the previous page).
+    inventory_tabs = ["Monitoring & Ordering", "Review & Approval"]
+    remembered_tab = st.session_state.get("inventory_last_tab", inventory_tabs[0])
+    if st.session_state.get("inventory_active_tab") not in inventory_tabs:
+        st.session_state["inventory_active_tab"] = remembered_tab
+    stock_tab, replenish_tab = st.tabs(
+        inventory_tabs, key="inventory_active_tab", on_change="rerun"
+    )
+    st.session_state["inventory_last_tab"] = st.session_state["inventory_active_tab"]
 
     with stock_tab:
         render_section_heading("Shortage Monitoring")
@@ -2436,16 +2476,39 @@ if active_section == "Inventory Planning":
                                 if option == "All reasons" or option in present_reasons
                             ]
                             dept_col, reason_col = st.columns([1, 1.2])
+                            dept_choices = ["All departments"] + sorted(held_policy["dept_id"].dropna().unique().tolist())
+                            dept_key = f"review_queue_dept_{store}"
+                            reason_key = f"review_queue_reason_{store}"
+                            dept_saved = f"review_queue_saved_dept_{store}"
+                            reason_saved = f"review_queue_saved_reason_{store}"
+                            # Persistent shadow keys survive when the review tab/page
+                            # is not rendered. Widget-owned state does not.
+                            if st.session_state.get(dept_key) not in dept_choices:
+                                st.session_state[dept_key] = (
+                                    st.session_state.get(dept_saved)
+                                    if st.session_state.get(dept_saved) in dept_choices
+                                    else "All departments"
+                                )
+                            if st.session_state.get(reason_key) not in queue_reason_options:
+                                st.session_state[reason_key] = (
+                                    st.session_state.get(reason_saved)
+                                    if st.session_state.get(reason_saved) in queue_reason_options
+                                    else "All reasons"
+                                )
                             with dept_col:
                                 queue_dept = st.selectbox(
-                                    "Department", ["All departments"] + sorted(held_policy["dept_id"].dropna().unique().tolist()),
-                                    key=f"review_queue_dept_{store}",
+                                    "Department", dept_choices, key=dept_key,
+                                    on_change=_persist_queue_filter,
+                                    args=(dept_key, dept_saved),
                                 )
                             with reason_col:
                                 queue_reason = st.selectbox(
-                                    "Review reason", queue_reason_options,
-                                    key=f"review_queue_reason_{store}",
+                                    "Review reason", queue_reason_options, key=reason_key,
+                                    on_change=_persist_queue_filter,
+                                    args=(reason_key, reason_saved),
                                 )
+                            st.session_state[dept_saved] = queue_dept
+                            st.session_state[reason_saved] = queue_reason
                             review_matches = held_policy
                             if queue_dept != "All departments":
                                 review_matches = review_matches.loc[review_matches["dept_id"].eq(queue_dept)]
@@ -3084,43 +3147,44 @@ if active_section == "AI Assistant":
     # Restrict style changes to the assistant form and answer card, leaving
     # other dashboard tabs and their existing design untouched.
     st.markdown("""<style>
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) {
-        border:1px solid #d4dfec !important;
-        background:#fff !important;
-        border-radius:12px !important;
-        padding:20px 22px !important;
+    .st-key-ai_question_card {
+        background:#fff !important;border:1px solid #d4dfec !important;
+        border-radius:12px !important;padding:16px 20px !important;
         box-shadow:0 2px 10px rgba(24,50,98,.045);
     }
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) label p {
+    .st-key-ai_question_card label p {
         color:#172e58 !important;font-size:15px !important;font-weight:650 !important;
     }
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) textarea {
+    .st-key-ai_question_card textarea {
         color:#142747 !important;background:#fff !important;
         font-size:15px !important;line-height:1.6 !important;
         border-color:#becce0 !important;
     }
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="primary"],
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-primaryFormSubmit"] {
-        color:#fff !important;background:#1f3368 !important;border-color:#1f3368 !important;
-        font-size:15px !important;font-weight:700 !important;min-height:45px !important;
+    .st-key-ai_question_card button[kind="primary"] {
+        background:#1f3368 !important;border-color:#1f3368 !important;
+        color:#fff !important;min-height:43px !important;font-weight:700 !important;
     }
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="primary"] p,
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-primaryFormSubmit"] p {
-        color:#fff !important;font-size:15px !important;font-weight:700 !important;
-    }
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="secondary"],
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-secondaryFormSubmit"] {
-        background:#fff !important;color:#1c386b !important;
-        border:1px solid #a9bcd6 !important;font-size:15px !important;
-        font-weight:650 !important;min-height:45px !important;
-    }
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="secondary"] p,
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-secondaryFormSubmit"] p {
-        color:#1c386b !important;font-size:15px !important;font-weight:650 !important;
+    .st-key-ai_question_card button[kind="primary"] p {color:#fff !important;}
+    .st-key-ai_question_card button[kind="secondary"] {
+        background:#fff !important;border-color:#a9bcd6 !important;
+        color:#1c386b !important;min-height:43px !important;
     }
     .st-key-ai_response_card [data-testid="stMarkdownContainer"] p,
     .st-key-ai_response_card [data-testid="stMarkdownContainer"] li {
         color:#1c2f50 !important;font-size:16px !important;line-height:1.8 !important;
+    }
+    /* AI-generated Markdown headings should read like section labels, not page titles. */
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] h1,
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] h2 {
+        color:#142a54 !important;font-size:21px !important;
+        line-height:1.35 !important;font-weight:700 !important;
+        margin:19px 0 7px !important;
+    }
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] h3,
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] h4 {
+        color:#142a54 !important;font-size:18px !important;
+        line-height:1.35 !important;font-weight:700 !important;
+        margin:15px 0 6px !important;
     }
     .st-key-ai_response_card [data-testid="stMarkdownContainer"] strong {
         color:#142a54 !important;
@@ -3155,10 +3219,10 @@ if active_section == "AI Assistant":
     with st.expander("Evidence retrieval settings", expanded=False):
         if v4_retrieval_available:
             readable_caption(
-                "Official v4 retrieval is active: dated evidence filtering, hybrid "
-                "keyword and semantic search, cross-encoder reranking, and "
-                "relevance/diversity selection. Relevance cutoff is provisional, "
-                "not a validated answer-correctness guarantee."
+                "The connected backend accepts the v4 full retrieval method "
+                "(hybrid candidate search and reranking). Verify that its artifacts, "
+                "model weights, and relevance cutoff are configured before presenting "
+                "these results as validated."
             )
         else:
             from rag_backend import retrieval_status
@@ -3191,34 +3255,72 @@ if active_section == "AI Assistant":
                     help="This setting has not been validated as a relevance threshold."
                 )
 
-    # A manager may hand off a selected product from Review & Approval.
-    # Consume the handoff once, so normal reruns never regenerate answers.
+    # Streamlit removes widget keys when their page/section is not rendered.
+    # Keep a separate, durable copy of the editable question across navigation.
+    default_question = "What historical factors might have affected Foods demand in California?"
+    if "assistant_question_saved" not in st.session_state:
+        st.session_state["assistant_question_saved"] = st.session_state.get(
+            "assistant_question_input", default_question
+        )
+
+    def _save_assistant_question():
+        st.session_state["assistant_question_saved"] = st.session_state.get(
+            "assistant_question_input", ""
+        )
+
+    def _clear_assistant_question():
+        # Clear only the editable question, not the prior answer or its checks.
+        st.session_state["assistant_question_input"] = ""
+        st.session_state["assistant_question_saved"] = ""
+        st.session_state.pop("assistant_active_order_profile", None)
+        st.session_state.pop("assistant_active_order_question", None)
+        st.session_state.pop("assistant_handoff_question", None)
+        st.session_state.pop("assistant_handoff_profile", None)
+
+    # Consume a new manager-review handoff exactly once. This is the only
+    # intentional automatic replacement of an existing question.
     auto_question = st.session_state.pop("assistant_handoff_question", None)
     if auto_question:
+        st.session_state["assistant_question_saved"] = auto_question
         st.session_state["assistant_question_input"] = auto_question
         st.session_state["assistant_active_order_profile"] = st.session_state.pop(
             "assistant_handoff_profile", None
         )
         st.session_state["assistant_active_order_question"] = auto_question
-    elif "assistant_question_input" not in st.session_state:
-        st.session_state["assistant_question_input"] = (
-            "What historical factors might have affected Foods demand in California?"
-        )
+    else:
+        # On returning to this page Streamlit may already have deleted the
+        # widget key. Restore it from the durable, non-widget state key.
+        if "assistant_question_input" not in st.session_state:
+            st.session_state["assistant_question_input"] = st.session_state[
+                "assistant_question_saved"
+            ]
 
-    with st.form("rag_question_form"):
+    # Keep the input outside a Streamlit form so its on_change callback can
+    # save text even when the user navigates away without submitting.
+    with st.container(key="ai_question_card", border=True):
         user_question = st.text_area(
-            "Your question", key="assistant_question_input", height=90
+            "Your question", key="assistant_question_input", height=90,
+            on_change=_save_assistant_question,
         )
-
-        ask_col, evidence_col = st.columns(2)
+        ask_col, evidence_col, clear_col = st.columns([2.1, 2.1, 1])
         with ask_col:
-            ask_clicked = st.form_submit_button(
-                "Ask AI Assistant", type="primary", use_container_width=True
+            ask_clicked = st.button(
+                "Ask AI Assistant", type="primary", use_container_width=True,
+                key="assistant_ask_button",
             )
         with evidence_col:
-            search_clicked = st.form_submit_button(
-                "Find Historical Evidence", use_container_width=True
+            search_clicked = st.button(
+                "Find Historical Evidence", use_container_width=True,
+                key="assistant_evidence_button",
             )
+        with clear_col:
+            st.button(
+                "Clear question", use_container_width=True,
+                key="assistant_clear_question_button", on_click=_clear_assistant_question,
+                help="Start another question without deleting your previous answer.",
+            )
+    if ask_clicked or search_clicked:
+        _save_assistant_question()
 
     # A product handoff behaves like a single user-triggered Ask submission.
     # The normal question input and results remain editable and reusable.
@@ -3344,34 +3446,44 @@ if active_section == "AI Assistant":
                         policy_context = (
                             "\n\nAUTHORITATIVE SELECTED ORDER POLICY (from the current dashboard):\n"
                             + _json.dumps(expected_order, sort_keys=True)
-                            + "\n\nFor this ORDER REVIEW question, address the hold reason first, "
-                            "and explain that a zero forecast does NOT automatically remove "
-                            "a new-item or discontinued-item hold. Do NOT calculate a replacement "
-                            "quantity or infer a shortage from the 7-day gap. "
-                            "Use a concise decision summary (roughly 150–220 words) with these "
-                            "exact lines: 'Current suggested order: <number> units', "
-                            "'If approved: <number> units', 'Hold reason: <reason>', "
-                            "'Forecast confidence: <High/Medium/Low>'. "
-                            "Explain the 14-day demand, safety stock, starting stock, "
-                            "incoming units, and how the hold affects the current order. "
-                            "For a held product, current suggested order is ZERO until approved; "
-                            "the if-approved quantity is conditional, not a purchase authorization. "
-                            "After explaining the figures, give an explicit advisory manager recommendation "
-                            "under the heading 'Recommendation:' using ONE of: "
+                            + "\n\nORDER-REVIEW RESPONSE FORMAT (mandatory for this selected order only): "
+                            "Write for a busy store manager, about 130–190 words total. "
+                            "Use exactly four Markdown section headings in this order: "
+                            "'### 1. Recommendation', '### 2. Order Summary', "
+                            "'### 3. Why?', '### 4. Manager Checks'. "
+                            "In Recommendation, lead with the operational conclusion and give one of "
                             "'Consider approval after verification', 'Keep on hold pending verification', "
-                            "or 'Insufficient information to recommend'. "
-                            "State a one-sentence reason tied to the selected policy and checks; if inventory "
-                            "is simulated or a flag remains unverified, do not imply the order is cleared. "
-                            "Recommend actual approval only conditionally after the required checks, "
-                            "never change the order status or claim an order was placed. "
-                            "Give 2-3 specific manager checks; do not issue automatic approval. "
-                            "Forecast confidence and manager-review holds are INDEPENDENT. Never "
-                            "claim the hold causes Low/Medium/High confidence. Explain the "
-                            "confidence rating with forecast diagnostics only when supported; "
-                            "a narrow forecast range by itself is not evidence of Low confidence. "
-                            "If diagnostics do not establish why, report the rating without "
-                            "inventing a cause. Do not describe a conditional order as validated "
-                            "or live inventory."
+                            "or 'Insufficient information to recommend'. State clearly when the "
+                            "conditional order is 0 units: no additional purchase is suggested; "
+                            "a policy hold can still need review. Do not claim an unresolved hold "
+                            "is cleared or that approval places a purchase. "
+                            "In Order Summary, give exactly these four separate lines (one per line): "
+                            "'Current suggested order: <integer> units', "
+                            "'If approved: <integer> units', "
+                            "'Hold reason: <flag or None>', "
+                            "'Forecast confidence: <High/Medium/Low>'. "
+                            "Keep these labels exact because automated checks parse them. "
+                            "In Why?, give at most three short bullet points covering (a) a compact "
+                            "14-day demand + safety-stock − available-and-incoming-stock calculation, "
+                            "(b) the actual reason for the hold, and (c) a plain-English explanation "
+                            "of forecast confidence separate from the hold. "
+                            "DO NOT include WAPE percentages, forecast-range ratios, demand pattern "
+                            "classifications, days of history, statistical diagnostics, or citation "
+                            "scores in the main answer; those belong in the dashboard's detailed "
+                            "model and calculation information. Say simply that confidence describes "
+                            "how reliable the forecast has been, and that Low means extra caution; "
+                            "do not invent the cause if diagnostics are insufficient. "
+                            "In Manager Checks, use a numbered list of exactly three brief, specific "
+                            "checks based on the hold reason (such as verify live inventory, open "
+                            "orders, lead time, or product availability). "
+                            "For outside historical claims, include valid evidence citations; no "
+                            "citations are needed for the dashboard's structured calculation. "
+                            "Do not add a separate Finding, technical Explanation, general monitoring "
+                            "discussion, boilerplate list of missing data, or repeated numeric summary. "
+                            "Always distinguish simulated stock from live inventory. "
+                            "Forecast confidence and manager-review holds are INDEPENDENT, and a "
+                            "narrow forecast range alone is not evidence of low confidence. "
+                            "A seven-day gap is NOT the basis of the 14-day order policy."
                         )
                     prompt = (
                             "You are a forecasting decision-support assistant for a HISTORICAL academic Walmart M5 project. "
@@ -3381,9 +3493,11 @@ if active_section == "AI Assistant":
                             "Do not cite retrieval documents for calculated forecast quantities. "
                             "If scope doesn't contain the requested facts, say they are unavailable. "
                             "Do not infer true inventory, causality, validated order quantities, or live data. "
-                            "Start with a concise finding grounded in the selected scope, then a short explanation "
-                            "and an actionable but non-prescriptive monitoring suggestion only if justified. "
-                            "If the direct numerical lookup is available, answer the exact question from its lookup table FIRST. "
+                            "For general questions (not selected-order reviews), start with a concise "
+                            "finding, then a short explanation and a monitoring suggestion only if justified. "
+                            "For general questions, when a direct numerical lookup is available, answer the "
+                            "exact question from its lookup table FIRST. For a selected-order review, "
+                            "the authoritative 14-day order profile takes precedence over 7-day lookup data. "
                             "Do not substitute stock-gap rankings for requested predicted-demand rankings. "
                             "If the user requests a top ranking, respect the requested sort and scope. "
                             "For store comparison questions ABOUT SHORTAGES, prioritize requested stores and describe ONLY the three highest-shortage stores, "
@@ -3465,8 +3579,22 @@ if active_section == "AI Assistant":
     if assistant_result:
         result = assistant_result
         filters = result["requested_filters"]
-        st.markdown('<h3 style="color:#142a54;font-size:23px;font-weight:750;'
-                    'margin:20px 0 10px">Answer</h3>', unsafe_allow_html=True)
+        answer_title_col, answer_return_col = st.columns([3, 2], vertical_alignment="center")
+        with answer_title_col:
+            st.markdown('<h3 style="color:#142a54;font-size:22px;font-weight:750;'
+                        'margin:13px 0 5px">Answer</h3>', unsafe_allow_html=True)
+        with answer_return_col:
+            if st.session_state.get("assistant_review_return_available"):
+                back_store = st.session_state.get("assistant_review_return_store", "")
+                back_item = st.session_state.get("assistant_review_return_product", "")
+                st.button(
+                    f"Back to Review & Approval · {back_item} ({back_store})",
+                    icon=":material/arrow_back:",
+                    key="assistant_back_to_manager_review",
+                    on_click=_back_to_manager_review,
+                    use_container_width=True,
+                    help="Return to the selected product's review with filters preserved.",
+                )
         with st.container(key="ai_response_card", border=True):
             st.markdown(f"**Your question:** {result['question']}")
             st.divider()
@@ -3547,8 +3675,21 @@ if active_section == "AI Assistant":
                             st.write("Source URL:", url)
                         st.write(passage["text"])
 
-        with st.expander("Forecast numbers and calculation details", expanded=False):
-            st.caption("These figures use the scope resolved from the question, not the sidebar store.")
+        with st.expander("Forecast data and technical details", expanded=False):
+            st.caption("These figures are historical forecast-audit data. For a selected order, use the 14-day policy values stated in the answer and order details; the 7-day audit is not an order recommendation.")
+            review_profile = result.get("order_profile")
+            if review_profile:
+                st.markdown("**Selected product: 14-day order policy**")
+                detail_cols = st.columns(4)
+                detail_cols[0].metric("14-day demand", f"{float(review_profile.get('demand_14d') or 0):,.2f}")
+                detail_cols[1].metric("Safety stock", f"{float(review_profile.get('safety_stock') or 0):,.2f}")
+                detail_cols[2].metric("Starting stock", f"{float(review_profile.get('starting_stock') or 0):,.0f}")
+                detail_cols[3].metric("If approved", f"{int(review_profile.get('if_confirmed_order_qty') or 0):,} units")
+                reason_details = str(review_profile.get("confidence_reasons") or "").strip()
+                if reason_details:
+                    st.markdown("**Technical confidence diagnostics (from the ordering policy)**")
+                    st.write(reason_details)
+                    st.caption("Group-level forecast errors and forecast-range diagnostics may not describe this individual item. A manager hold does not determine forecast confidence.")
             if filters.get("hint"):
                 st.info(filters["hint"])
             st.caption("Stores: " + (", ".join(filters["stores"]) or "All"))
@@ -3614,3 +3755,45 @@ if active_section == "AI Assistant":
         )
 
 
+
+# Navigation scroll fix: insert the iframe after the new section's elements.
+# Retry briefly because Streamlit restores layout/scroll asynchronously.
+import streamlit.components.v1 as components
+components.html(r"""<script>
+      (function() {
+        try {
+          const doc = window.parent.document;
+          const candidates = () => {
+            const main = doc.querySelector('[data-testid="stMain"]');
+            const arr = [main, main?.querySelector('[data-testid="stMainBlockContainer"]'),
+                         doc.querySelector('section.main'), doc.scrollingElement];
+            if (main) {
+              let p = main;
+              for (let i=0; p && i<4; i++,p=p.parentElement) arr.push(p);
+              arr.push(...main.querySelectorAll('div,section'));
+            }
+            return [...new Set(arr.filter(Boolean))].filter(el =>
+                el.scrollHeight > el.clientHeight + 35 &&
+                (el === doc.scrollingElement ||
+                 /(auto|scroll)/.test(window.parent.getComputedStyle(el).overflowY)));
+          };
+          const jump = () => { for (const el of candidates()) el.scrollTop = 0; };
+          if (NAV_SCROLL_PENDING) {
+            jump();
+            [60,180,350,700,1100].forEach(ms => setTimeout(jump, ms));
+          }
+          // Native st.tabs switches panels without a Python rerun. Listen
+          // for tab clicks directly to reset the main content scroll.
+          if (!doc.__walmartTabScrollListener) {
+            doc.addEventListener('click', (event) => {
+              const tab = event.target.closest('[role="tab"]');
+              if (!tab) return;
+              setTimeout(jump, 30);
+              setTimeout(jump, 180);
+              setTimeout(jump, 400);
+            }, true);
+            doc.__walmartTabScrollListener = true;
+          }
+        } catch (e) { /* Parent document unavailable in this hosting context. */ }
+      })();
+    </script>""".replace("NAV_SCROLL_PENDING", "true" if _scroll_pending else "false"), height=0)
