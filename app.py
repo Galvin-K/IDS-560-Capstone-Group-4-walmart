@@ -2030,7 +2030,8 @@ if active_section == "Model Insights":
 if active_section == "Inventory Planning":
 
     st.header("Inventory Planning")
-    readable_caption("Monitor upcoming shortages, plan routine orders, and review flagged products.")
+    readable_caption("Shortage monitoring flags products that may run short (7 or 14 days, no deliveries). "
+                     "The separate 14-day replenishment policy calculates suggested orders and manager holds.")
     stock_tab, replenish_tab = st.tabs([
         "Monitoring & Ordering", "Review & Approval"
     ])
@@ -2117,40 +2118,47 @@ if active_section == "Inventory Planning":
             "daily_p90_sum": "High-demand scenario*", "gap": "Demand Gap",
             "units_to_cover": "Units to Cover", "Stockout date": "Stockout Date",
         }
-        # A seven-day or fourteen-day gap is a screening signal, not an approved purchase order.
-        action_labels = {
-            "Point-forecast shortage": "Check shortage",
+        # Monitoring statuses are NOT order-approval or hold decisions.
+        monitoring_labels = {
+            "Point-forecast shortage": "Potential shortage",
             "Monitor high demand": "Monitor demand",
-            "Possible excess": "Review excess",
-            "Covered": "No immediate action",
+            "Possible excess": "Possible excess stock",
+            "Covered": "Stock sufficient",
         }
-        inv_list["Action"] = inv_list["Status"].map(action_labels).fillna("Review")
-        inv_columns["Action"] = "Action"
+        inv_list["Monitoring Status"] = inv_list["Status"].map(monitoring_labels).fillna("Needs stock check")
+        inv_columns["Monitoring Status"] = "Monitoring Status"
         inv_display = inv_list[list(inv_columns)].rename(columns=inv_columns)
         inv_display = inv_display.round({
             f"{action_horizon}-Day Demand": 2, "High-demand scenario*": 2,
             "Demand Gap": 2,
         })
-        st.dataframe(
+        # A selected row focuses the same product for forecasting and 14-day order
+        # details; it does NOT imply that the product is on manager hold.
+        monitoring_event = st.dataframe(
             inv_display, hide_index=True, use_container_width=True,
-            column_config={"Action": st.column_config.TextColumn(
-                "Action", help="Suggested review step based on forecasted stock status; not an approved order."
+            selection_mode="single-row", on_select="rerun",
+            key=f"monitoring_table_{store}_{action_horizon}",
+            column_config={"Monitoring Status": st.column_config.TextColumn(
+                "Monitoring Status",
+                help="Forecast-based stock screening only; manager approval is determined by the separate 14-day ordering policy."
             )},
         )
-        if not inv_list.empty:
-            st.markdown("**Inspect a product from this list**")
-            action_item_options = inv_list["item_id"].drop_duplicates().tolist()
-            action_item_selected = st.selectbox(
-                "Product to inspect", action_item_options, key="action_item_to_inspect",
-                help="Select a product, then open Review & Approval to see its order details and review status."
+        monitor_selected_rows = monitoring_event.selection.rows
+        if monitor_selected_rows and 0 <= monitor_selected_rows[0] < len(inv_list):
+            selected_monitor_item = str(inv_list.iloc[monitor_selected_rows[0]]["item_id"])
+            if st.session_state.get("focused_item") != selected_monitor_item or st.session_state.get("focused_store") != store:
+                # A fresh monitoring selection should not leave a previously
+                # selected held item overriding the order-detail product.
+                st.session_state[f"review_queue_selected_{store}"] = []
+                focus_product(selected_monitor_item)
+        if monitor_selected_rows:
+            st.caption(
+                f"Selected **{st.session_state.get('focused_item', '')}**. "
+                "Its order calculation is available under **Review & Approval**; "
+                "only products with a policy hold appear in the manager review queue."
             )
-            def open_action_product():
-                focus_product(action_item_selected)
-                st.session_state["action_product_notice"] = str(action_item_selected)
-            st.button("Review this product’s order", on_click=open_action_product,
-                      key="action_open_details", type="primary")
-            if st.session_state.get("action_product_notice") == action_item_selected:
-                st.success(f"Selected {action_item_selected}. Open Review & Approval for its order details.")
+        else:
+            st.caption("Select a product row to view its order calculation in Review & Approval.")
         st.download_button(
             f"Download {action_horizon}-Day Action List CSV",
             inv_display.to_csv(index=False),
@@ -2288,8 +2296,8 @@ if active_section == "Inventory Planning":
                         # as the main order table. No additional ordering rule is applied.
                         st.markdown("#### Manager Review Queue")
                         readable_caption(
-                            "Review products on hold, filter by reason, and open an item below "
-                            "for the specific checks required before approval."
+                            "Only items held by the 14-day ordering policy appear here. "
+                            "A monitoring shortage alone does not require order approval."
                         )
                         held_policy = order_policy.loc[order_policy["hold"].eq(True)].copy()
                         if held_policy.empty:
@@ -2400,8 +2408,12 @@ if active_section == "Inventory Planning":
         )
         default_product = (default_policy_items[0] if default_policy_items else
                            (str(store_df["item_id"].dropna().iloc[0]) if not store_df.empty else None))
-        if selected_held or default_product:
-            item = str(selected_held[0] if selected_held else default_product)
+        focused_product = st.session_state.get("focused_item") if st.session_state.get("focused_store") == store else None
+        available_policy_items = set(default_policy_items)
+        if focused_product not in available_policy_items:
+            focused_product = None
+        if selected_held or focused_product or default_product:
+            item = str(selected_held[0] if selected_held else (focused_product or default_product))
             dept_rows = store_df.loc[store_df["item_id"].eq(item), "dept_id"]
             dept = str(dept_rows.iloc[0]) if not dept_rows.empty else ""
             item_data = store_df.loc[store_df["item_id"].eq(item)].sort_values("date").copy()
