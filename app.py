@@ -995,6 +995,12 @@ if active_section == "Executive Overview":
         )
 
 
+    st.markdown("""<style>
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background:#ffffff !important;
+    }
+    </style>""", unsafe_allow_html=True)
+
     st.header("Executive Overview")
     render_overview_intro(store)
     dept = dept_options[0]  # Legacy default; Executive Overview covers all departments.
