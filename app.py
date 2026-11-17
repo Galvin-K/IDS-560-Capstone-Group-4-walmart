@@ -996,23 +996,7 @@ if active_section == "Executive Overview":
 
 
     st.header("Executive Overview")
-    # The shared intro component also emits a legacy data-scope caption under
-    # the navigation guide. Its content belongs with the calculation details.
-    # Suppress only that one note; leave header, team, and guide unchanged.
-    from unittest.mock import patch
-    def _without_guide_scope(original):
-        def _render(*args, **kwargs):
-            if args and isinstance(args[0], str):
-                text = args[0].lower()
-                if "data scope:" in text and ("m5" in text or "inventory" in text):
-                    return None
-            return original(*args, **kwargs)
-        return _render
-    with patch.object(st, "caption", _without_guide_scope(st.caption)), \
-         patch.object(st, "markdown", _without_guide_scope(st.markdown)), \
-         patch.object(st, "write", _without_guide_scope(st.write)), \
-         patch.object(st, "html", _without_guide_scope(st.html)):
-        render_overview_intro(store)
+    render_overview_intro(store)
     dept = dept_options[0]  # Legacy default; Executive Overview covers all departments.
     filtered = store_df.copy()
     item = sorted(filtered["item_id"].dropna().unique().tolist())[0]
