@@ -2875,19 +2875,16 @@ if active_section == "Inventory Planning":
         # Single time control: start at day 7; the same slider extends to day 14.
         # Only load the 14-day series if the user moves beyond the 7-day view.
         runway_day = st.slider(
-            "Inspect forecast day", min_value=1, max_value=14, value=7,
+            "Inspect forecast day · Days 8–14 use the separate 14-day daily forecast export",
+            min_value=1, max_value=14, value=7,
             key="runway_inspect_day",
-            help="Starts at day 7. Move right to inspect up to 14 days; no deliveries are assumed.",
+            help="Starts at day 7. Move right to inspect up to 14 forecast days.",
         )
         runway_horizon = runway_day
         runway_14_data = load_14day_daily_forecasts() if runway_day > 7 else None
         if runway_day > 7 and runway_14_data is None:
             st.warning("The 14-day daily forecast file is missing. Showing the available seven-day projection.")
             runway_horizon = 7
-        readable_caption(
-            "No deliveries assumed."
-        )
-
         import math
         import plotly.graph_objects as go
 
@@ -2928,12 +2925,6 @@ if active_section == "Inventory Planning":
             pid for pid in st.session_state.get("runway_selected_products", default_runway_products)
             if pid in chosen_product_options
         ]
-        runway_reset_col, runway_clear_col, _ = st.columns([1, 1, 4])
-        if runway_reset_col.button("Reset all", key="runway_reset_all", help="Restore five example products with different stock conditions"):
-            st.session_state["runway_selected_products"] = default_runway_products
-        if runway_clear_col.button("Clear all", key="runway_clear_all"):
-            st.session_state["runway_selected_products"] = []
-
         # Choose products; the one forecast-day slider above governs the horizon.
         runway_products = st.multiselect(
             "Products to compare (3–8 recommended)",
@@ -2943,9 +2934,23 @@ if active_section == "Inventory Planning":
             help="The five defaults illustrate a mix of stock conditions. Add or remove items (up to eight), or use Reset all to start over."
         )
 
-        if runway_horizon > 7:
-            readable_caption("Beyond day 7, this stock comparison uses the separate 14-day "
-                             "daily forecast export.")
+        # Callbacks run before Streamlit recreates the multiselect on rerun.
+        # Avoid modifying its widget-owned session state after rendering it.
+        def _reset_runway_products():
+            st.session_state["runway_selected_products"] = default_runway_products.copy()
+
+        def _clear_runway_products():
+            st.session_state["runway_selected_products"] = []
+
+        runway_reset_col, runway_clear_col, _ = st.columns([1, 1, 4])
+        runway_reset_col.button(
+            "Reset all", key="runway_reset_all",
+            help="Restore five example products with different stock conditions",
+            on_click=_reset_runway_products,
+        )
+        runway_clear_col.button(
+            "Clear all", key="runway_clear_all", on_click=_clear_runway_products,
+        )
 
         # Daily stock graphs (not purchase recommendations) use the selected horizon.
         runway_source = (
@@ -3133,8 +3138,8 @@ if active_section == "Inventory Planning":
             )
 
             readable_caption(
-                "Colors compare starting stock with cumulative demand. Summed daily P90 values "
-                "are illustrative, not calibrated multi-day intervals."
+                "The high-demand scenario uses summed daily P90 estimates; these are "
+                "illustrative, not calibrated multi-day prediction intervals."
             )
 
 
