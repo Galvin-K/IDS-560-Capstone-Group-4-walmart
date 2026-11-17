@@ -840,25 +840,11 @@ active_section = st.session_state["main_section_nav"]
 
 # Scroll only on navigation, not on ordinary Streamlit reruns. The component
 # runs in an iframe and tries Streamlit's main scroll container first.
-if st.session_state.pop("_scroll_to_top_on_navigation", False):
-    import streamlit.components.v1 as components
-    components.html("""<script>
-      (() => {
-        try {
-          const doc = window.parent.document;
-          const scrollers = [
-            doc.querySelector('[data-testid="stMain"]'),
-            doc.querySelector('section[data-testid="stMain"]'),
-            doc.querySelector('section.main'),
-            doc.scrollingElement,
-          ].filter(Boolean);
-          const jump = () => scrollers.forEach((el) => el.scrollTo({top:0,behavior:'instant'}));
-          jump();
-          requestAnimationFrame(jump);
-          setTimeout(jump, 120);
-        } catch(e) { /* Embedded browser restrictions may block parent scrolling. */ }
-      })();
-    </script>""", height=0)
+# Defer the scroll action until AFTER the new section has rendered. The old
+# early iframe ran before layout reconciliation, letting Streamlit restore the
+# previous scroll position afterward.
+_scroll_pending = bool(st.session_state.pop("_scroll_to_top_on_navigation", False))
+
 
 st.sidebar.header("Filters")
 
@@ -3199,6 +3185,19 @@ if active_section == "AI Assistant":
     .st-key-ai_response_card [data-testid="stMarkdownContainer"] li {
         color:#1c2f50 !important;font-size:16px !important;line-height:1.8 !important;
     }
+    /* AI-generated Markdown headings should read like section labels, not page titles. */
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] h1,
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] h2 {
+        color:#142a54 !important;font-size:21px !important;
+        line-height:1.35 !important;font-weight:700 !important;
+        margin:19px 0 7px !important;
+    }
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] h3,
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] h4 {
+        color:#142a54 !important;font-size:18px !important;
+        line-height:1.35 !important;font-weight:700 !important;
+        margin:15px 0 6px !important;
+    }
     .st-key-ai_response_card [data-testid="stMarkdownContainer"] strong {
         color:#142a54 !important;
     }
@@ -3225,17 +3224,6 @@ if active_section == "AI Assistant":
         )
         st.write("Daily P10–P90 forecasts describe uncertainty; adding daily bounds "
                  "does not produce a calibrated multi-day prediction interval.")
-
-    if st.session_state.get("assistant_review_return_available"):
-        back_store = st.session_state.get("assistant_review_return_store", "")
-        back_item = st.session_state.get("assistant_review_return_product", "")
-        st.button(
-            f"Back to Review & Approval · {back_item} ({back_store})",
-            icon=":material/arrow_back:",
-            key="assistant_back_to_manager_review",
-            on_click=_back_to_manager_review,
-            help="Return to the selected product's 14-day order review without losing its filters.",
-        )
 
     scope_choice = st.selectbox("Analysis scope", SCOPES, index=0, key="assistant_scope")
 
@@ -3565,8 +3553,22 @@ if active_section == "AI Assistant":
     if assistant_result:
         result = assistant_result
         filters = result["requested_filters"]
-        st.markdown('<h3 style="color:#142a54;font-size:23px;font-weight:750;'
-                    'margin:20px 0 10px">Answer</h3>', unsafe_allow_html=True)
+        answer_title_col, answer_return_col = st.columns([3, 2], vertical_alignment="center")
+        with answer_title_col:
+            st.markdown('<h3 style="color:#142a54;font-size:22px;font-weight:750;'
+                        'margin:13px 0 5px">Answer</h3>', unsafe_allow_html=True)
+        with answer_return_col:
+            if st.session_state.get("assistant_review_return_available"):
+                back_store = st.session_state.get("assistant_review_return_store", "")
+                back_item = st.session_state.get("assistant_review_return_product", "")
+                st.button(
+                    f"Back to Review & Approval · {back_item} ({back_store})",
+                    icon=":material/arrow_back:",
+                    key="assistant_back_to_manager_review",
+                    on_click=_back_to_manager_review,
+                    use_container_width=True,
+                    help="Return to the selected product's review with filters preserved.",
+                )
         with st.container(key="ai_response_card", border=True):
             st.markdown(f"**Your question:** {result['question']}")
             st.divider()
@@ -3727,3 +3729,45 @@ if active_section == "AI Assistant":
         )
 
 
+
+# Navigation scroll fix: insert the iframe after the new section's elements.
+# Retry briefly because Streamlit restores layout/scroll asynchronously.
+import streamlit.components.v1 as components
+components.html(r"""<script>
+      (function() {
+        try {
+          const doc = window.parent.document;
+          const candidates = () => {
+            const main = doc.querySelector('[data-testid="stMain"]');
+            const arr = [main, main?.querySelector('[data-testid="stMainBlockContainer"]'),
+                         doc.querySelector('section.main'), doc.scrollingElement];
+            if (main) {
+              let p = main;
+              for (let i=0; p && i<4; i++,p=p.parentElement) arr.push(p);
+              arr.push(...main.querySelectorAll('div,section'));
+            }
+            return [...new Set(arr.filter(Boolean))].filter(el =>
+                el.scrollHeight > el.clientHeight + 35 &&
+                (el === doc.scrollingElement ||
+                 /(auto|scroll)/.test(window.parent.getComputedStyle(el).overflowY)));
+          };
+          const jump = () => { for (const el of candidates()) el.scrollTop = 0; };
+          if (NAV_SCROLL_PENDING) {
+            jump();
+            [60,180,350,700,1100].forEach(ms => setTimeout(jump, ms));
+          }
+          // Native st.tabs switches panels without a Python rerun. Listen
+          // for tab clicks directly to reset the main content scroll.
+          if (!doc.__walmartTabScrollListener) {
+            doc.addEventListener('click', (event) => {
+              const tab = event.target.closest('[role="tab"]');
+              if (!tab) return;
+              setTimeout(jump, 30);
+              setTimeout(jump, 180);
+              setTimeout(jump, 400);
+            }, true);
+            doc.__walmartTabScrollListener = true;
+          }
+        } catch (e) { /* Parent document unavailable in this hosting context. */ }
+      })();
+    </script>""".replace("NAV_SCROLL_PENDING", "true" if _scroll_pending else "false"), height=0)
