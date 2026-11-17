@@ -2132,33 +2132,15 @@ if active_section == "Inventory Planning":
             f"{action_horizon}-Day Demand": 2, "High-demand scenario*": 2,
             "Demand Gap": 2,
         })
-        # A selected row focuses the same product for forecasting and 14-day order
-        # details; it does NOT imply that the product is on manager hold.
-        monitoring_event = st.dataframe(
+        # Monitoring is read-only for both 7- and 14-day horizons.
+        # Product selection belongs to the actual 14-day replenishment table.
+        st.dataframe(
             inv_display, hide_index=True, use_container_width=True,
-            selection_mode="single-row", on_select="rerun",
-            key=f"monitoring_table_{store}_{action_horizon}",
             column_config={"Monitoring Status": st.column_config.TextColumn(
                 "Monitoring Status",
                 help="Forecast-based stock screening only; manager approval is determined by the separate 14-day ordering policy."
             )},
         )
-        monitor_selected_rows = monitoring_event.selection.rows
-        if monitor_selected_rows and 0 <= monitor_selected_rows[0] < len(inv_list):
-            selected_monitor_item = str(inv_list.iloc[monitor_selected_rows[0]]["item_id"])
-            if st.session_state.get("focused_item") != selected_monitor_item or st.session_state.get("focused_store") != store:
-                # A fresh monitoring selection should not leave a previously
-                # selected held item overriding the order-detail product.
-                st.session_state[f"review_queue_selected_{store}"] = []
-                focus_product(selected_monitor_item)
-        if monitor_selected_rows:
-            st.caption(
-                f"Selected **{st.session_state.get('focused_item', '')}**. "
-                "Its order calculation is available under **Review & Approval**; "
-                "only products with a policy hold appear in the manager review queue."
-            )
-        else:
-            st.caption("Select a product row to view its order calculation in Review & Approval.")
         st.download_button(
             f"Download {action_horizon}-Day Action List CSV",
             inv_display.to_csv(index=False),
@@ -2284,8 +2266,13 @@ if active_section == "Inventory Planning":
                         "suggested_units": "Suggested Order",
                         "review_status": "Review",
                     })
-                    st.dataframe(
+                    # Select a single product from the 14-day order plan to
+                    # inspect its full calculation under Review & Approval.
+                    st.caption("Select an order row to view its product details in Review & Approval.")
+                    order_event = st.dataframe(
                         order_display, hide_index=True, use_container_width=True,
+                        on_select="rerun", selection_mode="single-row",
+                        key=f"routine_order_table_{store}_{review_only}_{order_search.strip()}",
                         column_config={
                             "Review": st.column_config.TextColumn(
                                 "Review",
@@ -2294,6 +2281,15 @@ if active_section == "Inventory Planning":
                             ),
                         },
                     )
+                    selected_order_rows = order_event.selection.rows
+                    if selected_order_rows and 0 <= selected_order_rows[0] < len(filtered_policy):
+                        selected_order_item = str(filtered_policy.iloc[selected_order_rows[0]]["item_id"])
+                        if (st.session_state.get("focused_item") != selected_order_item
+                                or st.session_state.get("focused_store") != store):
+                            # A new routine order selection takes priority over any
+                            # previously selected held item from the review queue.
+                            st.session_state[f"review_queue_selected_{store}"] = []
+                            focus_product(selected_order_item)
                     readable_caption("Held orders stay at zero until a manager approves them. Decisions are session-only.")
                     st.download_button(
                         "Download 14-day recommended orders CSV",
