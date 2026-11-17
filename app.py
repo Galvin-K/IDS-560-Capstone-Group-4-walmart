@@ -2175,6 +2175,23 @@ if active_section == "Inventory Planning":
                     inv_items[["item_id", "store_id", "starting_stock"]],
                     on=["item_id", "store_id"], how="inner", validate="one_to_one"
                 )
+                # The precomputed order-policy CSV does not guarantee a dept_id
+                # field. The Manager Review Queue filters by department, so
+                # attach each product's department from the forecast cube.
+                # This must remain one-to-one to avoid duplicating orders.
+                if "dept_id" not in order_policy.columns:
+                    department_lookup = (
+                        store_df[["item_id", "dept_id"]]
+                        .drop_duplicates()
+                    )
+                    if department_lookup["item_id"].duplicated().any():
+                        raise ValueError("A product has conflicting department IDs in the forecast data")
+                    order_policy = order_policy.merge(
+                        department_lookup,
+                        on="item_id", how="left", validate="many_to_one"
+                    )
+                if order_policy["dept_id"].isna().any():
+                    raise ValueError("Department information missing for some policy products")
                 if order_policy.empty:
                     st.info("No 14-day policy results are available for this store.")
                 else:
