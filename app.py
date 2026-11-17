@@ -1962,11 +1962,27 @@ if active_section == "Model Insights":
         "Demand Patterns", "Forecast Performance", "AI & RAG Evaluation"
     ])
 
+    def show_tab_purpose(question, explanation):
+        """A clearly visible, consistent introduction for the Model Insights tabs."""
+        from html import escape
+        st.html(
+            '<section style="border-left:4px solid #F0B915;padding:7px 0 9px 17px;'
+            'margin:20px 0 26px">'
+            '<div style="font-size:12px;font-weight:750;letter-spacing:.075em;'
+            'color:#82610C;text-transform:uppercase;margin-bottom:5px">'
+            'WHAT THIS TAB ANSWERS</div>'
+            '<div style="font-size:21px;line-height:1.4;font-weight:750;'
+            'color:#142A54;margin-bottom:7px">' + escape(question) + '</div>'
+            '<div style="font-size:14.5px;line-height:1.55;color:#435570">'
+            + escape(explanation) + '</div></section>'
+        )
+
     with performance_tab:
-        readable_caption(
-            "**What this tab answers:** How much better was our selected model than simpler "
-            "forecasting methods, and how does accuracy change with the planning period? "
-            "Use these results to judge the estimates in Demand Forecasting and Inventory Planning."
+        show_tab_purpose(
+            "How well does our forecasting model perform?",
+            "Compare LightGBM with simpler methods and see how forecast errors change "
+            "over time. These results help explain the estimates used in Demand Forecasting "
+            "and Inventory Planning."
         )
         render_section_heading("Forecast Model Performance")
         readable_caption(
@@ -2081,10 +2097,10 @@ if active_section == "Model Insights":
         )
 
     with patterns_tab:
-        readable_caption(
-            "**What this tab answers:** Which kinds of products and regions are harder to "
-            "forecast, and what information drives the model? These findings help explain "
-            "uncertainty in Demand Forecasting and the need for manager checks in Inventory Planning."
+        show_tab_purpose(
+            "Which products and regions are harder to forecast?",
+            "Explore demand patterns, forecast uncertainty, regional differences, "
+            "and model inputs. Use these findings when reviewing forecasts and checking inventory."
         )
         render_section_heading("Forecast Reliability")
         readable_caption(
@@ -2174,10 +2190,10 @@ if active_section == "Model Insights":
         )
 
     with ai_tab:
-        readable_caption(
-            "**What this tab answers:** Did retrieving sources and checking answers help "
-            "the research assistant perform better, and how well did the order-review rules "
-            "identify cases for managers to inspect?"
+        show_tab_purpose(
+            "How well did the AI assistant and review rules perform in testing?",
+            "See whether historical evidence and automated checks improved research results, "
+            "and how review flags identified orders needing manager attention."
         )
         render_section_heading("AI Assistant: Research Evaluation")
         readable_caption(
