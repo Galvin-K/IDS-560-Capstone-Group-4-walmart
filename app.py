@@ -1966,8 +1966,10 @@ if active_section == "Model Insights":
         """A clearly visible, consistent introduction for the Model Insights tabs."""
         from html import escape
         st.html(
-            '<section style="border-left:4px solid #F0B915;padding:7px 0 9px 17px;'
-            'margin:20px 0 26px">'
+            '<section style="background:#FFFFFF;border:1px solid #DBE3EF;'
+            'border-left:4px solid #F0B915;border-radius:10px;'
+            'padding:16px 20px;margin:18px 0 24px;'
+            'box-shadow:0 2px 10px rgba(24,50,98,.045)">'
             '<div style="font-size:12px;font-weight:750;letter-spacing:.075em;'
             'color:#82610C;text-transform:uppercase;margin-bottom:5px">'
             'WHAT THIS TAB ANSWERS</div>'
