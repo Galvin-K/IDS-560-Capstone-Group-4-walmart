@@ -3608,16 +3608,26 @@ if active_section == "AI Assistant":
                             "'### 3. Why?', '### 4. Manager Checks'. "
                             "In Recommendation, lead with the operational conclusion and give one of "
                             "'Consider approval after verification', 'Keep on hold pending verification', "
-                            "or 'Insufficient information to recommend'. State clearly when the "
-                            "conditional order is 0 units: no additional purchase is suggested; "
-                            "a policy hold can still need review. Do not claim an unresolved hold "
-                            "is cleared or that approval places a purchase. "
+                            "or 'Insufficient information to recommend'. For a held order, the "
+                            "current suggested order of 0 units is a POLICY BLOCK, not evidence "
+                            "that the product needs no replenishment. Base the inventory-need "
+                            "explanation on 'if_confirmed_order_qty' and its 14-day calculation; "
+                            "do not recommend keeping a hold solely because the current quantity is 0. "
+                            "If the conditional quantity is positive, explicitly say it could be "
+                            "ordered only after the hold is cleared and inventory is verified. "
+                            "If the conditional quantity is 0, say no additional units are "
+                            "currently indicated, though the policy flag may still need review. "
+                            "Assess the actual hold reason and available evidence independently; "
+                            "do not claim an unresolved hold is cleared or that approval places a purchase. "
                             "In Order Summary, give exactly these four separate lines (one per line): "
                             "'Current suggested order: <integer> units', "
                             "'If approved: <integer> units', "
                             "'Hold reason: <flag or None>', "
                             "'Forecast confidence: <High/Medium/Low>'. "
                             "Keep these labels exact because automated checks parse them. "
+                            "Explain nearby that the first number is the currently permitted "
+                            "order (zero while held), while 'If approved' is the conditional "
+                            "replenishment quantity, not a purchase already placed. "
                             "In Why?, give at most three short bullet points covering (a) a compact "
                             "14-day demand + safety-stock − available-and-incoming-stock calculation, "
                             "(b) the actual reason for the hold, and (c) a plain-English explanation "
@@ -3796,6 +3806,32 @@ if active_section == "AI Assistant":
 
         validation = result.get("validation")
         if validation:
+            # A compact, rule-based summary is always visible; full results
+            # stay in the expander. Not-applicable checks are excluded.
+            check_keys = (
+                "quantity_correct", "citations_valid", "no_future_sources",
+                "reasons_cited", "names_state_category", "flags_reported",
+                "no_unsupported_claims", "numbers_verified", "confidence_stated",
+            )
+            applicable = [validation.get(k) for k in check_keys
+                          if validation.get(k) is not None]
+            passes = sum(v is True for v in applicable)
+            reviews = sum(v is False for v in applicable)
+            skipped = len(check_keys) - len(applicable)
+            if reviews:
+                st.warning(
+                    f"AI explanation checks: {passes}/{len(applicable)} passed; "
+                    f"{reviews} need review. Open **AI response checks** below "
+                    "to see what needs attention. Automated checks do not "
+                    "verify that an order is safe to approve."
+                )
+            else:
+                extra = f" ({skipped} not applicable)" if skipped else ""
+                st.info(
+                    f"AI explanation checks: {passes}/{len(applicable)} passed"
+                    f"{extra}. See **AI response checks** below for details. "
+                    "These checks do not replace manager verification."
+                )
             with st.expander("AI response checks (automatic; not human verification)", expanded=False):
                 status = validation["explanation_check"]
                 st.write(f"**Status:** {status}" +
