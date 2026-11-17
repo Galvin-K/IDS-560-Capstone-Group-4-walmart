@@ -3432,34 +3432,44 @@ if active_section == "AI Assistant":
                         policy_context = (
                             "\n\nAUTHORITATIVE SELECTED ORDER POLICY (from the current dashboard):\n"
                             + _json.dumps(expected_order, sort_keys=True)
-                            + "\n\nFor this ORDER REVIEW question, address the hold reason first, "
-                            "and explain that a zero forecast does NOT automatically remove "
-                            "a new-item or discontinued-item hold. Do NOT calculate a replacement "
-                            "quantity or infer a shortage from the 7-day gap. "
-                            "Use a concise decision summary (roughly 150–220 words) with these "
-                            "exact lines: 'Current suggested order: <number> units', "
-                            "'If approved: <number> units', 'Hold reason: <reason>', "
-                            "'Forecast confidence: <High/Medium/Low>'. "
-                            "Explain the 14-day demand, safety stock, starting stock, "
-                            "incoming units, and how the hold affects the current order. "
-                            "For a held product, current suggested order is ZERO until approved; "
-                            "the if-approved quantity is conditional, not a purchase authorization. "
-                            "After explaining the figures, give an explicit advisory manager recommendation "
-                            "under the heading 'Recommendation:' using ONE of: "
+                            + "\n\nORDER-REVIEW RESPONSE FORMAT (mandatory for this selected order only): "
+                            "Write for a busy store manager, about 130–190 words total. "
+                            "Use exactly four Markdown section headings in this order: "
+                            "'### 1. Recommendation', '### 2. Order Summary', "
+                            "'### 3. Why?', '### 4. Manager Checks'. "
+                            "In Recommendation, lead with the operational conclusion and give one of "
                             "'Consider approval after verification', 'Keep on hold pending verification', "
-                            "or 'Insufficient information to recommend'. "
-                            "State a one-sentence reason tied to the selected policy and checks; if inventory "
-                            "is simulated or a flag remains unverified, do not imply the order is cleared. "
-                            "Recommend actual approval only conditionally after the required checks, "
-                            "never change the order status or claim an order was placed. "
-                            "Give 2-3 specific manager checks; do not issue automatic approval. "
-                            "Forecast confidence and manager-review holds are INDEPENDENT. Never "
-                            "claim the hold causes Low/Medium/High confidence. Explain the "
-                            "confidence rating with forecast diagnostics only when supported; "
-                            "a narrow forecast range by itself is not evidence of Low confidence. "
-                            "If diagnostics do not establish why, report the rating without "
-                            "inventing a cause. Do not describe a conditional order as validated "
-                            "or live inventory."
+                            "or 'Insufficient information to recommend'. State clearly when the "
+                            "conditional order is 0 units: no additional purchase is suggested; "
+                            "a policy hold can still need review. Do not claim an unresolved hold "
+                            "is cleared or that approval places a purchase. "
+                            "In Order Summary, give exactly these four separate lines (one per line): "
+                            "'Current suggested order: <integer> units', "
+                            "'If approved: <integer> units', "
+                            "'Hold reason: <flag or None>', "
+                            "'Forecast confidence: <High/Medium/Low>'. "
+                            "Keep these labels exact because automated checks parse them. "
+                            "In Why?, give at most three short bullet points covering (a) a compact "
+                            "14-day demand + safety-stock − available-and-incoming-stock calculation, "
+                            "(b) the actual reason for the hold, and (c) a plain-English explanation "
+                            "of forecast confidence separate from the hold. "
+                            "DO NOT include WAPE percentages, forecast-range ratios, demand pattern "
+                            "classifications, days of history, statistical diagnostics, or citation "
+                            "scores in the main answer; those belong in the dashboard's detailed "
+                            "model and calculation information. Say simply that confidence describes "
+                            "how reliable the forecast has been, and that Low means extra caution; "
+                            "do not invent the cause if diagnostics are insufficient. "
+                            "In Manager Checks, use a numbered list of exactly three brief, specific "
+                            "checks based on the hold reason (such as verify live inventory, open "
+                            "orders, lead time, or product availability). "
+                            "For outside historical claims, include valid evidence citations; no "
+                            "citations are needed for the dashboard's structured calculation. "
+                            "Do not add a separate Finding, technical Explanation, general monitoring "
+                            "discussion, boilerplate list of missing data, or repeated numeric summary. "
+                            "Always distinguish simulated stock from live inventory. "
+                            "Forecast confidence and manager-review holds are INDEPENDENT, and a "
+                            "narrow forecast range alone is not evidence of low confidence. "
+                            "A seven-day gap is NOT the basis of the 14-day order policy."
                         )
                     prompt = (
                             "You are a forecasting decision-support assistant for a HISTORICAL academic Walmart M5 project. "
@@ -3469,9 +3479,11 @@ if active_section == "AI Assistant":
                             "Do not cite retrieval documents for calculated forecast quantities. "
                             "If scope doesn't contain the requested facts, say they are unavailable. "
                             "Do not infer true inventory, causality, validated order quantities, or live data. "
-                            "Start with a concise finding grounded in the selected scope, then a short explanation "
-                            "and an actionable but non-prescriptive monitoring suggestion only if justified. "
-                            "If the direct numerical lookup is available, answer the exact question from its lookup table FIRST. "
+                            "For general questions (not selected-order reviews), start with a concise "
+                            "finding, then a short explanation and a monitoring suggestion only if justified. "
+                            "For general questions, when a direct numerical lookup is available, answer the "
+                            "exact question from its lookup table FIRST. For a selected-order review, "
+                            "the authoritative 14-day order profile takes precedence over 7-day lookup data. "
                             "Do not substitute stock-gap rankings for requested predicted-demand rankings. "
                             "If the user requests a top ranking, respect the requested sort and scope. "
                             "For store comparison questions ABOUT SHORTAGES, prioritize requested stores and describe ONLY the three highest-shortage stores, "
@@ -3635,8 +3647,21 @@ if active_section == "AI Assistant":
                             st.write("Source URL:", url)
                         st.write(passage["text"])
 
-        with st.expander("Forecast numbers and calculation details", expanded=False):
-            st.caption("These figures use the scope resolved from the question, not the sidebar store.")
+        with st.expander("Forecast data and technical details", expanded=False):
+            st.caption("These figures are historical forecast-audit data. For a selected order, use the 14-day policy values stated in the answer and order details; the 7-day audit is not an order recommendation.")
+            review_profile = result.get("order_profile")
+            if review_profile:
+                st.markdown("**Selected product: 14-day order policy**")
+                detail_cols = st.columns(4)
+                detail_cols[0].metric("14-day demand", f"{float(review_profile.get('demand_14d') or 0):,.2f}")
+                detail_cols[1].metric("Safety stock", f"{float(review_profile.get('safety_stock') or 0):,.2f}")
+                detail_cols[2].metric("Starting stock", f"{float(review_profile.get('starting_stock') or 0):,.0f}")
+                detail_cols[3].metric("If approved", f"{int(review_profile.get('if_confirmed_order_qty') or 0):,} units")
+                reason_details = str(review_profile.get("confidence_reasons") or "").strip()
+                if reason_details:
+                    st.markdown("**Technical confidence diagnostics (from the ordering policy)**")
+                    st.write(reason_details)
+                    st.caption("Group-level forecast errors and forecast-range diagnostics may not describe this individual item. A manager hold does not determine forecast confidence.")
             if filters.get("hint"):
                 st.info(filters["hint"])
             st.caption("Stores: " + (", ".join(filters["stores"]) or "All"))
