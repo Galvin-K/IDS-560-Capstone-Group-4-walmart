@@ -3141,6 +3141,10 @@ if active_section == "Inventory Planning":
                 "The high-demand scenario uses summed daily P90 estimates; these are "
                 "illustrative, not calibrated multi-day prediction intervals."
             )
+            readable_caption(
+                "This chart starts with estimated stock and subtracts predicted sales each day. "
+                "It does not include incoming deliveries or new orders."
+            )
 
 
 
