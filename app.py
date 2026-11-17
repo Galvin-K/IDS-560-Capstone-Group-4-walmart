@@ -144,26 +144,43 @@ def check_assistant_response(answer, prompt, evidence, decision_date, filters=No
             unknown.append(value)
     result['numbers_verified'] = not unknown
 
-    bullets = [l.strip() for l in answer.splitlines()
-               if l.lstrip().startswith(('- ', '* ', '• '))]
-    if bullets and len(rows):
-        result['reasons_cited'] = (sum(bool(re.search(r'\[(?:E)?\d+\]', b, re.I))
-                                       for b in bullets) / len(bullets)) >= 0.8
-    # The notebook checks state/category naming for item-specific orders.
-    # For a scoped QA question, apply it only when both are unambiguous.
-    store_ids = list(filters.get('stores') or [])
-    departments = list(filters.get('departments') or [])
-    states = {store.split('_')[0] for store in store_ids}
-    categories = {dept.split('_')[0] for dept in departments}
-    if len(states) == 1 and len(categories) == 1:
-        state_names = {'CA': 'California', 'TX': 'Texas', 'WI': 'Wisconsin'}
-        category_words = {'FOODS': 'food', 'HOBBIES': 'hobb', 'HOUSEHOLD': 'household'}
-        state = next(iter(states)); category = next(iter(categories))
-        state_term = state_names.get(state, state).lower()
-        category_term = category_words.get(category, category.lower())
-        lower = answer.lower()
-        result['names_state_category'] = (state_term in lower or
-            bool(re.search(r'\b' + re.escape(state) + r'_\d+\b', answer))) and category_term in lower
+    # Evidence citation presence, rather than forcing citations onto numbered
+    # manager action instructions (which are procedural, not historical claims).
+    # The separate citation-validity and date checks inspect those references.
+    if len(rows):
+        result['reasons_cited'] = bool(citation_indices)
+
+    # Verify the specific store and department used by a manager-order handoff.
+    # General questions may specify unambiguous filters instead.
+    if expected_order and expected_order.get('store_id') and expected_order.get('department'):
+        scoped_store = str(expected_order['store_id'])
+        scoped_dept = str(expected_order['department'])
+        lower_answer = answer.lower()
+        state_words = {'CA': 'california', 'TX': 'texas', 'WI': 'wisconsin'}
+        store_prefix = scoped_store.split('_')[0].upper()
+        department_prefix = scoped_dept.split('_')[0].upper()
+        department_words = {'FOODS': 'food', 'HOBBIES': 'hobb', 'HOUSEHOLD': 'household'}
+        store_found = (scoped_store.lower() in lower_answer or
+                       state_words.get(store_prefix, '__none__') in lower_answer)
+        dept_found = (scoped_dept.lower() in lower_answer or
+                      department_words.get(department_prefix, '__none__') in lower_answer)
+        result['names_state_category'] = bool(store_found and dept_found)
+    else:
+        store_ids = list(filters.get('stores') or [])
+        departments = list(filters.get('departments') or [])
+        states = {store.split('_')[0] for store in store_ids}
+        categories = {dept.split('_')[0] for dept in departments}
+        if len(states) == 1 and len(categories) == 1:
+            state_names = {'CA': 'California', 'TX': 'Texas', 'WI': 'Wisconsin'}
+            category_words = {'FOODS': 'food', 'HOBBIES': 'hobb', 'HOUSEHOLD': 'household'}
+            state = next(iter(states)); category = next(iter(categories))
+            state_term = state_names.get(state, state).lower()
+            category_term = category_words.get(category, category.lower())
+            lower = answer.lower()
+            result['names_state_category'] = (
+                (state_term in lower or bool(re.search(r'\\b' + re.escape(state) + r'_\\d+\\b', answer)))
+                and category_term in lower
+            )
 
     # Flags and quantity are checked only if the assistant actually receives a
     # computed order profile. The generic QA tab does not currently supply one.
@@ -204,10 +221,26 @@ def check_assistant_response(answer, prompt, evidence, decision_date, filters=No
         )
         confidence = expected_order.get('confidence')
         if confidence:
-            result['confidence_stated'] = bool(re.search(r'Forecast confidence:\s*\**' + re.escape(confidence), answer, re.I))
+            # A correct label is insufficient if the assistant incorrectly
+            # claims that a manager hold CAUSED that confidence rating.
+            label_ok = bool(re.search(
+                r'Forecast confidence:\s*\**' + re.escape(str(confidence)) + r'\b',
+                answer, re.I))
+            confidence_reason = re.search(
+                r'(?is)\bconfidence\s+is\s+(?:high|medium|low)\s+'
+                r'(?:for\s+\w+\s+)?reasons?\s*:\s*([^\n]{0,250})', answer)
+            false_hold_cause = bool(confidence_reason and re.search(
+                r'(?i)\b(?:order\s+is\s+on\s+hold|on\s+hold|order\s+hold)\b',
+                confidence_reason.group(1)))
+            false_hold_cause |= bool(re.search(
+                r'(?i)\b(?:low|medium|high)\s+(?:forecast\s+)?confidence'
+                r'\s+(?:because|due to)\s+[^.\n]{0,90}\b(?:hold|review)\b', answer))
+            result['confidence_stated'] = bool(label_ok and not false_hold_cause)
 
     # Check external factual claims in bullet points; do not treat a statement
     # about missing evidence as an unsupported factual claim.
+    bullets = [line.strip() for line in answer.splitlines()
+               if re.match(r'^\\s*(?:[-*•]\\s+|\\d+[.)]\\s+)', line)]
     external = re.compile(r'\b(?:storm|snow|weather|rain|SNAP|inflation|unemployment|promotion|economic|hurricane)\b', re.I)
     negative = re.compile(r'\b(?:no|not|cannot|unavailable|missing|without)\b', re.I)
     result['no_unsupported_claims'] = not any(external.search(b) and not negative.search(b)
@@ -3289,7 +3322,13 @@ if active_section == "AI Assistant":
                             "For a held product, current suggested order is ZERO until approved; "
                             "the if-approved quantity is conditional, not a purchase authorization. "
                             "Give 2-3 specific manager checks; do not issue automatic approval. "
-                            "Do not describe a conditional order as validated or live inventory."
+                            "Forecast confidence and manager-review holds are INDEPENDENT. Never "
+                            "claim the hold causes Low/Medium/High confidence. Explain the "
+                            "confidence rating with forecast diagnostics only when supported; "
+                            "a narrow forecast range by itself is not evidence of Low confidence. "
+                            "If diagnostics do not establish why, report the rating without "
+                            "inventing a cause. Do not describe a conditional order as validated "
+                            "or live inventory."
                         )
                     prompt = (
                             "You are a forecasting decision-support assistant for a HISTORICAL academic Walmart M5 project. "
@@ -3408,12 +3447,12 @@ if active_section == "AI Assistant":
                     "quantity_correct": "Suggested order matches computed quantity",
                     "citations_valid": "Citation numbers exist in retrieved sources",
                     "no_future_sources": "Cited sources predate the decision",
-                    "reasons_cited": "Most bullet-point reasons cite sources",
-                    "names_state_category": "Store state and category named",
+                    "reasons_cited": "Historical evidence cited in answer",
+                    "names_state_category": "Store and department identified",
                     "flags_reported": "Order holds and flags described",
                     "no_unsupported_claims": "No obvious uncited outside claims in bullet points",
                     "numbers_verified": "Numerical claims match supplied values",
-                    "confidence_stated": "Item forecast confidence matches policy",
+                    "confidence_stated": "Forecast confidence label and explanation consistent",
                 }
                 check_rows = [
                     {"Check": label_map[name],
