@@ -1787,25 +1787,25 @@ if active_section == "Demand Forecasting":
 
 if active_section == "Model Insights":
     st.header("Model Insights")
-    forecast_tab, ai_tab = st.tabs(["Forecasting Models", "RAG & AI Evaluation"])
+    readable_caption("Historical evaluation on the 2016 M5 holdout sample; not live store performance.")
+    performance_tab, patterns_tab, ai_tab = st.tabs([
+        "Forecast Performance", "Demand Patterns", "AI & RAG Evaluation"
+    ])
 
-    with forecast_tab:
-        st.markdown("## Forecasting Model Performance")
-        st.write("How we selected LightGBM, how accurate its forecasts were, and where demand is harder to predict.")
-        render_model_summary()
+    with performance_tab:
+        render_section_heading("Forecast Model Performance")
+        metrics = st.columns(4)
+        metrics[0].metric("LightGBM 7-day WAPE", "71.62%",
+                          help="Lower total absolute forecast error is better.")
+        metrics[1].metric("Recent-mean WAPE", "74.58%",
+                          help="Seven-day recent-sales-average baseline.")
+        metrics[2].metric("Forecast bias", "−0.70%",
+                          help="Negative means demand was underestimated overall.")
+        metrics[3].metric("RMSE", "2.04 units",
+                          help="Root mean squared prediction error.")
+        readable_caption("LightGBM lowered 7-day WAPE by 2.96 percentage points versus the recent-mean baseline.")
 
-        # Extra diagnostics supplement the headline model-selection WAPE comparison.
-        st.subheader("4. Additional Seven-Day Diagnostics")
-        a, b, c = st.columns(3)
-        a.metric("Forecast bias", "−0.70%",
-                 help="Negative means total demand was slightly underestimated.")
-        b.metric("RMSE", "2.04 units",
-                 help="Forecast error measured in units, giving larger misses more weight.")
-        c.metric("P10–P90 coverage", "77.7%",
-                 help="Share of actual daily observations within prediction bounds; target was 80%.")
-        readable_caption("2016 held-out sample (15,245 item–store series).")
-
-        st.subheader("5. Forecast Error Across 7, 14 and 28 Days")
+        render_section_heading("Accuracy Across Forecast Periods")
         poster_horizons = pd.DataFrame({
             "Horizon": ["7 days", "14 days", "28 days"],
             "WAPE": [71.62, 72.55, 73.94],
@@ -1814,7 +1814,7 @@ if active_section == "Model Insights":
         poster_fig = go.Figure(go.Bar(
             x=poster_horizons["Horizon"], y=poster_horizons["WAPE"],
             marker_color=["#184A8C", "#4F81BD", "#B8CCE4"],
-            text=[f"{v:.1f}%" for v in poster_horizons["WAPE"]],
+            text=[f"{v:.2f}%" for v in poster_horizons["WAPE"]],
             textposition="outside",
         ))
         poster_fig.update_layout(
@@ -1824,195 +1824,112 @@ if active_section == "Model Insights":
             margin=dict(t=55, b=50),
         )
         st.plotly_chart(poster_fig, use_container_width=True)
-        st.markdown(
-            "**Key takeaway:** Forecast error was lowest at 7 days and rose gradually at 14 and 28 days. "
-            "The dashboard uses 7-day forecasts for quick stock checks and a separate 14-day forecast "
-            "with safety stock for replenishment decisions."
-        )
-        readable_caption(
-            "Source: `04_M5_LightGBM_Final_Forecasting.ipynb`."
-        )
+        readable_caption("Forecast error increased modestly over longer periods; 7-day forecasts were most accurate.")
 
-        with st.expander("Evaluation methodology and data split", expanded=False):
-            st.write(
-                "The models were trained using sales through 2014, validated on 2015, "
-                "then tested on unseen sales from January 1 to May 22, 2016. "
-                "The historical test includes 15,245 item–store series in the 50% sample."
-            )
-            readable_caption(
-                "WAPE, bias, RMSE, and interval coverage are explained above in "
-                "'How to Interpret the Results'."
-            )
-
-        with st.expander(" Explore detailed model comparisons and segment results", expanded=False):
-            st.subheader("1. Which forecasting method performed best?")
-            st.markdown("**Historical test: comparing five forecast methods**")
-            readable_caption("TSB and SES were exploratory comparisons; LightGBM remains the selected forecast model.")
+        with st.expander("Explore detailed model comparisons", expanded=False):
             comparison_horizon = st.radio(
                 "Comparison period", [7, 14, 28],
                 format_func=lambda d: f"{d} days", horizontal=True,
                 key="historical_model_comparison_period")
             historical_models = pd.DataFrame([
-                {"Model": "Recent sales average (7 days)", "Forecast error (%)": 74.58, "Bias (%)": -1.75, "RMSE (units)": 2.219, "Days": 7},
-                {"Model": "Recent sales average (28 days)", "Forecast error (%)": 73.91, "Bias (%)": -2.76, "RMSE (units)": 2.202, "Days": 7},
-                {"Model": "TSB (intermittent demand)", "Forecast error (%)": 72.816, "Bias (%)": -3.969, "RMSE (units)": 2.159, "Days": 7},
-                {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 72.846, "Bias (%)": -4.100, "RMSE (units)": 2.159, "Days": 7},
-                {"Model": "LightGBM (selected)", "Forecast error (%)": 71.62, "Bias (%)": -0.70, "RMSE (units)": 2.040, "Days": 7},
-                {"Model": "Recent sales average (7 days)", "Forecast error (%)": 75.77, "Bias (%)": -2.27, "RMSE (units)": 2.282, "Days": 14},
-                {"Model": "Recent sales average (28 days)", "Forecast error (%)": 74.65, "Bias (%)": -3.08, "RMSE (units)": 2.243, "Days": 14},
-                {"Model": "TSB (intermittent demand)", "Forecast error (%)": 73.729, "Bias (%)": -4.427, "RMSE (units)": 2.209, "Days": 14},
-                {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 73.763, "Bias (%)": -4.567, "RMSE (units)": 2.210, "Days": 14},
-                {"Model": "LightGBM (selected)", "Forecast error (%)": 72.55, "Bias (%)": -1.31, "RMSE (units)": 2.080, "Days": 14},
-                {"Model": "Recent sales average (7 days)", "Forecast error (%)": 77.25, "Bias (%)": -2.72, "RMSE (units)": 2.343, "Days": 28},
-                {"Model": "Recent sales average (28 days)", "Forecast error (%)": 75.94, "Bias (%)": -3.58, "RMSE (units)": 2.294, "Days": 28},
-                {"Model": "TSB (intermittent demand)", "Forecast error (%)": 75.060, "Bias (%)": -4.780, "RMSE (units)": 2.261, "Days": 28},
-                {"Model": "Exponential smoothing (SES)", "Forecast error (%)": 75.104, "Bias (%)": -4.902, "RMSE (units)": 2.263, "Days": 28},
-                {"Model": "LightGBM (selected)", "Forecast error (%)": 73.94, "Bias (%)": -1.67, "RMSE (units)": 2.123, "Days": 28},
+                {"Model": "Recent sales average (7 days)", "WAPE (%)": 74.58, "Bias (%)": -1.75, "RMSE (units)": 2.219, "Days": 7},
+                {"Model": "Recent sales average (28 days)", "WAPE (%)": 73.91, "Bias (%)": -2.76, "RMSE (units)": 2.202, "Days": 7},
+                {"Model": "TSB (intermittent demand)", "WAPE (%)": 72.816, "Bias (%)": -3.969, "RMSE (units)": 2.159, "Days": 7},
+                {"Model": "Exponential smoothing (SES)", "WAPE (%)": 72.846, "Bias (%)": -4.100, "RMSE (units)": 2.159, "Days": 7},
+                {"Model": "LightGBM (selected)", "WAPE (%)": 71.62, "Bias (%)": -0.70, "RMSE (units)": 2.040, "Days": 7},
+                {"Model": "Recent sales average (7 days)", "WAPE (%)": 75.77, "Bias (%)": -2.27, "RMSE (units)": 2.282, "Days": 14},
+                {"Model": "Recent sales average (28 days)", "WAPE (%)": 74.65, "Bias (%)": -3.08, "RMSE (units)": 2.243, "Days": 14},
+                {"Model": "TSB (intermittent demand)", "WAPE (%)": 73.729, "Bias (%)": -4.427, "RMSE (units)": 2.209, "Days": 14},
+                {"Model": "Exponential smoothing (SES)", "WAPE (%)": 73.763, "Bias (%)": -4.567, "RMSE (units)": 2.210, "Days": 14},
+                {"Model": "LightGBM (selected)", "WAPE (%)": 72.55, "Bias (%)": -1.31, "RMSE (units)": 2.080, "Days": 14},
+                {"Model": "Recent sales average (7 days)", "WAPE (%)": 77.25, "Bias (%)": -2.72, "RMSE (units)": 2.343, "Days": 28},
+                {"Model": "Recent sales average (28 days)", "WAPE (%)": 75.94, "Bias (%)": -3.58, "RMSE (units)": 2.294, "Days": 28},
+                {"Model": "TSB (intermittent demand)", "WAPE (%)": 75.060, "Bias (%)": -4.780, "RMSE (units)": 2.261, "Days": 28},
+                {"Model": "Exponential smoothing (SES)", "WAPE (%)": 75.104, "Bias (%)": -4.902, "RMSE (units)": 2.263, "Days": 28},
+                {"Model": "LightGBM (selected)", "WAPE (%)": 73.94, "Bias (%)": -1.67, "RMSE (units)": 2.123, "Days": 28},
             ])
-            selected_historical = historical_models.loc[historical_models["Days"] == comparison_horizon].copy()
-            st.dataframe(selected_historical.drop(columns="Days").round(2), hide_index=True, use_container_width=True)
+            selected_historical = historical_models.loc[historical_models["Days"].eq(comparison_horizon)].copy()
+            st.dataframe(selected_historical.drop(columns="Days").round(2), hide_index=True,
+                         use_container_width=True)
             compare_fig = go.Figure(go.Bar(
-                x=selected_historical["Model"], y=selected_historical["Forecast error (%)"],
-                marker_color=["#184A8C" if m == "LightGBM (selected)" else "#B8CCE4" for m in selected_historical["Model"]],
-                text=selected_historical["Forecast error (%)"].round(2), texttemplate="%{text:.2f}%", textposition="outside"))
-            compare_fig.update_layout(title=f"{comparison_horizon}-day historical forecast error (lower is better)",
-                                      yaxis_title="WAPE (%)", xaxis_title="", height=390,
+                x=selected_historical["Model"], y=selected_historical["WAPE (%)"],
+                marker_color=["#184A8C" if m == "LightGBM (selected)" else "#B8CCE4"
+                              for m in selected_historical["Model"]],
+                text=selected_historical["WAPE (%)"].round(2), texttemplate="%{text:.2f}%",
+                textposition="outside"))
+            compare_fig.update_layout(title=f"{comparison_horizon}-day WAPE by method",
+                                      yaxis_title="WAPE (%)", xaxis_title="", height=370,
                                       xaxis_tickangle=-18, yaxis=dict(rangemode="tozero"))
             st.plotly_chart(compare_fig, use_container_width=True)
-
-            readable_caption(
-                "**Historical sources:** `03_M5_Statistical_Model_Exploration.ipynb` "
-                "(TSB, SES and statistical screening) and "
-                "`04_M5_LightGBM_Final_Forecasting.ipynb` (LightGBM, recent-mean "
-                "baselines, and 2016 holdout). Croston and SBA were evaluated during validation "
-                "but were not selected for confirmatory held-out testing. "
-                "TSB and SES are exploratory comparisons, not live dashboard models."
-            )
-
-            st.subheader("2. Did the models forecast too much or too little?")
-            st.write(
-                "A negative value means the method underestimated total demand. "
-                "For inventory teams, consistently underestimating demand can increase stockout risk."
-            )
+            readable_caption("LightGBM had the lowest WAPE among the five reported methods at each horizon; TSB and SES were exploratory comparisons.")
             bias_fig = go.Figure(go.Bar(
-                x=selected_historical["Model"],
-                y=selected_historical["Bias (%)"],
+                x=selected_historical["Model"], y=selected_historical["Bias (%)"],
                 marker_color=["#184A8C" if m == "LightGBM (selected)" else "#B8CCE4"
                               for m in selected_historical["Model"]],
                 text=selected_historical["Bias (%)"].round(2),
-                texttemplate="%{text:.2f}%", textposition="outside"
-            ))
+                texttemplate="%{text:.2f}%", textposition="outside"))
             bias_fig.add_hline(y=0, line_color="#303030", line_width=1)
-            bias_fig.update_layout(
-                title=f"{comparison_horizon}-day forecast bias — 2016 test",
-                xaxis_title="", yaxis_title="Signed bias (%)",
-                xaxis_tickangle=-18, height=390,
-            )
+            bias_fig.update_layout(title=f"{comparison_horizon}-day forecast bias",
+                                   xaxis_title="", yaxis_title="Signed bias (%)",
+                                   xaxis_tickangle=-18, height=360)
             st.plotly_chart(bias_fig, use_container_width=True)
+            readable_caption("LightGBM's aggregate bias was closest to zero across the reported forecast periods.")
 
-            st.subheader("3. Which types of products are harder to forecast?")
-            st.write(
-                "We grouped items by how regularly customers bought them. The seven-day results "
-                "show that products with sporadic sales are harder to predict than products with steady sales."
-            )
-            by_pattern = pd.DataFrame({
-                "Demand pattern": ["Smooth", "Erratic", "Intermittent", "Lumpy", "No sales"],
-                "Recent 7-day average": [48.205, 58.448, 89.424, 83.773, 88.806],
-                "LightGBM": [44.625, 55.447, 86.927, 80.331, 89.532],
-            })
-            pattern_fig = go.Figure()
-            for model_name, color in [("Recent 7-day average", "#B8CCE4"), ("LightGBM", "#184A8C")]:
-                pattern_fig.add_trace(go.Bar(
-                    x=by_pattern["Demand pattern"], y=by_pattern[model_name],
-                    name=model_name, marker_color=color,
-                ))
-            pattern_fig.update_layout(
-                title="7-day forecast error by demand pattern — 2016 test",
-                yaxis_title="WAPE (%) — lower is better", xaxis_title="",
-                barmode="group", height=420,
-            )
-            st.plotly_chart(pattern_fig, use_container_width=True)
-            readable_caption(
-                "This chart compares LightGBM with the recent seven-day average on the same "
-                "2016 held-out 50% sample. For products with no sales, WAPE is aggregated at "
-                "the group level; it is not an individual product's percentage error. "
-                "Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 10.2."
-            )
+    with patterns_tab:
+        render_section_heading("Forecast Reliability")
+        reliability = st.columns(2)
+        reliability[0].metric("P10–P90 coverage", "77.7%",
+                              help="Share of observed daily sales within lower and upper forecast estimates.")
+        reliability[1].metric("Nominal coverage target", "80%")
+        readable_caption("Daily forecast ranges covered 77.7% of observations, slightly below the 80% target; they do not guarantee product-level accuracy.")
 
-            st.subheader("4. Where might the model overestimate or underestimate demand?")
-            st.write(
-                "This historical chart highlights groups where the model systematically "
-                "forecast too high or too low. Negative numbers mean underforecasting. "
-                "For example, Wisconsin food items had a -3.53% bias in this test."
-            )
-            bias_map = pd.DataFrame(
-                [[-0.588, 2.082, 0.205], [-0.248, 1.659, 2.433], [-3.528, 0.232, -0.721]],
-                index=["California", "Texas", "Wisconsin"],
-                columns=["Foods", "Hobbies", "Household"]
-            )
-            location_fig = go.Figure(go.Heatmap(
-                z=bias_map.values, x=list(bias_map.columns), y=list(bias_map.index),
-                colorscale="RdBu_r", zmid=0,
-                colorbar=dict(title="Bias (%)"),
-                text=[[f"{v:+.2f}%" for v in row] for row in bias_map.values],
-                texttemplate="%{text}", textfont=dict(size=13),
-            ))
-            location_fig.update_layout(
-                title="LightGBM 7-day forecast bias by state and category — 2016 test",
-                height=380, xaxis_title="Category", yaxis_title="State",
-            )
-            st.plotly_chart(location_fig, use_container_width=True)
-            readable_caption(
-                "Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 10.1. "
-                "Group-level historical estimates; they do not predict the bias of a specific product."
-            )
+        render_section_heading("Error by Demand Pattern")
+        by_pattern = pd.DataFrame({
+            "Demand pattern": ["Smooth", "Erratic", "Intermittent", "Lumpy", "No sales"],
+            "Recent 7-day average": [48.205, 58.448, 89.424, 83.773, 88.806],
+            "LightGBM": [44.625, 55.447, 86.927, 80.331, 89.532],
+        })
+        pattern_fig = go.Figure()
+        for model_name, color in [("Recent 7-day average", "#B8CCE4"), ("LightGBM", "#184A8C")]:
+            pattern_fig.add_trace(go.Bar(x=by_pattern["Demand pattern"], y=by_pattern[model_name],
+                                        name=model_name, marker_color=color))
+        pattern_fig.update_layout(title="7-day WAPE by demand pattern", yaxis_title="WAPE (%) — lower is better",
+                                  xaxis_title="", barmode="group", height=390)
+        st.plotly_chart(pattern_fig, use_container_width=True)
+        readable_caption("Intermittent and lumpy products were harder to forecast than smooth sellers; 'No sales' uses group-level WAPE.")
 
-            with st.expander("What information does LightGBM use most?", expanded=False):
-                st.write(
-                    "The model relies mostly on recent sales patterns. These percentages measure "
-                    "how much each group contributed to splits in the fitted model; "
-                    "they do not prove that changing one input causes sales to change."
-                )
-                feature_groups = pd.DataFrame({
-                    "Input": ["Recent sales patterns", "Price", "Item and store type",
-                              "Calendar and events", "Same weekday history", "Forecast lead time"],
-                    "Share of model gain (%)": [89.3, 5.1, 3.3, 1.2, 0.7, 0.3]
-                })
-                gain_fig = go.Figure(go.Bar(
-                    x=feature_groups["Share of model gain (%)"],
-                    y=feature_groups["Input"], orientation="h",
-                    marker_color="#0071ce",
-                ))
-                gain_fig.update_layout(
-                    title="Feature groups by model gain", xaxis_title="Share of model gain (%)",
-                    yaxis_title="", yaxis=dict(autorange="reversed"), height=340,
-                )
-                st.plotly_chart(gain_fig, use_container_width=True)
-                readable_caption("Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 11.3.")
+        render_section_heading("Regional Forecast Bias")
+        bias_map = pd.DataFrame(
+            [[-0.588, 2.082, 0.205], [-0.248, 1.659, 2.433], [-3.528, 0.232, -0.721]],
+            index=["California", "Texas", "Wisconsin"],
+            columns=["Foods", "Hobbies", "Household"])
+        location_fig = go.Figure(go.Heatmap(
+            z=bias_map.values, x=list(bias_map.columns), y=list(bias_map.index),
+            colorscale="RdBu_r", zmid=0, colorbar=dict(title="Bias (%)"),
+            text=[[f"{v:+.2f}%" for v in row] for row in bias_map.values],
+            texttemplate="%{text}", textfont=dict(size=13)))
+        location_fig.update_layout(title="7-day LightGBM bias by state and category",
+                                   height=370, xaxis_title="Category", yaxis_title="State")
+        st.plotly_chart(location_fig, use_container_width=True)
+        readable_caption("Wisconsin Foods showed the strongest underforecasting (−3.53%); these group averages do not describe individual items.")
 
-            with st.expander("How reliable is the forecast range?", expanded=False):
-                st.write(
-                    "We also tested how often actual daily sales landed between our lower and "
-                    "higher demand estimates. Demand-type-specific ranges covered **77.7%** of "
-                    "observations, compared with a nominal **80%** target. We use this result "
-                    "to communicate uncertainty, not to promise that every future day falls in range."
-                )
-                readable_caption("Source: `04_M5_LightGBM_Final_Forecasting.ipynb`, Section 11.2.")
-
-            readable_caption(
-                "**Notebook filenames:** `03_M5_Statistical_Model_Exploration.ipynb`; "
-                "`04_M5_LightGBM_Final_Forecasting.ipynb`."
-            )
+        with st.expander("Explore model input importance", expanded=False):
+            feature_groups = pd.DataFrame({
+                "Input": ["Recent sales patterns", "Price", "Item and store type",
+                          "Calendar and events", "Same weekday history", "Forecast lead time"],
+                "Share of model gain (%)": [89.3, 5.1, 3.3, 1.2, 0.7, 0.3]})
+            gain_fig = go.Figure(go.Bar(x=feature_groups["Share of model gain (%)"],
+                                        y=feature_groups["Input"], orientation="h",
+                                        marker_color="#0071ce"))
+            gain_fig.update_layout(title="Feature groups by model gain",
+                                   xaxis_title="Share of model gain (%)", yaxis_title="",
+                                   yaxis=dict(autorange="reversed"), height=330)
+            st.plotly_chart(gain_fig, use_container_width=True)
+            readable_caption("Recent sales patterns account for 89.3% of model gain; feature importance is not causal evidence.")
 
     with ai_tab:
-        st.markdown("## RAG, AI Assistant & Inventory Risk")
-        st.write("Historical research evaluation of retrieval, answer quality, and manager-review flags (not live dashboard measurements).")
-
-        st.subheader("AI Assistant: Held-Out Research Evaluation")
-        readable_caption(
-            "Our research compared four AI approaches on 36 new 2016 cases, "
-            "with two runs per system (72 runs each), scored automatically."
-        )
+        render_section_heading("AI Assistant: Research Evaluation")
+        readable_caption("Held-out research benchmark on synthetic cases, not a live accuracy measurement.")
         agent_eval = pd.DataFrame({
             "Approach": ["Direct LLM", "Basic RAG", "RAG agent", "Agent + validation"],
             "Task success (%)": [36.1, 51.4, 70.8, 75.0],
@@ -2020,57 +1937,51 @@ if active_section == "Model Insights":
         eval_fig = go.Figure(go.Bar(
             x=agent_eval["Approach"], y=agent_eval["Task success (%)"],
             marker_color=["#A3B0C0", "#8094AC", "#1761B1", "#168B83"],
-            text=[f"{v:.1f}%" for v in agent_eval["Task success (%)"]],
-            textposition="outside",
-        ))
-        eval_fig.update_layout(
-            title="Research agent task success — higher is better",
-            yaxis_title="Task success (%)", yaxis=dict(range=[0, 90]),
-            height=370, margin=dict(t=60,b=40), showlegend=False,
-        )
+            text=[f"{v:.1f}%" for v in agent_eval["Task success (%)"]], textposition="outside"))
+        eval_fig.update_layout(title="Research agent task success — higher is better",
+                               yaxis_title="Task success (%)", yaxis=dict(range=[0, 90]),
+                               height=345, margin=dict(t=60, b=40), showlegend=False)
         st.plotly_chart(eval_fig, use_container_width=True)
+        readable_caption("The agent with automated checks reached 75.0% task success on 72 automatically scored runs.")
         eval_a, eval_b, eval_c = st.columns(3)
         eval_a.metric("Agent + checks", "75.0%", help="54 of 72 automatically scored runs")
         eval_b.metric("Numeric grounding", "100%", help="Checked runs only: numbers appeared in supplied inputs")
-        eval_c.metric("Avg. response time", "10.5 seconds", help="Held-out research benchmark, not live response time")
-        with st.expander("How to interpret the AI benchmark", expanded=False):
-            st.write(
-                "All four approaches used the same research LLM (Claude Haiku 5.5). "
-                "Validation checked order quantities, source citations, dates, flags, "
-                "confidence and numerical claims. The sample was synthetic and "
-                "human review remained pending in the notebook. The dashboard has "
-                "different prompts and inputs, so these scores cannot be assumed "
-                "to measure the deployed assistant."
-            )
-            readable_caption(
-                "Source: `M5_RAG_6_heldout_benchmark_v4.ipynb` and "
-                "`M5_RAG_4_evaluation_v4.ipynb`."
-            )
+        eval_c.metric("Avg. response time", "10.5 seconds", help="Research benchmark, not live response time")
 
-        st.subheader("Inventory Risk Detection: Historical Flagging Evaluation")
-        readable_caption(
-            "The research evaluated whether review flags identified products that might "
-            "not be actively selling. These numbers are from the notebook's historical "
-            "evaluation, not from live inventory monitoring."
-        )
+        render_section_heading("Manager-Review Flagging Evaluation")
         f1, prec, reduction = st.columns(3)
-        f1.metric("Flagging F1", "0.58", help="F1 balances precision and recall on historical test cases.")
-        prec.metric("Flagging precision", "0.57", help="About 57% of the flagged cases matched the evaluation's defined outcome.")
-        reduction.metric("Fewer orders held", "33%", help="Relative to the previous 14-plus zero-sales-days rule.")
-        with st.expander("How the item-review flags were evaluated", expanded=False):
-            st.markdown(
-                "The new policy distinguishes **new items**, **possible stockouts**, and "
-                "**possibly discontinued items**. It reduces the number of orders held "
-                "for review compared with the original 14-day zero-sales rule while "
-                "maintaining similar F1 in the research evaluation."
-            )
-            readable_caption(
-                "For a held item, the app displays zero immediately approved units "
-                "and separately shows the conditional amount if a manager confirms the item. "
-                "The flags are signals for review, not proof that shelves are empty or "
-                "the item has been discontinued. Source: `M5_RAG_3_agent_v4.ipynb` "
-                "and the team's final presentation, slide 25."
-            )
+        f1.metric("Flagging F1", "0.58", help="Balances precision and recall in historical test cases")
+        prec.metric("Flagging precision", "0.57", help="Share of flagged cases matching the evaluation outcome")
+        reduction.metric("Fewer orders held", "33%", help="Compared with the older 14+ zero-sales-days rule")
+        readable_caption("The revised review rules reduced holds by 33% in simulation, while retaining similar F1.")
+        with st.expander("What do these research results mean?", expanded=False):
+            st.write("All four AI approaches used the same research LLM, with 36 held-out cases "
+                     "run twice per system (72 runs per approach). Scoring was automated; human "
+                     "review remained pending. The deployed assistant has different inputs and prompts.")
+            st.write("The review policy distinguishes new items, possible stockouts, and possibly "
+                     "discontinued products. Flags are reasons to investigate, not proof of a stockout "
+                     "or discontinuation. Held items show zero immediately approved units and a "
+                     "separate conditional quantity if a manager clears the hold.")
+
+    with st.expander("Research sources, methodology & metric definitions", expanded=False):
+        st.markdown(
+            "**Evaluation scope:** Models trained on sales through 2014, validated on 2015, "
+            "and tested on January 1–May 22, 2016; the holdout uses 15,245 item–store series "
+            "in a stratified 50% sample.\n\n"
+            "**Metrics:** WAPE = total absolute forecast error / total actual units; "
+            "bias = signed aggregate forecast error (negative indicates underforecasting); "
+            "RMSE = root mean squared error; P10–P90 coverage = share of actual daily sales "
+            "within the two forecast estimates.\n\n"
+            "**Forecasting notebooks:** `03_M5_Statistical_Model_Exploration.ipynb` "
+            "(TSB/SES comparisons); `04_M5_LightGBM_Final_Forecasting.ipynb` "
+            "(model selection, horizon comparisons, segments, bias, model gain, interval coverage). "
+            "TSB and SES were exploratory; Croston and SBA were not selected for confirmatory "
+            "held-out testing.\n\n"
+            "**AI and inventory evaluation:** `M5_RAG_6_heldout_benchmark_v4.ipynb`, "
+            "`M5_RAG_4_evaluation_v4.ipynb`, and `M5_RAG_3_agent_v4.ipynb`. "
+            "The AI benchmark and review-policy results come from research simulations, "
+            "not measurements of the deployed Streamlit assistant."
+        )
 
 # ============================================================
 # TAB 3: INVENTORY PLANNING
