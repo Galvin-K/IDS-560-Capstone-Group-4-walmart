@@ -780,6 +780,24 @@ if "inventory_overrides" not in st.session_state:
 if "manager_review_decisions" not in st.session_state:
     st.session_state["manager_review_decisions"] = {}
 
+def commit_planning_stock(store_id, product_id):
+    """Commit the editable stock before the next rerun recalculates all tables."""
+    key = f"planning_override_{store_id}_{product_id}"
+    if key in st.session_state:
+        st.session_state["inventory_overrides"][(str(store_id), str(product_id))] = int(st.session_state[key])
+
+
+def clear_planning_stock(store_id, product_id):
+    """Restore the simulated stock when manual override is switched off."""
+    st.session_state["inventory_overrides"].pop((str(store_id), str(product_id)), None)
+
+
+def record_selected_manager_decisions(store_id, decision):
+    """Apply the manager's simulated decision only to selected held products."""
+    for product_id in st.session_state.get(f"review_queue_selected_{store_id}", []):
+        record_manager_decision(store_id, product_id, decision)
+
+
 def record_manager_decision(store_id, product_id, decision):
     st.session_state["manager_review_decisions"][(str(store_id), str(product_id))] = decision
 
@@ -2235,8 +2253,7 @@ if active_section == "Inventory Planning":
                         },
                     )
                     readable_caption(
-                        "Held orders stay at zero until approved here. Decisions reset with this browser session."
-
+                        "Starting Stock is included in the table. Held orders remain zero until approved in the review queue; decisions reset each session."
                     )
                     st.download_button(
                         "Download 14-day recommended orders CSV",
@@ -2273,27 +2290,24 @@ if active_section == "Inventory Planning":
                             option for option in queue_reason_options
                             if option == "All reasons" or option in present_reasons
                         ]
-                        reason_col, search_col = st.columns([1, 1.4])
+                        dept_col, reason_col = st.columns([1, 1.2])
+                        with dept_col:
+                            queue_dept = st.selectbox(
+                                "Department", ["All departments"] + sorted(held_policy["dept_id"].dropna().unique().tolist()),
+                                key=f"review_queue_dept_{store}",
+                            )
                         with reason_col:
                             queue_reason = st.selectbox(
                                 "Review reason", queue_reason_options,
                                 key=f"review_queue_reason_{store}",
                             )
-                        with search_col:
-                            queue_search = st.text_input(
-                                "Find a held product", key=f"review_queue_search_{store}",
-                            )
                         review_matches = held_policy
+                        if queue_dept != "All departments":
+                            review_matches = review_matches.loc[review_matches["dept_id"].eq(queue_dept)]
                         if queue_reason != "All reasons":
                             review_matches = review_matches.loc[
                                 review_matches["review_labels"].map(
                                     lambda labels: queue_reason in labels
-                                )
-                            ]
-                        if queue_search.strip():
-                            review_matches = review_matches.loc[
-                                review_matches["item_id"].str.contains(
-                                    queue_search.strip(), case=False, regex=False
                                 )
                             ]
                         review_matches = review_matches.sort_values(
@@ -2322,23 +2336,46 @@ if active_section == "Inventory Planning":
                                     help="Suggested units only after a manager clears the hold."
                                 )},
                             )
-                            selected_review_item = st.selectbox(
-                                "Product to review", review_matches["item_id"].tolist(),
-                                key=f"review_queue_item_{store}_{queue_reason}",
+                            queue_options = review_matches["item_id"].tolist()
+                            selection_key = f"review_queue_selected_{store}"
+                            if selection_key in st.session_state:
+                                st.session_state[selection_key] = [
+                                    pid for pid in st.session_state[selection_key] if pid in queue_options
+                                ]
+                            selected_review_items = st.multiselect(
+                                "Select held products to review",
+                                options=queue_options,
+                                key=selection_key,
+                                help="Choose one item for its order details or several for the same simulated review decision.",
                             )
-                            def open_review_product():
-                                focus_product(selected_review_item)
-                                st.session_state["review_queue_opened"] = selected_review_item
-                            st.button(
-                                "Review selected product",
-                                on_click=open_review_product,
-                                key=f"review_queue_open_{store}", type="secondary",
-                            )
-                            if st.session_state.get("review_queue_opened") == selected_review_item:
-                                st.success(f"Selected {selected_review_item} for review. Open the Replenishment & Review tab to inspect its hold and order calculation.")
-                
+                            if selected_review_items:
+                                chosen_first = selected_review_items[0]
+                                st.caption(
+                                    f"Order details below show **{chosen_first}**. "
+                                    + (f"Decisions will apply to all {len(selected_review_items)} selected products."
+                                       if len(selected_review_items) > 1 else
+                                       "Manager decisions are temporary and do not place an order.")
+                                )
+                                decision_cols = st.columns(3)
+                                decision_cols[0].button(
+                                    "Approve selected", key=f"queue_approve_{store}",
+                                    on_click=record_selected_manager_decisions, args=(store, "Approved"),
+                                    type="primary", use_container_width=True,
+                                )
+                                decision_cols[1].button(
+                                    "Do not approve", key=f"queue_reject_{store}",
+                                    on_click=record_selected_manager_decisions, args=(store, "Rejected"),
+                                    use_container_width=True,
+                                )
+                                decision_cols[2].button(
+                                    "Reset selected", key=f"queue_reset_{store}",
+                                    on_click=record_selected_manager_decisions, args=(store, "Pending"),
+                                    use_container_width=True,
+                                )
+                            else:
+                                st.caption("Select one or more held products above to review an order and decide.")
                     readable_caption(
-                        "Store-wide estimates assume zero incoming units; enter an incoming shipment below for the selected product."
+                        "Store-wide order quantities use simulated stock; the selected product's stock can be changed below."
                     )
             except (ValueError, KeyError, FileNotFoundError, TypeError, ImportError) as exc:
                 st.error(f"Cannot load 14-day ordering recommendations: {type(exc).__name__}: {exc}")
@@ -2346,232 +2383,214 @@ if active_section == "Inventory Planning":
             st.info(order_message + ". The 14-day ordering CSV is needed for recommendations.")
 
     with replenish_tab:
-        st.divider()
-        render_section_heading("Selected Product: 14-Day Order")
-        planning_dept = st.selectbox("Department", dept_options, key="planning_dept")
-        planning_items = sorted(store_df[store_df["dept_id"] == planning_dept]["item_id"].dropna().unique().tolist())
-        planning_item = st.selectbox("Product", planning_items, key="planning_item")
-        dept = planning_dept
-        filtered = store_df[store_df["dept_id"] == dept].copy()
-        item = planning_item
-        item_data = filtered[filtered["item_id"] == item].sort_values("date").copy()
-        predicted_total = float(item_data["forecast"].sum())
-        with st.expander("Set or override inventory for this product", expanded=False):
-            selected_key = (str(store), str(item))
-            override_enabled = st.checkbox(
-                "Manually set starting stock for this product",
-                value=selected_key in st.session_state["inventory_overrides"],
-                key=f"planning_override_enabled_{store}_{item}"
-            )
-            if override_enabled:
-                current_stock = st.session_state["inventory_overrides"].get(selected_key)
-                if current_stock is None:
-                    current_rows = inv_items.loc[inv_items["item_id"].eq(item), "starting_stock"]
-                    current_stock = int(current_rows.iloc[0]) if not current_rows.empty else 0
-                override_value = st.number_input(
-                    "Starting stock (units)", min_value=0, step=1,
-                    value=int(current_stock), key=f"planning_override_{store}_{item}"
+        selected_held = st.session_state.get(f"review_queue_selected_{store}", [])
+        if selected_held:
+            item = str(selected_held[0])
+            dept_rows = store_df.loc[store_df["item_id"].eq(item), "dept_id"]
+            dept = str(dept_rows.iloc[0]) if not dept_rows.empty else ""
+            item_data = store_df.loc[store_df["item_id"].eq(item)].sort_values("date").copy()
+            predicted_total = float(item_data["forecast"].sum())
+            st.divider()
+            render_section_heading("14-Day Replenishment | Selected Product")
+            st.caption(f"**{item}** · {dept} · {store} · Selected from Manager Review Queue")
+            st.caption("The order covers expected sales over 14 days: 7-day delivery lead time + 7-day review period.")
+            with st.expander("Set or override inventory for this product", expanded=False):
+                selected_key = (str(store), str(item))
+                override_enabled = st.checkbox(
+                    "Manually set starting stock for this product",
+                    value=selected_key in st.session_state["inventory_overrides"],
+                    key=f"planning_override_enabled_{store}_{item}",
+                    on_change=lambda: (None if st.session_state.get(f"planning_override_enabled_{store}_{item}")
+                                       else clear_planning_stock(store, item)),
                 )
-                st.session_state["inventory_overrides"][selected_key] = int(override_value)
-                inv_items.loc[inv_items["item_id"].eq(item), "starting_stock"] = int(override_value)
-                inv_items.loc[inv_items["item_id"].eq(item), "inventory_source"] = "Manual override"
-            else:
-                if selected_key in st.session_state["inventory_overrides"]:
-                    st.session_state["inventory_overrides"].pop(selected_key, None)
-                    readable_caption("Removed the manual override. Other dashboard sections refresh on the next rerun.")
-        # Use one starting-stock display; the Monitoring tab contains the
-        # comparative stock screening and projected shortages.
-        col1, col2 = st.columns(2)
-
-
-        selected_inventory_row = inv_items[
-            inv_items["item_id"] == item
-        ]
-
-        if selected_inventory_row.empty:
-            st.info(
-                "Select the relevant department in the inventory "
-                "scope to view this product."
-            )
-            on_hand = 0
-        else:
-            on_hand = int(
-                selected_inventory_row["starting_stock"].iloc[0]
-            )
-
-
-        selected_source = (
-            selected_inventory_row["inventory_source"].iloc[0]
-            if not selected_inventory_row.empty else "Simulated"
-        )
-        st.caption(f"Starting stock: **{on_hand:,} units** ({selected_source}) · "
-                   f"7-day forecast: **{predicted_total:,.2f} units**")
-
-        # REAL 14-DAY POLICY — precomputed using the team's v4 LightGBM model,
-        # M5 history, safety stock, confidence and hold/review rules. The only
-        # live arithmetic is stock-dependent ordering; do NOT initialize M5 here.
-        st.divider()
-        render_section_heading("14-Day Replenishment | Suggested Orders")
-        readable_caption(
-            "14-day replenishment: predicted demand + safety stock − available and incoming units. "
-            "Flagged items require manager review."
-        )
-        offline_available, offline_message = offline_policy_status()
-        if not offline_available:
-            st.info(offline_message + ". Upload the generated CSV to forecasting/ to enable this section.")
-        else:
-            try:
-                policy_table = load_offline_policy()
-                policy_rows = policy_table[policy_table["store_id"].eq(str(store))]
-                # Store-wide counts are already present in the order table.
-                ordering_cols = st.columns(2)
-                policy_on_order = ordering_cols[0].number_input(
-                    "Already on order (units)", min_value=0, value=0, step=1,
-                    key=f"v4_precomputed_on_order_{store}_{item}",
-                    help="Units already ordered for the selected product, not included in current on-hand stock."
-                )
-                ordering_cols[1].caption("Fixed 14-day plan: 7-day delivery + 7-day review cycle.")
-                try:
-                    v4_selected = offline_v4_recommendation(
-                        item=item, store=store, on_hand=on_hand, on_order=int(policy_on_order)
+                if override_enabled:
+                    current_stock = st.session_state["inventory_overrides"].get(selected_key)
+                    if current_stock is None:
+                        current_rows = inv_items.loc[inv_items["item_id"].eq(item), "starting_stock"]
+                        current_stock = int(current_rows.iloc[0]) if not current_rows.empty else 0
+                    override_value = st.number_input(
+                        "Starting stock (units)", min_value=0, step=1,
+                        value=int(current_stock), key=f"planning_override_{store}_{item}",
+                        on_change=commit_planning_stock, args=(store, item),
                     )
-                except KeyError:
-                    st.warning("This product is not available in the precomputed 14-day policy sample.")
+                    st.session_state["inventory_overrides"][selected_key] = int(override_value)
+                    inv_items.loc[inv_items["item_id"].eq(item), "starting_stock"] = int(override_value)
+                    inv_items.loc[inv_items["item_id"].eq(item), "inventory_source"] = "Manual override"
                 else:
-                    manager_decision = st.session_state["manager_review_decisions"].get(
-                        (str(store), str(item)), "Pending"
-                    ) if v4_selected["hold"] else "No hold"
-                    effective_order_qty = (
-                        int(v4_selected.get("if_confirmed_order_qty") or 0)
-                        if v4_selected["hold"] and manager_decision == "Approved"
-                        else (0 if v4_selected["hold"] else int(v4_selected["order_qty"]))
-                    )
-                    metric_cols = st.columns(4)
-                    metric_cols[0].metric("Expected 14-day sales", f"{v4_selected['demand_14d']:,.1f}",
-                                          help="Units we expect customers to buy during January 1–14.")
-                    metric_cols[1].metric("Extra safety stock", f"{v4_selected['safety_stock']:,.1f}",
-                                          help="Additional inventory to help cover unexpectedly high demand.")
-                    metric_cols[2].metric("Target stock level", f"{v4_selected['order_up_to']:,.1f}",
-                                          help="Expected 14-day demand plus safety stock.")
-                    metric_cols[3].metric("Suggested units to order", f"{effective_order_qty:,}",
-                                          help="Target minus stock on hand and stock already on order; zero for held items.")
-                    # Order approval status is separate from forecast reliability.
-                    # This label is based on the precomputed hold decision, not confidence.
-                    status_title_col, status_info_col, _status_spacer = st.columns(
-                        [1.0, 0.35, 7.0], gap="small", vertical_alignment="center"
-                    )
-                    with status_title_col:
-                        st.markdown("**Order status**")
-                    with status_info_col:
-                        with st.popover("ⓘ", type="tertiary"):
-                            st.markdown(
-                                "**What is an order hold?**\n\n"
-                                "A hold is a system-generated restriction that prevents a "
-                                "suggested order from being approved until the flagged issue "
-                                "has been reviewed. It is separate from forecast confidence.\n\n"
-                                "*The review flag is advisory; it does not process an order.*"
-                            )
-                    if v4_selected['hold']:
-                        review_steps = manager_review_steps(
-                            f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
-                        )
-                        if not review_steps:
-                            review_steps = [
-                                "Confirm the hold reason, verify available and incoming stock, and approve the order only after the issue is resolved."
-                            ]
-                        review_text = "\n".join(f"- {step}" for step in review_steps)
-                        hold_labels = hold_reason_labels(
-                            f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
-                        )
-                        conditional_units = int(v4_selected.get("if_confirmed_order_qty") or 0)
-                        status_note = {
-                            "Pending": "Manager review required",
-                            "Approved": "Approved for this demo session",
-                            "Rejected": "Not approved for this demo session",
-                        }.get(manager_decision, "Manager review required")
-                        st.warning(
-                            f"**{status_note}**\n\n"
-                            f"**Reason:** {', '.join(hold_labels)}\n\n"
-                            f"**Manager action:**\n{review_text}\n\n"
-                            f"**Units if approved:** {conditional_units:,} "
-                            f"{'unit' if conditional_units == 1 else 'units'} "
-                            "(simulated; no real order placed)."
-                        )
-                        st.markdown("**Manager decision (demo only)**")
-                        approve_col, reject_col, reset_col = st.columns([1, 1, 1.2])
-                        approve_col.button(
-                            "Approve", key=f"approve_hold_{store}_{item}", type="primary",
-                            on_click=record_manager_decision,
-                            args=(store, item, "Approved"), use_container_width=True,
-                        )
-                        reject_col.button(
-                            "Do not approve", key=f"reject_hold_{store}_{item}",
-                            on_click=record_manager_decision,
-                            args=(store, item, "Rejected"), use_container_width=True,
-                        )
-                        reset_col.button(
-                            "Reset decision", key=f"reset_hold_{store}_{item}",
-                            on_click=record_manager_decision,
-                            args=(store, item, "Pending"), use_container_width=True,
-                        )
-                        st.caption("Updates the order table and this product’s quantity. "
-                                   "No order is submitted; decisions are session-only.")
-                    else:
-                        st.success(
-                            "**No hold** — No additional manager review is required by the system. "
-                            "The suggested quantity is available for normal manager approval."
-                        )
-                    # Keep forecast confidence separate from the ordering hold decision.
-                    # The hold warning above determines whether an order may proceed.
-                    confidence_label = str(v4_selected.get("confidence", "Low")).strip().title()
-                    if confidence_label not in ("High", "Medium", "Low"):
-                        confidence_label = "Low"
-                    confidence_design = {
-                        "High": ("#237A47", "#E6F4EA", "#C5E5D0"),
-                        "Medium": ("#9B6500", "#FFF4D6", "#F0DBA5"),
-                        "Low": ("#B42332", "#FDEBEC", "#F3C4C9"),
-                    }
-                    confidence_fg, confidence_bg, confidence_border = confidence_design[confidence_label]
-                    # Show only the current confidence level and one plain-language
-                    # explanation; retain details under the existing expander.
-                    confidence_description = {
-                        "High": "Forecast shows relatively strong historical reliability.",
-                        "Medium": "Some forecast uncertainty. Review demand estimates before ordering.",
-                        "Low": "This product's demand is harder to predict. Check the suggested quantity and available stock before ordering.",
-                    }[confidence_label]
-                    st.markdown(
-                        '<div style="border:1px solid #DBE3EF;border-radius:10px;'
-                        'padding:12px 15px;margin-top:12px;margin-bottom:12px;max-width:720px">'
-                        '<div style="display:flex;align-items:center;justify-content:space-between;'
-                        'gap:12px;flex-wrap:wrap">'
-                        '<span style="font-weight:650;color:#041e42">Forecast confidence</span>'
-                        f'<span style="color:{confidence_fg};background:{confidence_bg};'
-                        f'border:1px solid {confidence_border};border-radius:999px;'
-                        'padding:3px 12px;font-weight:750">'
-                        f'● {confidence_label}</span></div>'
-                        f'<div style="color:#617189;font-size:0.85rem;margin-top:6px">'
-                        f'{confidence_description}</div></div>',
-                        unsafe_allow_html=True,
-                    )
-                    with st.expander("Why this confidence level?", expanded=False):
-                        reasons = str(v4_selected.get("confidence_reasons", "")).strip()
-                        st.write(reasons if reasons and reasons.lower() != "nan" else
-                                 "The confidence score comes from the historical forecast-error and uncertainty checks.")
-                        flags = str(v4_selected.get("flags", "")).strip()
-                        holds = str(v4_selected.get("hold_reasons", "")).strip()
-                        if flags and flags.lower() != "nan":
-                            readable_caption("Review flags: " + flags.replace("_", " ").title())
-                        if holds and holds.lower() != "nan":
-                            readable_caption("Hold reasons: " + holds.replace("_", " ").title())
-                    with st.expander("Order calculation details", expanded=False):
-                        st.write(
-                            f"Inventory position: {v4_selected['inventory_position']:,.0f} units "
-                            f"({on_hand:,} on hand + {int(policy_on_order):,} on order). "
-                            f"Safety stock method: {v4_selected.get('safety_stock_method','historical v4 policy')}."
-                        )
+                    if selected_key in st.session_state["inventory_overrides"]:
+                        st.session_state["inventory_overrides"].pop(selected_key, None)
+                        readable_caption("Removed the manual override. Other dashboard sections refresh on the next rerun.")
+            # Use one starting-stock display; the Monitoring tab contains the
+            # comparative stock screening and projected shortages.
+            col1, col2 = st.columns(2)
 
-            except (ValueError, KeyError, FileNotFoundError, TypeError, ImportError) as exc:
-                st.error(f"Cannot load precomputed v4 inventory decisions: {type(exc).__name__}: {exc}")
+
+            selected_inventory_row = inv_items[
+                inv_items["item_id"] == item
+            ]
+
+            if selected_inventory_row.empty:
+                st.info(
+                    "Select the relevant department in the inventory "
+                    "scope to view this product."
+                )
+                on_hand = 0
+            else:
+                on_hand = int(
+                    selected_inventory_row["starting_stock"].iloc[0]
+                )
+
+
+            selected_source = (
+                selected_inventory_row["inventory_source"].iloc[0]
+                if not selected_inventory_row.empty else "Simulated"
+            )
+            st.caption(f"Starting stock: **{on_hand:,} units** ({selected_source}) · "
+                       f"7-day forecast: **{predicted_total:,.2f} units**")
+
+            # REAL 14-DAY POLICY — precomputed using the team's v4 LightGBM model,
+            # M5 history, safety stock, confidence and hold/review rules. The only
+            # live arithmetic is stock-dependent ordering; do NOT initialize M5 here.
+            readable_caption("Suggested units = 14-day demand + safety stock − starting stock − units already on order.")
+            offline_available, offline_message = offline_policy_status()
+            if not offline_available:
+                st.info(offline_message + ". Upload the generated CSV to forecasting/ to enable this section.")
+            else:
+                try:
+                    policy_table = load_offline_policy()
+                    policy_rows = policy_table[policy_table["store_id"].eq(str(store))]
+                    # Store-wide counts are already present in the order table.
+                    ordering_cols = st.columns(2)
+                    policy_on_order = ordering_cols[0].number_input(
+                        "Already on order (units)", min_value=0, value=0, step=1,
+                        key=f"v4_precomputed_on_order_{store}_{item}",
+                        help="Units already ordered for the selected product, not included in current on-hand stock."
+                    )
+                    ordering_cols[1].caption("Planning horizon: 14 days (7-day delivery + 7-day review period).")
+                    try:
+                        v4_selected = offline_v4_recommendation(
+                            item=item, store=store, on_hand=on_hand, on_order=int(policy_on_order)
+                        )
+                    except KeyError:
+                        st.warning("This product is not available in the precomputed 14-day policy sample.")
+                    else:
+                        manager_decision = st.session_state["manager_review_decisions"].get(
+                            (str(store), str(item)), "Pending"
+                        ) if v4_selected["hold"] else "No hold"
+                        effective_order_qty = (
+                            int(v4_selected.get("if_confirmed_order_qty") or 0)
+                            if v4_selected["hold"] and manager_decision == "Approved"
+                            else (0 if v4_selected["hold"] else int(v4_selected["order_qty"]))
+                        )
+                        metric_cols = st.columns(4)
+                        metric_cols[0].metric("Expected demand (14 days)", f"{v4_selected['demand_14d']:,.1f}",
+                                              help="Units we expect customers to buy during January 1–14.")
+                        metric_cols[1].metric("Extra safety stock", f"{v4_selected['safety_stock']:,.1f}",
+                                              help="Additional inventory to help cover unexpectedly high demand.")
+                        metric_cols[2].metric("Target stock level", f"{v4_selected['order_up_to']:,.1f}",
+                                              help="Expected 14-day demand plus safety stock.")
+                        metric_cols[3].metric("Suggested units to order", f"{effective_order_qty:,}",
+                                              help="Target minus stock on hand and stock already on order; zero for held items.")
+                        # Order approval status is separate from forecast reliability.
+                        # This label is based on the precomputed hold decision, not confidence.
+                        status_title_col, status_info_col, _status_spacer = st.columns(
+                            [1.0, 0.35, 7.0], gap="small", vertical_alignment="center"
+                        )
+                        with status_title_col:
+                            st.markdown("**Order status**")
+                        with status_info_col:
+                            with st.popover("ⓘ", type="tertiary"):
+                                st.markdown(
+                                    "**What is an order hold?**\n\n"
+                                    "A hold is a system-generated restriction that prevents a "
+                                    "suggested order from being approved until the flagged issue "
+                                    "has been reviewed. It is separate from forecast confidence.\n\n"
+                                    "*The review flag is advisory; it does not process an order.*"
+                                )
+                        if v4_selected['hold']:
+                            review_steps = manager_review_steps(
+                                f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
+                            )
+                            if not review_steps:
+                                review_steps = [
+                                    "Confirm the hold reason, verify available and incoming stock, and approve the order only after the issue is resolved."
+                                ]
+                            review_text = "\n".join(f"- {step}" for step in review_steps)
+                            hold_labels = hold_reason_labels(
+                                f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
+                            )
+                            conditional_units = int(v4_selected.get("if_confirmed_order_qty") or 0)
+                            status_note = {
+                                "Pending": "Manager review required",
+                                "Approved": "Approved for this demo session",
+                                "Rejected": "Not approved for this demo session",
+                            }.get(manager_decision, "Manager review required")
+                            st.warning(
+                                f"**{status_note}**\n\n"
+                                f"**Reason:** {', '.join(hold_labels)}\n\n"
+                                f"**Manager action:**\n{review_text}\n\n"
+                                f"**Units if approved:** {conditional_units:,} "
+                                f"{'unit' if conditional_units == 1 else 'units'} "
+                                "(simulated; no real order placed)."
+                            )
+                            st.caption("Use the Manager Review Queue above to approve, reject, or reset this item. "
+                                       "The order table updates on the next rerun; no real purchase is made.")
+                        else:
+                            st.success(
+                                "**No hold** — No additional manager review is required by the system. "
+                                "The suggested quantity is available for normal manager approval."
+                            )
+                        # Keep forecast confidence separate from the ordering hold decision.
+                        # The hold warning above determines whether an order may proceed.
+                        confidence_label = str(v4_selected.get("confidence", "Low")).strip().title()
+                        if confidence_label not in ("High", "Medium", "Low"):
+                            confidence_label = "Low"
+                        confidence_design = {
+                            "High": ("#237A47", "#E6F4EA", "#C5E5D0"),
+                            "Medium": ("#9B6500", "#FFF4D6", "#F0DBA5"),
+                            "Low": ("#B42332", "#FDEBEC", "#F3C4C9"),
+                        }
+                        confidence_fg, confidence_bg, confidence_border = confidence_design[confidence_label]
+                        # Show only the current confidence level and one plain-language
+                        # explanation; retain details under the existing expander.
+                        confidence_description = {
+                            "High": "Forecast shows relatively strong historical reliability.",
+                            "Medium": "Some forecast uncertainty. Review demand estimates before ordering.",
+                            "Low": "This product's demand is harder to predict. Check the suggested quantity and available stock before ordering.",
+                        }[confidence_label]
+                        st.markdown(
+                            '<div style="border:1px solid #DBE3EF;border-radius:10px;'
+                            'padding:12px 15px;margin-top:12px;margin-bottom:12px;max-width:720px">'
+                            '<div style="display:flex;align-items:center;justify-content:space-between;'
+                            'gap:12px;flex-wrap:wrap">'
+                            '<span style="font-weight:650;color:#041e42">Forecast confidence</span>'
+                            f'<span style="color:{confidence_fg};background:{confidence_bg};'
+                            f'border:1px solid {confidence_border};border-radius:999px;'
+                            'padding:3px 12px;font-weight:750">'
+                            f'● {confidence_label}</span></div>'
+                            f'<div style="color:#617189;font-size:0.85rem;margin-top:6px">'
+                            f'{confidence_description}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                        with st.expander("Why this confidence level?", expanded=False):
+                            reasons = str(v4_selected.get("confidence_reasons", "")).strip()
+                            st.write(reasons if reasons and reasons.lower() != "nan" else
+                                     "The confidence score comes from the historical forecast-error and uncertainty checks.")
+                            flags = str(v4_selected.get("flags", "")).strip()
+                            holds = str(v4_selected.get("hold_reasons", "")).strip()
+                            if flags and flags.lower() != "nan":
+                                readable_caption("Review flags: " + flags.replace("_", " ").title())
+                            if holds and holds.lower() != "nan":
+                                readable_caption("Hold reasons: " + holds.replace("_", " ").title())
+                        with st.expander("Order calculation details", expanded=False):
+                            st.write(
+                                f"Inventory position: {v4_selected['inventory_position']:,.0f} units "
+                                f"({on_hand:,} on hand + {int(policy_on_order):,} on order). "
+                                f"Safety stock method: {v4_selected.get('safety_stock_method','historical v4 policy')}."
+                            )
+
+                except (ValueError, KeyError, FileNotFoundError, TypeError, ImportError) as exc:
+                    st.error(f"Cannot load precomputed v4 inventory decisions: {type(exc).__name__}: {exc}")
 
 
     # Stock Monitoring continues with a multi-product runway comparison.
