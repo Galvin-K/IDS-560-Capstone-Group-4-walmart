@@ -793,7 +793,7 @@ def clear_planning_stock(store_id, product_id):
 
 
 def record_selected_manager_decisions(store_id, decision):
-    """Apply the manager's simulated decision only to selected held products."""
+    """Apply the simulated decision to the single selected held product."""
     for product_id in st.session_state.get(f"review_queue_selected_{store_id}", []):
         record_manager_decision(store_id, product_id, decision)
 
@@ -2162,7 +2162,7 @@ if active_section == "Inventory Planning":
     with replenish_tab:
         render_section_heading("Recommended Replenishment Orders")
         st.write(
-            "Review 14-day order quantities, holds, and manager decisions (simulated only)."
+            "Review suggested orders and manager decisions (simulated only)."
         )
         order_ready, order_message = offline_policy_status()
         if order_ready:
@@ -2345,35 +2345,35 @@ if active_section == "Inventory Planning":
                                 "confidence": "Forecast Confidence",
                                 "review_decision": "Decision",
                             })
-                            st.dataframe(
+                            st.caption("Click a product row to view its 14-day order details below.")
+                            selection_key = f"review_queue_selected_{store}"
+                            queue_options = review_matches["item_id"].astype(str).tolist()
+                            # Keep only a single active product; a changed queue filter
+                            # must not leave a hidden product selected for approval.
+                            selected_previous = st.session_state.get(selection_key, [])
+                            if isinstance(selected_previous, str):
+                                selected_previous = [selected_previous]
+                            selected_previous = [pid for pid in selected_previous if pid in queue_options]
+                            st.session_state[selection_key] = selected_previous[:1]
+                            queue_event = st.dataframe(
                                 queue_display, use_container_width=True, hide_index=True,
                                 height=min(420, 45 + 35 * len(queue_display)),
+                                on_select="rerun", selection_mode="single-row",
+                                key=f"review_queue_table_{store}_{queue_dept}_{queue_reason}",
                                 column_config={"Units if Approved": st.column_config.NumberColumn(
                                     "Units if Approved", format="%d",
                                     help="Suggested units only after a manager clears the hold."
                                 )},
                             )
-                            queue_options = review_matches["item_id"].tolist()
-                            selection_key = f"review_queue_selected_{store}"
-                            if selection_key in st.session_state:
-                                st.session_state[selection_key] = [
-                                    pid for pid in st.session_state[selection_key] if pid in queue_options
-                                ]
-                            selected_review_items = st.multiselect(
-                                "Select held products to review",
-                                options=queue_options,
-                                key=selection_key,
-                                help="Choose one item for its order details or several for the same simulated review decision.",
-                            )
-                            if selected_review_items:
+                            chosen_rows = queue_event.selection.rows
+                            if chosen_rows and chosen_rows[0] < len(queue_options):
+                                clicked_item = queue_options[chosen_rows[0]]
+                                st.session_state[selection_key] = [clicked_item]
+                            if st.session_state[selection_key]:
                                 st.caption(
-                                    f"Order details below show **{selected_review_items[0]}**. "
-                                    + (f"Decisions will apply to all {len(selected_review_items)} selected products."
-                                       if len(selected_review_items) > 1 else
-                                       "Approval controls are at the end of this tab.")
+                                    f"Selected: **{st.session_state[selection_key][0]}** · "
+                                    "Review its calculation and hold reason below before deciding."
                                 )
-                            else:
-                                st.caption("Choose held products to review. Product-level order details remain available below even without a selection.")
                     readable_caption(
                         "Store-wide order quantities use simulated stock; the selected product's stock can be changed below."
                     )
@@ -2402,13 +2402,10 @@ if active_section == "Inventory Planning":
             render_section_heading("14-Day Replenishment | Selected Product")
             source_label = "Selected from Manager Review Queue" if selected_held else "Default product (select a held item in the queue to change it)"
             st.caption(f"**{item}** · {dept} · {store} · {source_label}")
-            st.info(
-                "**Why 14 days?** The seven-day stock check shows possible shortages before "
-                "the next delivery. Replenishment instead uses a **14-day protection period**: "
-                "7 days until delivery + 7 days until the following stock review. "
-                "Therefore, the order calculation uses expected demand for all 14 days, "
-                "plus safety stock, minus available and incoming inventory. "
-                "These are two different decisions—not two contradictory forecasts."
+            st.caption(
+                "**14-day order plan:** 7 days for delivery + 7 days until the next "
+                "stock review. The suggested quantity covers forecast demand for "
+                "those 14 days, plus safety stock, less stock available or already on order."
             )
             with st.expander("Set or override inventory for this product", expanded=False):
                 selected_key = (str(store), str(item))
@@ -2549,8 +2546,7 @@ if active_section == "Inventory Planning":
                                 f"{'unit' if conditional_units == 1 else 'units'} "
                                 "(simulated; no real order placed)."
                             )
-                            st.caption("Use the Manager Review Queue above to approve, reject, or reset this item. "
-                                       "The order table updates on the next rerun; no real purchase is made.")
+                            st.caption("Manager approval controls are at the end of this tab. No real purchase is made.")
                         else:
                             st.success(
                                 "**No hold** — No additional manager review is required by the system. "
@@ -2610,15 +2606,15 @@ if active_section == "Inventory Planning":
 
 
     # Manager decision belongs at the END, after product calculations, confidence,
-    # and evidence. Decisions apply to the chosen held items only.
+    # and evidence. Only the selected held product can be approved or rejected.
     with replenish_tab:
         st.divider()
         st.markdown("#### Manager Decision")
         selected_for_decision = st.session_state.get(f"review_queue_selected_{store}", [])
         if selected_for_decision:
             st.write(
-                f"Review the figures and hold reasons above before deciding for "
-                f"**{len(selected_for_decision)} selected product(s)**."
+                f"Review the order quantity, hold reasons, and confidence above before "
+                f"deciding for **{selected_for_decision[0]}**."
             )
             st.caption(
                 "Need supporting context? Open **AI Assistant** in the sidebar and ask about "
@@ -2627,7 +2623,7 @@ if active_section == "Inventory Planning":
             )
             decision_cols = st.columns(3)
             decision_cols[0].button(
-                "Approve selected", key=f"queue_approve_{store}",
+                "Approve product", key=f"queue_approve_{store}",
                 on_click=record_selected_manager_decisions, args=(store, "Approved"),
                 type="primary", use_container_width=True,
             )
@@ -2637,14 +2633,14 @@ if active_section == "Inventory Planning":
                 use_container_width=True,
             )
             decision_cols[2].button(
-                "Reset selected", key=f"queue_reset_{store}",
+                "Reset decision", key=f"queue_reset_{store}",
                 on_click=record_selected_manager_decisions, args=(store, "Pending"),
                 use_container_width=True,
             )
             st.caption("Demo only: decisions update this session's order quantities; no purchase is submitted.")
         else:
-            st.info("Select one or more held products in the review queue to enable approval decisions.")
-            st.caption("You can still review the default product's 14-day calculation above.")
+            st.info("Click one held product in the review queue to enable approval decisions.")
+            st.caption("The product details above remain available without a queue selection.")
 
     # Stock Monitoring continues with a multi-product runway comparison.
     with runway_slot:
