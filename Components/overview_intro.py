@@ -10,11 +10,6 @@ import streamlit as st
 
 def render_overview_intro(store: str) -> None:
     """Render a compact guide and historical model-performance context."""
-    st.markdown(
-        "Historical M5 forecasting and simulated inventory planning. "
-        "This prototype does not place real orders."
-    )
-
     with st.expander("Dashboard Navigation Guide", expanded=False):
         steps = st.columns(3, gap="small")
         with steps[0]:
