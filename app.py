@@ -1954,13 +1954,26 @@ if active_section == "Demand Forecasting":
 
 if active_section == "Model Insights":
     st.header("Model Insights")
-    readable_caption("Historical evaluation on the 2016 M5 holdout sample; not live store performance.")
+    readable_caption(
+        "See where demand is difficult to predict, how our forecasts performed, and how "
+        "the AI system was evaluated. These are historical test results, not live store performance."
+    )
     patterns_tab, performance_tab, ai_tab = st.tabs([
         "Demand Patterns", "Forecast Performance", "AI & RAG Evaluation"
     ])
 
     with performance_tab:
+        readable_caption(
+            "**What this tab answers:** How much better was our selected model than simpler "
+            "forecasting methods, and how does accuracy change with the planning period? "
+            "Use these results to judge the estimates in Demand Forecasting and Inventory Planning."
+        )
         render_section_heading("Forecast Model Performance")
+        readable_caption(
+            "**Why we compare models:** We tested LightGBM against a recent-sales average. "
+            "The comparison helps show whether the more advanced approach improves forecasts "
+            "before they are used to estimate shortages or plan orders."
+        )
         metrics = st.columns(4)
         metrics[0].metric("LightGBM 7-day WAPE", "71.62%",
                           help="Lower total absolute forecast error is better.")
@@ -1970,9 +1983,17 @@ if active_section == "Model Insights":
                           help="Negative means demand was underestimated overall.")
         metrics[3].metric("RMSE", "2.04 units",
                           help="Root mean squared prediction error.")
-        readable_caption("LightGBM lowered 7-day WAPE by 2.96 percentage points versus the recent-mean baseline.")
+        readable_caption(
+            "**What this means for managers:** LightGBM lowered 7-day WAPE by 2.96 percentage "
+            "points versus the recent-mean baseline, but 71.62% error remains substantial. "
+            "Treat the dashboard's predicted sales as estimates, not guaranteed outcomes."
+        )
 
         render_section_heading("Accuracy Across Forecast Periods")
+        readable_caption(
+            "**Why this matters:** A longer forecast covers more of the ordering cycle but can "
+            "be less accurate. We evaluated 7-, 14-, and 28-day forecasts to show this trade-off."
+        )
         poster_horizons = pd.DataFrame({
             "Horizon": ["7 days", "14 days", "28 days"],
             "WAPE": [71.62, 72.55, 73.94],
@@ -1991,9 +2012,19 @@ if active_section == "Model Insights":
             margin=dict(t=55, b=50),
         )
         st.plotly_chart(poster_fig, use_container_width=True)
-        readable_caption("Forecast error increased modestly over longer periods; 7-day forecasts were most accurate.")
+        readable_caption(
+            "**What this means for planning:** Error increased from 71.62% at 7 days to "
+            "72.55% at 14 days and 73.94% at 28 days. The dashboard uses seven days for "
+            "urgent shortage monitoring and fourteen days for routine ordering, which needs "
+            "the longer view despite greater uncertainty."
+        )
 
         render_section_heading("Detailed Model Comparisons")
+        readable_caption(
+            "**Why this chart is here:** Compare all five tested forecasting methods over "
+            "the same period. Lower error means the model's overall predictions were closer "
+            "to observed sales; forecast bias shows whether it tended to predict too much or too little."
+        )
         comparison_horizon = st.radio(
             "Comparison period", [7, 14, 28],
             format_func=lambda d: f"{d} days", horizontal=True,
@@ -2028,7 +2059,10 @@ if active_section == "Model Insights":
                                   yaxis_title="WAPE (%)", xaxis_title="", height=370,
                                   xaxis_tickangle=-18, yaxis=dict(rangemode="tozero"))
         st.plotly_chart(compare_fig, use_container_width=True)
-        readable_caption("LightGBM had the lowest WAPE among the five reported methods at each horizon; TSB and SES were exploratory comparisons.")
+        readable_caption(
+            "**Manager takeaway:** LightGBM had the lowest WAPE among the five reported "
+            "methods at each horizon, but no method eliminated error. TSB and SES were exploratory comparisons."
+        )
         bias_fig = go.Figure(go.Bar(
             x=selected_historical["Model"], y=selected_historical["Bias (%)"],
             marker_color=["#184A8C" if m == "LightGBM (selected)" else "#B8CCE4"
@@ -2040,17 +2074,40 @@ if active_section == "Model Insights":
                                xaxis_title="", yaxis_title="Signed bias (%)",
                                xaxis_tickangle=-18, height=360)
         st.plotly_chart(bias_fig, use_container_width=True)
-        readable_caption("LightGBM's aggregate bias was closest to zero across the reported forecast periods.")
+        readable_caption(
+            "**Manager takeaway:** LightGBM's overall bias was closest to zero across the "
+            "reported periods. A small overall bias does not guarantee that an individual "
+            "product's forecast is accurate; verify stock before approving orders."
+        )
 
     with patterns_tab:
+        readable_caption(
+            "**What this tab answers:** Which kinds of products and regions are harder to "
+            "forecast, and what information drives the model? These findings help explain "
+            "uncertainty in Demand Forecasting and the need for manager checks in Inventory Planning."
+        )
         render_section_heading("Forecast Reliability")
+        readable_caption(
+            "**Why this matters:** The shaded range in Demand Forecasting shows lower and "
+            "higher daily sales estimates. This check measures how often actual daily sales "
+            "fell within that range in historical testing."
+        )
         reliability = st.columns(2)
         reliability[0].metric("P10–P90 coverage", "77.7%",
                               help="Share of observed daily sales within lower and upper forecast estimates.")
         reliability[1].metric("Nominal coverage target", "80%")
-        readable_caption("Daily forecast ranges covered 77.7% of observations, slightly below the 80% target; they do not guarantee product-level accuracy.")
+        readable_caption(
+            "**What this means for managers:** Actual daily sales fell within the estimated "
+            "range 77.7% of the time, slightly below the 80% target. The range can help "
+            "spot uncertainty, but it is not a guarantee for any one product or multi-day order."
+        )
 
         render_section_heading("Error by Demand Pattern")
+        readable_caption(
+            "**Why this matters:** Some products sell steadily, while others have irregular "
+            "or occasional sales. This comparison shows which demand patterns make predictions "
+            "harder, even when using the same forecasting model."
+        )
         by_pattern = pd.DataFrame({
             "Demand pattern": ["Smooth", "Erratic", "Intermittent", "Lumpy", "No sales"],
             "Recent 7-day average": [48.205, 58.448, 89.424, 83.773, 88.806],
@@ -2063,9 +2120,18 @@ if active_section == "Model Insights":
         pattern_fig.update_layout(title="7-day WAPE by demand pattern", yaxis_title="WAPE (%) — lower is better",
                                   xaxis_title="", barmode="group", height=390)
         st.plotly_chart(pattern_fig, use_container_width=True)
-        readable_caption("Intermittent and lumpy products were harder to forecast than smooth sellers; 'No sales' uses group-level WAPE.")
+        readable_caption(
+            "**What this means for managers:** Intermittent and lumpy products had higher "
+            "forecast error than smooth sellers. Check stock and incoming orders especially "
+            "carefully for irregular-demand items; 'No sales' uses group-level WAPE."
+        )
 
         render_section_heading("Regional Forecast Bias")
+        readable_caption(
+            "**Why this matters:** Model errors may differ by state and product category. "
+            "This chart shows whether sales were generally underpredicted or overpredicted "
+            "in each group, rather than assuming every store behaves alike."
+        )
         bias_map = pd.DataFrame(
             [[-0.588, 2.082, 0.205], [-0.248, 1.659, 2.433], [-3.528, 0.232, -0.721]],
             index=["California", "Texas", "Wisconsin"],
@@ -2078,9 +2144,18 @@ if active_section == "Model Insights":
         location_fig.update_layout(title="7-day LightGBM bias by state and category",
                                    height=370, xaxis_title="Category", yaxis_title="State")
         st.plotly_chart(location_fig, use_container_width=True)
-        readable_caption("Wisconsin Foods showed the strongest underforecasting (−3.53%); these group averages do not describe individual items.")
+        readable_caption(
+            "**What this means for managers:** Wisconsin Foods had the strongest "
+            "underforecasting (−3.53%) among these groups. Use regional comparisons as "
+            "context when reviewing shortages, not as corrections for individual products."
+        )
 
         render_section_heading("Model Input Importance")
+        readable_caption(
+            "**Why this matters:** The model uses sales history, prices, product and store "
+            "information, and calendar signals. This chart shows which inputs contributed "
+            "most to improving its predictions."
+        )
         feature_groups = pd.DataFrame({
             "Input": ["Recent sales patterns", "Price", "Item and store type",
                       "Calendar and events", "Same weekday history", "Forecast lead time"],
@@ -2092,11 +2167,25 @@ if active_section == "Model Insights":
                                xaxis_title="Share of model gain (%)", yaxis_title="",
                                yaxis=dict(autorange="reversed"), height=330)
         st.plotly_chart(gain_fig, use_container_width=True)
-        readable_caption("Recent sales patterns account for 89.3% of model gain; feature importance is not causal evidence.")
+        readable_caption(
+            "**What this means for managers:** Recent sales patterns accounted for 89.3% "
+            "of model gain, so recent demand is central to the forecast. These importance "
+            "scores describe the model, not the causes of customer purchases."
+        )
 
     with ai_tab:
+        readable_caption(
+            "**What this tab answers:** Did retrieving sources and checking answers help "
+            "the research assistant perform better, and how well did the order-review rules "
+            "identify cases for managers to inspect?"
+        )
         render_section_heading("AI Assistant: Research Evaluation")
-        readable_caption("Held-out research benchmark on synthetic cases, not a live accuracy measurement.")
+        readable_caption(
+            "**Why this matters:** The AI Assistant combines historical sources with "
+            "dashboard estimates. We compared four research approaches to see whether "
+            "evidence retrieval and automated checks improved task completion. "
+            "These were synthetic held-out cases, not live dashboard measurements."
+        )
         agent_eval = pd.DataFrame({
             "Approach": ["Direct LLM", "Basic RAG", "RAG agent", "Agent + validation"],
             "Task success (%)": [36.1, 51.4, 70.8, 75.0],
@@ -2109,18 +2198,32 @@ if active_section == "Model Insights":
                                yaxis_title="Task success (%)", yaxis=dict(range=[0, 90]),
                                height=345, margin=dict(t=60, b=40), showlegend=False)
         st.plotly_chart(eval_fig, use_container_width=True)
-        readable_caption("The agent with automated checks reached 75.0% task success on 72 automatically scored runs.")
+        readable_caption(
+            "**What this means for managers:** Task success rose from 36.1% for a direct "
+            "language model to 75.0% for the agent with checks, across 72 automatically "
+            "scored runs per approach. The live AI Assistant can cite evidence and display "
+            "checks, but its answers still need human review."
+        )
         eval_a, eval_b, eval_c = st.columns(3)
         eval_a.metric("Agent + checks", "75.0%", help="54 of 72 automatically scored runs")
         eval_b.metric("Numeric grounding", "100%", help="Checked runs only: numbers appeared in supplied inputs")
         eval_c.metric("Avg. response time", "10.5 seconds", help="Research benchmark, not live response time")
 
         render_section_heading("Manager-Review Flagging Evaluation")
+        readable_caption(
+            "**Why this matters:** Inventory Planning sends some orders to Review & Approval "
+            "rather than allowing them to proceed immediately. These results evaluate how "
+            "the research review rules balanced catching possible issues against holding too many orders."
+        )
         f1, prec, reduction = st.columns(3)
         f1.metric("Flagging F1", "0.58", help="Balances precision and recall in historical test cases")
         prec.metric("Flagging precision", "0.57", help="Share of flagged cases matching the evaluation outcome")
         reduction.metric("Fewer orders held", "33%", help="Compared with the older 14+ zero-sales-days rule")
-        readable_caption("The revised review rules reduced holds by 33% in simulation, while retaining similar F1.")
+        readable_caption(
+            "**What this means for managers:** The revised rules held 33% fewer orders "
+            "in simulation while retaining similar F1. A review flag signals that a manager "
+            "should investigate; it does not prove a stockout or authorize a purchase."
+        )
         st.markdown("**Interpretation & limitations**")
         st.write("All four AI approaches used the same research LLM, with 36 held-out cases "
                  "run twice per system (72 runs per approach). Scoring was automated; human "
