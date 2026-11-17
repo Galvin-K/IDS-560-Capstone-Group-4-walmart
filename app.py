@@ -2227,7 +2227,7 @@ if active_section == "Inventory Planning":
                         "Rejected": "🔴 Rejected", "No hold": "No review needed"
                     })
                     order_search = st.text_input(
-                        "Search recommended orders by product ID",
+                        "Search by product ID",
                         key="recommended_order_product_search",
                     )
                     review_only = st.checkbox(
