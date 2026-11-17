@@ -3147,39 +3147,27 @@ if active_section == "AI Assistant":
     # Restrict style changes to the assistant form and answer card, leaving
     # other dashboard tabs and their existing design untouched.
     st.markdown("""<style>
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) {
-        border:1px solid #d4dfec !important;
-        background:#fff !important;
-        border-radius:12px !important;
-        padding:20px 22px !important;
+    .st-key-ai_question_card {
+        background:#fff !important;border:1px solid #d4dfec !important;
+        border-radius:12px !important;padding:16px 20px !important;
         box-shadow:0 2px 10px rgba(24,50,98,.045);
     }
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) label p {
+    .st-key-ai_question_card label p {
         color:#172e58 !important;font-size:15px !important;font-weight:650 !important;
     }
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) textarea {
+    .st-key-ai_question_card textarea {
         color:#142747 !important;background:#fff !important;
         font-size:15px !important;line-height:1.6 !important;
         border-color:#becce0 !important;
     }
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="primary"],
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-primaryFormSubmit"] {
-        color:#fff !important;background:#1f3368 !important;border-color:#1f3368 !important;
-        font-size:15px !important;font-weight:700 !important;min-height:45px !important;
+    .st-key-ai_question_card button[kind="primary"] {
+        background:#1f3368 !important;border-color:#1f3368 !important;
+        color:#fff !important;min-height:43px !important;font-weight:700 !important;
     }
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="primary"] p,
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-primaryFormSubmit"] p {
-        color:#fff !important;font-size:15px !important;font-weight:700 !important;
-    }
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="secondary"],
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-secondaryFormSubmit"] {
-        background:#fff !important;color:#1c386b !important;
-        border:1px solid #a9bcd6 !important;font-size:15px !important;
-        font-weight:650 !important;min-height:45px !important;
-    }
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[kind="secondary"] p,
-    div[data-testid="stForm"]:has(textarea[aria-label="Your question"]) button[data-testid="stBaseButton-secondaryFormSubmit"] p {
-        color:#1c386b !important;font-size:15px !important;font-weight:650 !important;
+    .st-key-ai_question_card button[kind="primary"] p {color:#fff !important;}
+    .st-key-ai_question_card button[kind="secondary"] {
+        background:#fff !important;border-color:#a9bcd6 !important;
+        color:#1c386b !important;min-height:43px !important;
     }
     .st-key-ai_response_card [data-testid="stMarkdownContainer"] p,
     .st-key-ai_response_card [data-testid="stMarkdownContainer"] li {
@@ -3267,34 +3255,72 @@ if active_section == "AI Assistant":
                     help="This setting has not been validated as a relevance threshold."
                 )
 
-    # A manager may hand off a selected product from Review & Approval.
-    # Consume the handoff once, so normal reruns never regenerate answers.
+    # Streamlit removes widget keys when their page/section is not rendered.
+    # Keep a separate, durable copy of the editable question across navigation.
+    default_question = "What historical factors might have affected Foods demand in California?"
+    if "assistant_question_saved" not in st.session_state:
+        st.session_state["assistant_question_saved"] = st.session_state.get(
+            "assistant_question_input", default_question
+        )
+
+    def _save_assistant_question():
+        st.session_state["assistant_question_saved"] = st.session_state.get(
+            "assistant_question_input", ""
+        )
+
+    def _clear_assistant_question():
+        # Clear only the editable question, not the prior answer or its checks.
+        st.session_state["assistant_question_input"] = ""
+        st.session_state["assistant_question_saved"] = ""
+        st.session_state.pop("assistant_active_order_profile", None)
+        st.session_state.pop("assistant_active_order_question", None)
+        st.session_state.pop("assistant_handoff_question", None)
+        st.session_state.pop("assistant_handoff_profile", None)
+
+    # Consume a new manager-review handoff exactly once. This is the only
+    # intentional automatic replacement of an existing question.
     auto_question = st.session_state.pop("assistant_handoff_question", None)
     if auto_question:
+        st.session_state["assistant_question_saved"] = auto_question
         st.session_state["assistant_question_input"] = auto_question
         st.session_state["assistant_active_order_profile"] = st.session_state.pop(
             "assistant_handoff_profile", None
         )
         st.session_state["assistant_active_order_question"] = auto_question
-    elif "assistant_question_input" not in st.session_state:
-        st.session_state["assistant_question_input"] = (
-            "What historical factors might have affected Foods demand in California?"
-        )
+    else:
+        # On returning to this page Streamlit may already have deleted the
+        # widget key. Restore it from the durable, non-widget state key.
+        if "assistant_question_input" not in st.session_state:
+            st.session_state["assistant_question_input"] = st.session_state[
+                "assistant_question_saved"
+            ]
 
-    with st.form("rag_question_form"):
+    # Keep the input outside a Streamlit form so its on_change callback can
+    # save text even when the user navigates away without submitting.
+    with st.container(key="ai_question_card", border=True):
         user_question = st.text_area(
-            "Your question", key="assistant_question_input", height=90
+            "Your question", key="assistant_question_input", height=90,
+            on_change=_save_assistant_question,
         )
-
-        ask_col, evidence_col = st.columns(2)
+        ask_col, evidence_col, clear_col = st.columns([2.1, 2.1, 1])
         with ask_col:
-            ask_clicked = st.form_submit_button(
-                "Ask AI Assistant", type="primary", use_container_width=True
+            ask_clicked = st.button(
+                "Ask AI Assistant", type="primary", use_container_width=True,
+                key="assistant_ask_button",
             )
         with evidence_col:
-            search_clicked = st.form_submit_button(
-                "Find Historical Evidence", use_container_width=True
+            search_clicked = st.button(
+                "Find Historical Evidence", use_container_width=True,
+                key="assistant_evidence_button",
             )
+        with clear_col:
+            st.button(
+                "Clear question", use_container_width=True,
+                key="assistant_clear_question_button", on_click=_clear_assistant_question,
+                help="Start another question without deleting your previous answer.",
+            )
+    if ask_clicked or search_clicked:
+        _save_assistant_question()
 
     # A product handoff behaves like a single user-triggered Ask submission.
     # The normal question input and results remain editable and reusable.
