@@ -801,7 +801,26 @@ if st.session_state.get("main_section_nav") not in [name for name, _ in SECTION_
 
 
 def _open_dashboard_section(section_name):
+    previous = st.session_state.get("main_section_nav")
     st.session_state["main_section_nav"] = section_name
+    if previous != section_name:
+        st.session_state["_scroll_to_top_on_navigation"] = True
+    # If returning from a product-specific AI review, go directly to the
+    # manager's decision tab, not the default monitoring tab.
+    if section_name == "Inventory Planning" and previous == "AI Assistant" and st.session_state.get("assistant_review_return_available"):
+        st.session_state["inventory_active_tab"] = "Review & Approval"
+        st.session_state["inventory_last_tab"] = "Review & Approval"
+
+
+def _back_to_manager_review():
+    st.session_state["inventory_active_tab"] = "Review & Approval"
+    st.session_state["inventory_last_tab"] = "Review & Approval"
+    st.session_state["main_section_nav"] = "Inventory Planning"
+    st.session_state["_scroll_to_top_on_navigation"] = True
+
+
+def _persist_queue_filter(widget_key, saved_key):
+    st.session_state[saved_key] = st.session_state[widget_key]
 
 
 with st.sidebar:
@@ -818,6 +837,28 @@ with st.sidebar:
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
 active_section = st.session_state["main_section_nav"]
+
+# Scroll only on navigation, not on ordinary Streamlit reruns. The component
+# runs in an iframe and tries Streamlit's main scroll container first.
+if st.session_state.pop("_scroll_to_top_on_navigation", False):
+    import streamlit.components.v1 as components
+    components.html("""<script>
+      (() => {
+        try {
+          const doc = window.parent.document;
+          const scrollers = [
+            doc.querySelector('[data-testid="stMain"]'),
+            doc.querySelector('section[data-testid="stMain"]'),
+            doc.querySelector('section.main'),
+            doc.scrollingElement,
+          ].filter(Boolean);
+          const jump = () => scrollers.forEach((el) => el.scrollTo({top:0,behavior:'instant'}));
+          jump();
+          requestAnimationFrame(jump);
+          setTimeout(jump, 120);
+        } catch(e) { /* Embedded browser restrictions may block parent scrolling. */ }
+      })();
+    </script>""", height=0)
 
 st.sidebar.header("Filters")
 
@@ -908,6 +949,11 @@ def ask_ai_about_selected_order(store_id):
     st.session_state["assistant_handoff_profile"] = dict(current_profile)
     st.session_state.pop("assistant_handoff_error", None)
     st.session_state["main_section_nav"] = "AI Assistant"
+    st.session_state["assistant_review_return_available"] = True
+    st.session_state["assistant_review_return_store"] = str(store_id)
+    st.session_state["assistant_review_return_product"] = product_id
+    st.session_state["inventory_last_tab"] = "Review & Approval"
+    st.session_state["_scroll_to_top_on_navigation"] = True
 
 
 def clear_manager_decisions():
@@ -2139,9 +2185,17 @@ if active_section == "Model Insights":
 if active_section == "Inventory Planning":
 
     st.header("Inventory Planning")
-    stock_tab, replenish_tab = st.tabs([
-        "Monitoring & Ordering", "Review & Approval"
-    ])
+    # Streamlit >= 1.55 supports a stateful, programmatically selectable tab.
+    # Restore the last tab after navigating to AI Assistant (Streamlit clears
+    # widget keys when the widget is not rendered on the previous page).
+    inventory_tabs = ["Monitoring & Ordering", "Review & Approval"]
+    remembered_tab = st.session_state.get("inventory_last_tab", inventory_tabs[0])
+    if st.session_state.get("inventory_active_tab") not in inventory_tabs:
+        st.session_state["inventory_active_tab"] = remembered_tab
+    stock_tab, replenish_tab = st.tabs(
+        inventory_tabs, key="inventory_active_tab", on_change="rerun"
+    )
+    st.session_state["inventory_last_tab"] = st.session_state["inventory_active_tab"]
 
     with stock_tab:
         render_section_heading("Shortage Monitoring")
@@ -2436,16 +2490,39 @@ if active_section == "Inventory Planning":
                                 if option == "All reasons" or option in present_reasons
                             ]
                             dept_col, reason_col = st.columns([1, 1.2])
+                            dept_choices = ["All departments"] + sorted(held_policy["dept_id"].dropna().unique().tolist())
+                            dept_key = f"review_queue_dept_{store}"
+                            reason_key = f"review_queue_reason_{store}"
+                            dept_saved = f"review_queue_saved_dept_{store}"
+                            reason_saved = f"review_queue_saved_reason_{store}"
+                            # Persistent shadow keys survive when the review tab/page
+                            # is not rendered. Widget-owned state does not.
+                            if st.session_state.get(dept_key) not in dept_choices:
+                                st.session_state[dept_key] = (
+                                    st.session_state.get(dept_saved)
+                                    if st.session_state.get(dept_saved) in dept_choices
+                                    else "All departments"
+                                )
+                            if st.session_state.get(reason_key) not in queue_reason_options:
+                                st.session_state[reason_key] = (
+                                    st.session_state.get(reason_saved)
+                                    if st.session_state.get(reason_saved) in queue_reason_options
+                                    else "All reasons"
+                                )
                             with dept_col:
                                 queue_dept = st.selectbox(
-                                    "Department", ["All departments"] + sorted(held_policy["dept_id"].dropna().unique().tolist()),
-                                    key=f"review_queue_dept_{store}",
+                                    "Department", dept_choices, key=dept_key,
+                                    on_change=_persist_queue_filter,
+                                    args=(dept_key, dept_saved),
                                 )
                             with reason_col:
                                 queue_reason = st.selectbox(
-                                    "Review reason", queue_reason_options,
-                                    key=f"review_queue_reason_{store}",
+                                    "Review reason", queue_reason_options, key=reason_key,
+                                    on_change=_persist_queue_filter,
+                                    args=(reason_key, reason_saved),
                                 )
+                            st.session_state[dept_saved] = queue_dept
+                            st.session_state[reason_saved] = queue_reason
                             review_matches = held_policy
                             if queue_dept != "All departments":
                                 review_matches = review_matches.loc[review_matches["dept_id"].eq(queue_dept)]
@@ -3148,6 +3225,17 @@ if active_section == "AI Assistant":
         )
         st.write("Daily P10–P90 forecasts describe uncertainty; adding daily bounds "
                  "does not produce a calibrated multi-day prediction interval.")
+
+    if st.session_state.get("assistant_review_return_available"):
+        back_store = st.session_state.get("assistant_review_return_store", "")
+        back_item = st.session_state.get("assistant_review_return_product", "")
+        st.button(
+            f"Back to Review & Approval · {back_item} ({back_store})",
+            icon=":material/arrow_back:",
+            key="assistant_back_to_manager_review",
+            on_click=_back_to_manager_review,
+            help="Return to the selected product's 14-day order review without losing its filters.",
+        )
 
     scope_choice = st.selectbox("Analysis scope", SCOPES, index=0, key="assistant_scope")
 
