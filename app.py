@@ -901,7 +901,8 @@ def ask_ai_about_selected_order(store_id):
     question = (
         f"For product {product_id} at store {store_id}, why is its 14-day order "
         "held for review, how was the conditional quantity calculated, "
-        "what does forecast confidence mean, and what should I verify before deciding?"
+        "what does forecast confidence mean, and should I consider approving it, "
+        "keeping it on hold, or seeking more information before deciding?"
     )
     st.session_state["assistant_handoff_question"] = question
     st.session_state["assistant_handoff_profile"] = dict(current_profile)
@@ -2781,8 +2782,8 @@ if active_section == "Inventory Planning":
                      "AI evidence is advisory; it does not approve an order.",
             )
             st.caption(
-                "The assistant will use the selected product and store to look for relevant "
-                "forecast figures and historical evidence. It cannot approve an order."
+                "The assistant will explain the order and suggest whether to consider approval, "
+                "keep the hold, or verify more information. Only a manager makes the decision."
             )
             decision_cols = st.columns(3)
             decision_cols[0].button(
@@ -3167,9 +3168,11 @@ if active_section == "AI Assistant":
                 "the evaluated v4 reranker. Its ranking scores are not calibrated relevance probabilities."
             )
         evidence_k = st.select_slider(
-            "Maximum evidence passages", options=[3, 5, 8], value=5,
-            help="Upper limit; the retrieval engine may return fewer passages. "
-                 "A top result is not guaranteed relevant."
+            "Maximum evidence passages", options=[5, 8, 10, 12], value=8,
+            help="8 passages by default, following the held-out RAG evaluation. "
+                 "Up to 12 can be requested for broader questions; date, category, "
+                 "relevance, and diversity filters may return fewer. "
+                 "Higher passage counts do not guarantee better evidence."
         )
         evidence_category_filter = st.checkbox(
             "Match evidence to the question's category", value=True,
@@ -3267,9 +3270,12 @@ if active_section == "AI Assistant":
 
             # Retain citations and answer for the SAME question. Search-only
             # must not remove an explanation or silently renumber its sources.
-            evidence = previous.get("evidence") if same_question else None
-            retrieved_with_v4 = bool(previous.get("retrieved_with_v4", False)) if same_question else False
-            retrieval_error = previous.get("retrieval_error") if same_question else None
+            retrieval_settings = (int(evidence_k), bool(evidence_category_filter),
+                                  float(min_similarity) if min_similarity is not None else None)
+            same_retrieval = same_question and previous.get("retrieval_settings") == retrieval_settings
+            evidence = previous.get("evidence") if same_retrieval else None
+            retrieved_with_v4 = bool(previous.get("retrieved_with_v4", False)) if same_retrieval else False
+            retrieval_error = previous.get("retrieval_error") if same_retrieval else None
             if evidence is None:
                 requested_states = {v.split("_")[0] for v in requested_filters["stores"]}
                 evidence_state = next(iter(requested_states)) if len(requested_states) == 1 else None
@@ -3304,11 +3310,12 @@ if active_section == "AI Assistant":
                 "total_gap": total_gap, "affected_items": affected_items,
                 "store_gaps": store_gaps,
                 "evidence": evidence, "retrieved_with_v4": retrieved_with_v4,
+                "retrieval_settings": retrieval_settings,
                 "retrieval_error": retrieval_error,
-                "answer": previous.get("answer") if same_question else None,
-                "answer_error": previous.get("answer_error") if same_question else None,
-                "validation": previous.get("validation") if same_question else None,
-                "validation_retried": previous.get("validation_retried", False) if same_question else False,
+                "answer": previous.get("answer") if same_retrieval else None,
+                "answer_error": previous.get("answer_error") if same_retrieval else None,
+                "validation": previous.get("validation") if same_retrieval else None,
+                "validation_retried": previous.get("validation_retried", False) if same_retrieval else False,
                 "order_profile": expected_order,
             }
             # Store interim results even if an external LLM call fails.
@@ -3349,6 +3356,14 @@ if active_section == "AI Assistant":
                             "incoming units, and how the hold affects the current order. "
                             "For a held product, current suggested order is ZERO until approved; "
                             "the if-approved quantity is conditional, not a purchase authorization. "
+                            "After explaining the figures, give an explicit advisory manager recommendation "
+                            "under the heading 'Recommendation:' using ONE of: "
+                            "'Consider approval after verification', 'Keep on hold pending verification', "
+                            "or 'Insufficient information to recommend'. "
+                            "State a one-sentence reason tied to the selected policy and checks; if inventory "
+                            "is simulated or a flag remains unverified, do not imply the order is cleared. "
+                            "Recommend actual approval only conditionally after the required checks, "
+                            "never change the order status or claim an order was placed. "
                             "Give 2-3 specific manager checks; do not issue automatic approval. "
                             "Forecast confidence and manager-review holds are INDEPENDENT. Never "
                             "claim the hold causes Low/Medium/High confidence. Explain the "
