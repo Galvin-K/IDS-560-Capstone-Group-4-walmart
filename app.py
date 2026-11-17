@@ -168,20 +168,40 @@ def check_assistant_response(answer, prompt, evidence, decision_date, filters=No
     # Flags and quantity are checked only if the assistant actually receives a
     # computed order profile. The generic QA tab does not currently supply one.
     if expected_order:
-        import math
-        match = re.search(r'(?im)^\s*(?:\*\*)?Recommendation(?:\*\*)?:\s*(.*)$', answer)
-        rec = match.group(1) if match else ''
-        rec_values = {int(float(x)) for x in re.findall(r'\b\d+(?:\.\d+)?\b', rec)}
-        needed = {int(expected_order['order_qty'])}
-        if expected_order.get('hold'):
-            needed.add(int(expected_order['if_confirmed_order_qty']))
-        result['quantity_correct'] = needed.issubset(rec_values)
+        def stated_units(label):
+            match = re.search(
+                rf'(?im)^\s*(?:[-*]\s*)?(?:\*\*)?{re.escape(label)}'
+                rf'(?:\*\*)?\s*:\s*(?:\*\*)?(\d[\d,]*)\s*units?', answer
+            )
+            return int(match.group(1).replace(',', '')) if match else None
+        # The current suggestion is zero on a held order, even if the precomputed
+        # policy has a nonzero conditional quantity.
+        expected_current = (
+            int(expected_order.get('if_confirmed_order_qty') or 0)
+            if expected_order.get('hold') and expected_order.get('review_decision') == 'Approved'
+            else 0 if expected_order.get('hold')
+            else int(expected_order.get('order_qty') or 0)
+        )
+        result['quantity_correct'] = (
+            stated_units('Current suggested order') == expected_current and
+            stated_units('If approved') == int(expected_order.get('if_confirmed_order_qty') or 0)
+        )
         flags = expected_order.get('flags') or []
         flag_words = {'NEW_ITEM': ('new item', 'new product', 'launch'),
                       'POSSIBLE_STOCKOUT': ('stockout', 'stock-out', 'shelf'),
                       'POSSIBLY_DISCONTINUED': ('discontinu', 'still carr', 'still sold')}
-        result['flags_reported'] = all(any(w in answer.lower() for w in flag_words.get(str(flag), (str(flag).lower(),)))
-                                       for flag in flags) and (not expected_order.get('hold') or 'hold' in answer.lower())
+        labels = [str(f).upper() for f in flags]
+        reasons = str(expected_order.get('hold_reasons') or '').lower()
+        for code, words in flag_words.items():
+            if code.lower() in reasons and code not in labels:
+                labels.append(code)
+        result['flags_reported'] = (
+            bool(re.search(r'(?im)^\s*(?:\*\*)?Hold reason(?:\*\*)?\s*:', answer))
+            and all(any(w in answer.lower() for w in flag_words.get(flag, (flag.lower(),)))
+                    for flag in labels)
+            and (not expected_order.get('hold') or
+                 ('hold' in answer.lower() or 'manager review' in answer.lower()))
+        )
         confidence = expected_order.get('confidence')
         if confidence:
             result['confidence_stated'] = bool(re.search(r'Forecast confidence:\s*\**' + re.escape(confidence), answer, re.I))
@@ -194,6 +214,8 @@ def check_assistant_response(answer, prompt, evidence, decision_date, filters=No
         and not re.search(r'\[(?:E)?\d+\]', b, re.I) for b in bullets)
     critical = ('quantity_correct', 'citations_valid', 'no_future_sources',
                 'flags_reported', 'numbers_verified')
+    if expected_order:
+        critical += ('confidence_stated',)
     failed_critical = [k for k in critical if result[k] is False]
     failed_other = [k for k, val in result.items() if val is False and k not in critical]
     result['critical_failures'] = failed_critical
@@ -802,18 +824,27 @@ def record_manager_decision(store_id, product_id, decision):
     st.session_state["manager_review_decisions"][(str(store_id), str(product_id))] = decision
 
 def ask_ai_about_selected_order(store_id):
-    """Route the current held product into the existing AI answer workflow."""
+    """Pass the current order-policy snapshot into the AI review, not just its ID."""
     selected = st.session_state.get(f"review_queue_selected_{store_id}", [])
     if not selected:
         return
     product_id = str(selected[0])
-    st.session_state["assistant_handoff_question"] = (
-        f"For product {product_id} at store {store_id}, what should a manager "
-        "check before approving its proposed 14-day replenishment order? "
-        "Use available forecast figures and historical evidence. Separate "
-        "verified findings from missing information, and do not assume "
-        "that the order has already been approved."
+    current_profile = st.session_state.get("assistant_order_policy_snapshots", {}).get(
+        (str(store_id), product_id)
     )
+    if not current_profile:
+        st.session_state["assistant_handoff_error"] = (
+            "This product's order calculation is unavailable. Open its order details before asking AI."
+        )
+        return
+    question = (
+        f"For product {product_id} at store {store_id}, why is its 14-day order "
+        "held for review, how was the conditional quantity calculated, "
+        "what does forecast confidence mean, and what should I verify before deciding?"
+    )
+    st.session_state["assistant_handoff_question"] = question
+    st.session_state["assistant_handoff_profile"] = dict(current_profile)
+    st.session_state.pop("assistant_handoff_error", None)
     st.session_state["main_section_nav"] = "AI Assistant"
 
 
@@ -2519,6 +2550,40 @@ if active_section == "Inventory Planning":
                         manager_decision = st.session_state["manager_review_decisions"].get(
                             (str(store), str(item)), "Pending"
                         ) if v4_selected["hold"] else "No hold"
+                        # Snapshot the exact calculation displayed to the manager.
+                        # Do not replace zero forecast demand with a 7-day stock gap.
+                        raw_flags = str(v4_selected.get("flags") or "")
+                        raw_reasons = str(v4_selected.get("hold_reasons") or "")
+                        import re as _re
+                        normalized_flags = [
+                            token for token in _re.split(r"[,;|\s]+", raw_flags.upper())
+                            if token in {"NEW_ITEM", "POSSIBLE_STOCKOUT", "POSSIBLY_DISCONTINUED"}
+                        ]
+                        policy_snapshot = {
+                            "store_id": str(store), "item_id": str(item),
+                            "department": str(dept),
+                            "demand_14d": float(v4_selected.get("demand_14d") or 0),
+                            "safety_stock": float(v4_selected.get("safety_stock") or 0),
+                            "order_up_to": float(v4_selected.get("order_up_to") or 0),
+                            "starting_stock": int(on_hand),
+                            "stock_source": str(selected_source),
+                            "on_order": int(policy_on_order),
+                            "inventory_position": float(v4_selected.get("inventory_position") or 0),
+                            "order_qty": int(v4_selected.get("order_qty") or 0),
+                            "if_confirmed_order_qty": int(v4_selected.get("if_confirmed_order_qty") or 0),
+                            "hold": bool(v4_selected.get("hold")),
+                            "flags": normalized_flags,
+                            "hold_reasons": raw_reasons,
+                            "confidence": str(v4_selected.get("confidence") or "Low").title(),
+                            "confidence_reasons": str(v4_selected.get("confidence_reasons") or ""),
+                            "review_decision": str(manager_decision),
+                            "protection_days": 14,
+                            "lead_time_days": 7,
+                            "review_cycle_days": 7,
+                        }
+                        st.session_state.setdefault("assistant_order_policy_snapshots", {})[
+                            (str(store), str(item))
+                        ] = policy_snapshot
                         effective_order_qty = (
                             int(v4_selected.get("if_confirmed_order_qty") or 0)
                             if v4_selected["hold"] and manager_decision == "Approved"
@@ -2644,6 +2709,8 @@ if active_section == "Inventory Planning":
         selected_for_decision = st.session_state.get(f"review_queue_selected_{store}", [])
         if selected_for_decision:
             st.caption("Review the hold reason, order estimate, and forecast confidence before deciding.")
+            if st.session_state.get("assistant_handoff_error"):
+                st.warning(st.session_state.pop("assistant_handoff_error"))
             st.button(
                 "Ask AI about this product", icon=":material/smart_toy:",
                 key=f"queue_ask_ai_{store}",
@@ -3004,7 +3071,8 @@ if active_section == "AI Assistant":
                 'margin:8px 0 7px">AI Assistant</h2>', unsafe_allow_html=True)
     st.markdown('<p style="color:#3c516f;font-size:16px;line-height:1.6;'
                 'margin:0 0 15px">Ask about product demand, store comparisons, and past sales patterns. '
-                'Explore the forecast figures alongside dated historical evidence.</p>',
+                'Explore forecasts and historical evidence, or review a selected 14-day '
+                'order with its hold reason and forecast confidence.</p>',
                 unsafe_allow_html=True)
 
     decision_date = pd.Timestamp(
@@ -3064,6 +3132,10 @@ if active_section == "AI Assistant":
     auto_question = st.session_state.pop("assistant_handoff_question", None)
     if auto_question:
         st.session_state["assistant_question_input"] = auto_question
+        st.session_state["assistant_active_order_profile"] = st.session_state.pop(
+            "assistant_handoff_profile", None
+        )
+        st.session_state["assistant_active_order_question"] = auto_question
     elif "assistant_question_input" not in st.session_state:
         st.session_state["assistant_question_input"] = (
             "What historical factors might have affected Foods demand in California?"
@@ -3094,6 +3166,13 @@ if active_section == "AI Assistant":
             st.warning("Please enter a question.")
         else:
             question = user_question.strip()
+            # A changed/manual question is general QA, not an order review.
+            # Prevent stale policy values from being applied to another product.
+            expected_order = (
+                st.session_state.get("assistant_active_order_profile")
+                if question == st.session_state.get("assistant_active_order_question")
+                else None
+            )
             previous = st.session_state.get("assistant_result_v2", {})
             same_question = (previous.get("question") == question
                              and previous.get("scope_choice") == scope_choice)
@@ -3169,6 +3248,7 @@ if active_section == "AI Assistant":
                 "answer_error": previous.get("answer_error") if same_question else None,
                 "validation": previous.get("validation") if same_question else None,
                 "validation_retried": previous.get("validation_retried", False) if same_question else False,
+                "order_profile": expected_order,
             }
             # Store interim results even if an external LLM call fails.
             st.session_state["assistant_result_v2"] = result
@@ -3190,6 +3270,27 @@ if active_section == "AI Assistant":
                     top_store_context = (store_gaps.head(3).to_string(index=False)
                                          if store_gaps is not None
                                          else "No all-store ranking in the chosen scope.")
+                    import json as _json
+                    policy_context = ""
+                    if expected_order:
+                        policy_context = (
+                            "\n\nAUTHORITATIVE SELECTED ORDER POLICY (from the current dashboard):\n"
+                            + _json.dumps(expected_order, sort_keys=True)
+                            + "\n\nFor this ORDER REVIEW question, address the hold reason first, "
+                            "and explain that a zero forecast does NOT automatically remove "
+                            "a new-item or discontinued-item hold. Do NOT calculate a replacement "
+                            "quantity or infer a shortage from the 7-day gap. "
+                            "Use a concise decision summary (roughly 150–220 words) with these "
+                            "exact lines: 'Current suggested order: <number> units', "
+                            "'If approved: <number> units', 'Hold reason: <reason>', "
+                            "'Forecast confidence: <High/Medium/Low>'. "
+                            "Explain the 14-day demand, safety stock, starting stock, "
+                            "incoming units, and how the hold affects the current order. "
+                            "For a held product, current suggested order is ZERO until approved; "
+                            "the if-approved quantity is conditional, not a purchase authorization. "
+                            "Give 2-3 specific manager checks; do not issue automatic approval. "
+                            "Do not describe a conditional order as validated or live inventory."
+                        )
                     prompt = (
                             "You are a forecasting decision-support assistant for a HISTORICAL academic Walmart M5 project. "
                             "Answer the user's question at the resolved question-based scope. Never inherit sidebar filters. "
@@ -3225,6 +3326,7 @@ if active_section == "AI Assistant":
                             f"Top three store comparisons (including accurate count labels):\n{top_store_context}\n\n"
                             f"Structured M5 forecast and inventory calculations (audit details):\n{scoped_context}\n\n"
                             "Historical retrieved evidence:\n" + "\n\n".join(references)
+                            + policy_context
                         )
 
                     try:
@@ -3236,7 +3338,8 @@ if active_section == "AI Assistant":
                             )
                             candidate = generate_answer(prompt, key=key, model=configured_model)
                             audit = check_assistant_response(
-                                candidate, prompt, evidence, decision_date, requested_filters
+                                candidate, prompt, evidence, decision_date, requested_filters,
+                                expected_order=expected_order
                             )
                             result["validation_retried"] = False
                             # Retry once only for substantive critical failures.
@@ -3253,7 +3356,8 @@ if active_section == "AI Assistant":
                                 )
                                 candidate = generate_answer(correction, key=key, model=configured_model)
                                 audit = check_assistant_response(
-                                    candidate, prompt, evidence, decision_date, requested_filters
+                                    candidate, prompt, evidence, decision_date, requested_filters,
+                                expected_order=expected_order
                                 )
                             result["validation"] = audit
                             if audit["critical_failures"]:
@@ -3319,10 +3423,18 @@ if active_section == "AI Assistant":
                 ]
                 st.dataframe(pd.DataFrame(check_rows), hide_index=True,
                              use_container_width=True)
-                st.caption("These checks are adapted from the research notebook. "
-                           "The general question-answering mode has no computed order profile, "
-                           "so order-specific checks are not applicable. Automatic rules can "
-                           "miss incorrect claims and should not replace human review.")
+                if result.get("order_profile"):
+                    st.caption(
+                        "Order-specific checks use the selected 14-day policy snapshot. "
+                        "Pass means the rule found no flagged issue, not that the order is safe "
+                        "or that the generated explanation is independently verified."
+                    )
+                else:
+                    st.caption(
+                        "General questions have no selected order profile, so hold, quantity, "
+                        "and confidence checks are not applicable. These automated rules "
+                        "can miss errors and do not replace human review."
+                    )
 
         evidence = result["evidence"]
         retrieved_with_v4 = result["retrieved_with_v4"]
