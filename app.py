@@ -3186,6 +3186,14 @@ if active_section == "AI Assistant":
         line-height:1.35 !important;font-weight:700 !important;
         margin:15px 0 6px !important;
     }
+    /* Tighten only the divider between the question and the answer. */
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] hr {
+        margin:9px 0 7px !important;
+    }
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] hr + h3,
+    .st-key-ai_response_card [data-testid="stMarkdownContainer"] hr + h2 {
+        margin-top:7px !important;
+    }
     .st-key-ai_response_card [data-testid="stMarkdownContainer"] strong {
         color:#142a54 !important;
     }
