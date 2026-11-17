@@ -775,6 +775,17 @@ with st.sidebar.expander("How we estimate inventory", expanded=False):
 if "inventory_overrides" not in st.session_state:
     st.session_state["inventory_overrides"] = {}
 
+# Ephemeral manager decisions: never persisted to files or a database.
+# A decision is keyed by (store, item) and applies only to original policy holds.
+if "manager_review_decisions" not in st.session_state:
+    st.session_state["manager_review_decisions"] = {}
+
+def record_manager_decision(store_id, product_id, decision):
+    st.session_state["manager_review_decisions"][(str(store_id), str(product_id))] = decision
+
+def clear_manager_decisions():
+    st.session_state["manager_review_decisions"] = {}
+
 # Cross-tab product focus: all selectors use the same store's item and department.
 # Streamlit tabs cannot be programmatically activated, but selecting an overview row
 # prepares the product in both tabs, without requiring another product search.
@@ -1990,7 +2001,7 @@ if active_section == "Model Insights":
 if active_section == "Inventory Planning":
 
     st.header("Inventory Planning")
-    readable_caption("Check projected shortages, review 14-day replenishment, and compare product stock scenarios.")
+    readable_caption("Monitor potential stock gaps or review replenishment decisions for your store.")
     stock_tab, replenish_tab = st.tabs([
         "Stock Monitoring", "Replenishment & Review"
     ])
@@ -2003,7 +2014,7 @@ if active_section == "Inventory Planning":
         )
         readable_caption(
             f"{action_horizon}-day shortage screening, assuming no deliveries. "
-            "For suggested order quantities, use Recommended Replenishment Orders below."
+            "Order decisions are in Replenishment & Review."
         )
         inv_only = st.checkbox(
             "Show shortages and high-demand monitoring only",
@@ -2107,10 +2118,10 @@ if active_section == "Inventory Planning":
             def open_action_product():
                 focus_product(action_item_selected)
                 st.session_state["action_product_notice"] = str(action_item_selected)
-            st.button("Open selected product's inventory details", on_click=open_action_product,
+            st.button("Review this product’s order", on_click=open_action_product,
                       key="action_open_details", type="primary")
             if st.session_state.get("action_product_notice") == action_item_selected:
-                st.success(f"Selected {action_item_selected}. Open the Replenishment & Review tab to inspect its inventory and 14-day order.")
+                st.success(f"Selected {action_item_selected}. Open Replenishment & Review for its order details.")
         st.download_button(
             f"Download {action_horizon}-Day Action List CSV",
             inv_display.to_csv(index=False),
@@ -2133,9 +2144,7 @@ if active_section == "Inventory Planning":
     with replenish_tab:
         render_section_heading("Recommended Replenishment Orders")
         st.write(
-            "Use this 14-day list to review suggested order quantities, safety stock, "
-            "and items requiring manager approval. Products marked for review have "
-            "zero immediately suggested units until the issue is checked."
+            "Review 14-day order quantities, holds, and manager decisions (simulated only)."
         )
         order_ready, order_message = offline_policy_status()
         if order_ready:
@@ -2155,8 +2164,18 @@ if active_section == "Inventory Planning":
                         apply_precomputed_policy(row, on_hand=float(row["starting_stock"]))
                         for _, row in order_policy.iterrows()
                     ]
+                    current_decisions = st.session_state["manager_review_decisions"]
+                    order_policy["review_decision"] = [
+                        current_decisions.get((str(store), str(row["item_id"])), "Pending")
+                        if bool(row["hold"]) else "No hold"
+                        for _, row in order_policy.iterrows()
+                    ]
                     order_policy["suggested_units"] = [
-                        result["order_qty"] for result in order_calculations
+                        (int(result["if_confirmed_order_qty"] or 0)
+                         if bool(row["hold"]) and current_decisions.get(
+                             (str(store), str(row["item_id"]))) == "Approved"
+                         else (0 if bool(row["hold"]) else int(result["order_qty"])))
+                        for (_, row), result in zip(order_policy.iterrows(), order_calculations)
                     ]
                     order_policy["if_confirmed"] = [
                         result["if_confirmed_order_qty"]
@@ -2164,9 +2183,10 @@ if active_section == "Inventory Planning":
                         else None
                         for (_, row), result in zip(order_policy.iterrows(), order_calculations)
                     ]
-                    order_policy["review_status"] = order_policy["hold"].map(
-                        lambda held: "🟠 Yes" if held else "🟢 No"
-                    )
+                    order_policy["review_status"] = order_policy["review_decision"].map({
+                        "Pending": "🟠 Review", "Approved": "🟢 Approved",
+                        "Rejected": "🔴 Rejected", "No hold": "—"
+                    })
                     order_search = st.text_input(
                         "Search recommended orders by product ID",
                         key="recommended_order_product_search",
@@ -2209,15 +2229,14 @@ if active_section == "Inventory Planning":
                         column_config={
                             "Review": st.column_config.TextColumn(
                                 "Review",
-                                help="🟠 Yes: a manager must check the product before ordering. "
-                                     "🟢 No: no additional review hold is triggered.",
+                                help="Review = pending manager decision; Approved = conditional quantity released; "
+                                     "Rejected = no order; — = no policy hold.",
                             ),
                         },
                     )
                     readable_caption(
-                        "Review: 🟠 Yes = manager review required; 🟢 No = no review hold. "
-                        "Held products show zero under Suggested Order; see the Manager "
-                        "Review Queue below for their conditional quantity and review reason."
+                        "Held orders stay at zero until approved here. Decisions reset with this browser session."
+
                     )
                     st.download_button(
                         "Download 14-day recommended orders CSV",
@@ -2289,10 +2308,11 @@ if active_section == "Inventory Planning":
                             st.info("No held products match these filters.")
                         else:
                             queue_display = review_matches[[
-                                "item_id", "Review Reason", "if_confirmed", "confidence"
+                                "item_id", "Review Reason", "if_confirmed", "confidence", "review_decision"
                             ]].rename(columns={
                                 "item_id": "Product", "if_confirmed": "Units if Approved",
                                 "confidence": "Forecast Confidence",
+                                "review_decision": "Decision",
                             })
                             st.dataframe(
                                 queue_display, use_container_width=True, hide_index=True,
@@ -2310,7 +2330,7 @@ if active_section == "Inventory Planning":
                                 focus_product(selected_review_item)
                                 st.session_state["review_queue_opened"] = selected_review_item
                             st.button(
-                                "Open selected product's review details",
+                                "Review selected product",
                                 on_click=open_review_product,
                                 key=f"review_queue_open_{store}", type="secondary",
                             )
@@ -2318,8 +2338,7 @@ if active_section == "Inventory Planning":
                                 st.success(f"Selected {selected_review_item} for review. Open the Replenishment & Review tab to inspect its hold and order calculation.")
                 
                     readable_caption(
-                        "Store-wide orders assume zero incoming units. To include an incoming shipment "
-                        "for a specific product, enter it in Product Inventory Details."
+                        "Store-wide estimates assume zero incoming units; enter an incoming shipment below for the selected product."
                     )
             except (ValueError, KeyError, FileNotFoundError, TypeError, ImportError) as exc:
                 st.error(f"Cannot load 14-day ordering recommendations: {type(exc).__name__}: {exc}")
@@ -2328,10 +2347,10 @@ if active_section == "Inventory Planning":
 
     with replenish_tab:
         st.divider()
-        render_section_heading("Product Inventory Details")
-        planning_dept = st.selectbox("Department for inventory planning", dept_options, key="planning_dept")
+        render_section_heading("Selected Product: 14-Day Order")
+        planning_dept = st.selectbox("Department", dept_options, key="planning_dept")
         planning_items = sorted(store_df[store_df["dept_id"] == planning_dept]["item_id"].dropna().unique().tolist())
-        planning_item = st.selectbox("Product for inventory KPIs", planning_items, key="planning_item")
+        planning_item = st.selectbox("Product", planning_items, key="planning_item")
         dept = planning_dept
         filtered = store_df[store_df["dept_id"] == dept].copy()
         item = planning_item
@@ -2360,8 +2379,8 @@ if active_section == "Inventory Planning":
                 if selected_key in st.session_state["inventory_overrides"]:
                     st.session_state["inventory_overrides"].pop(selected_key, None)
                     readable_caption("Removed the manual override. Other dashboard sections refresh on the next rerun.")
-        render_section_heading("Inventory Assumptions")
-
+        # Use one starting-stock display; the Monitoring tab contains the
+        # comparative stock screening and projected shortages.
         col1, col2 = st.columns(2)
 
 
@@ -2381,19 +2400,12 @@ if active_section == "Inventory Planning":
             )
 
 
-        with col1:
-            selected_source = (
-                selected_inventory_row["inventory_source"].iloc[0]
-                if not selected_inventory_row.empty else "Simulated"
-            )
-            st.metric("Starting Stock (units)", f"{on_hand:,}")
-            readable_caption("Starting stock is estimated unless you use the manual override above.")
-
-        with col2:
-            st.metric(
-                "7-Day Predicted Demand",
-                f"{predicted_total:,.2f} units"
-            )
+        selected_source = (
+            selected_inventory_row["inventory_source"].iloc[0]
+            if not selected_inventory_row.empty else "Simulated"
+        )
+        st.caption(f"Starting stock: **{on_hand:,} units** ({selected_source}) · "
+                   f"7-day forecast: **{predicted_total:,.2f} units**")
 
         # REAL 14-DAY POLICY — precomputed using the team's v4 LightGBM model,
         # M5 history, safety stock, confidence and hold/review rules. The only
@@ -2411,17 +2423,14 @@ if active_section == "Inventory Planning":
             try:
                 policy_table = load_offline_policy()
                 policy_rows = policy_table[policy_table["store_id"].eq(str(store))]
-                readable_caption(f"{len(policy_rows):,} item-store policy decisions available for {store}.")
+                # Store-wide counts are already present in the order table.
                 ordering_cols = st.columns(2)
                 policy_on_order = ordering_cols[0].number_input(
                     "Already on order (units)", min_value=0, value=0, step=1,
                     key=f"v4_precomputed_on_order_{store}_{item}",
                     help="Units already ordered for the selected product, not included in current on-hand stock."
                 )
-                ordering_cols[1].caption(
-                    "We plan for 14 days: seven days for a delivery and seven days until the next "
-                    "stock review. We need to recalculate the plan to change that period."
-                )
+                ordering_cols[1].caption("Fixed 14-day plan: 7-day delivery + 7-day review cycle.")
                 try:
                     v4_selected = offline_v4_recommendation(
                         item=item, store=store, on_hand=on_hand, on_order=int(policy_on_order)
@@ -2429,6 +2438,14 @@ if active_section == "Inventory Planning":
                 except KeyError:
                     st.warning("This product is not available in the precomputed 14-day policy sample.")
                 else:
+                    manager_decision = st.session_state["manager_review_decisions"].get(
+                        (str(store), str(item)), "Pending"
+                    ) if v4_selected["hold"] else "No hold"
+                    effective_order_qty = (
+                        int(v4_selected.get("if_confirmed_order_qty") or 0)
+                        if v4_selected["hold"] and manager_decision == "Approved"
+                        else (0 if v4_selected["hold"] else int(v4_selected["order_qty"]))
+                    )
                     metric_cols = st.columns(4)
                     metric_cols[0].metric("Expected 14-day sales", f"{v4_selected['demand_14d']:,.1f}",
                                           help="Units we expect customers to buy during January 1–14.")
@@ -2436,7 +2453,7 @@ if active_section == "Inventory Planning":
                                           help="Additional inventory to help cover unexpectedly high demand.")
                     metric_cols[2].metric("Target stock level", f"{v4_selected['order_up_to']:,.1f}",
                                           help="Expected 14-day demand plus safety stock.")
-                    metric_cols[3].metric("Suggested units to order", f"{v4_selected['order_qty']:,}",
+                    metric_cols[3].metric("Suggested units to order", f"{effective_order_qty:,}",
                                           help="Target minus stock on hand and stock already on order; zero for held items.")
                     # Order approval status is separate from forecast reliability.
                     # This label is based on the precomputed hold decision, not confidence.
@@ -2467,13 +2484,38 @@ if active_section == "Inventory Planning":
                             f"{v4_selected.get('flags', '')} {v4_selected.get('hold_reasons', '')}"
                         )
                         conditional_units = int(v4_selected.get("if_confirmed_order_qty") or 0)
+                        status_note = {
+                            "Pending": "Manager review required",
+                            "Approved": "Approved for this demo session",
+                            "Rejected": "Not approved for this demo session",
+                        }.get(manager_decision, "Manager review required")
                         st.warning(
-                            "**Manager review required**\n\n"
+                            f"**{status_note}**\n\n"
                             f"**Reason:** {', '.join(hold_labels)}\n\n"
                             f"**Manager action:**\n{review_text}\n\n"
                             f"**Units if approved:** {conditional_units:,} "
-                            f"{'unit' if conditional_units == 1 else 'units'} (not yet ordered)."
+                            f"{'unit' if conditional_units == 1 else 'units'} "
+                            "(simulated; no real order placed)."
                         )
+                        st.markdown("**Manager decision (demo only)**")
+                        approve_col, reject_col, reset_col = st.columns([1, 1, 1.2])
+                        approve_col.button(
+                            "Approve", key=f"approve_hold_{store}_{item}", type="primary",
+                            on_click=record_manager_decision,
+                            args=(store, item, "Approved"), use_container_width=True,
+                        )
+                        reject_col.button(
+                            "Do not approve", key=f"reject_hold_{store}_{item}",
+                            on_click=record_manager_decision,
+                            args=(store, item, "Rejected"), use_container_width=True,
+                        )
+                        reset_col.button(
+                            "Reset decision", key=f"reset_hold_{store}_{item}",
+                            on_click=record_manager_decision,
+                            args=(store, item, "Pending"), use_container_width=True,
+                        )
+                        st.caption("Updates the order table and this product’s quantity. "
+                                   "No order is submitted; decisions are session-only.")
                     else:
                         st.success(
                             "**No hold** — No additional manager review is required by the system. "
@@ -2531,88 +2573,8 @@ if active_section == "Inventory Planning":
             except (ValueError, KeyError, FileNotFoundError, TypeError, ImportError) as exc:
                 st.error(f"Cannot load precomputed v4 inventory decisions: {type(exc).__name__}: {exc}")
 
-        # Offline research comparison, NOT a live service-level selector. Changing
-        # the target in the live 14-day policy would require recomputing the policy.
-        st.markdown("#### Balancing Shortages and Extra Stock")
-        readable_caption(
-            "More safety stock helps cover unexpected demand, but also leaves more "
-            "inventory. The current ordering calculations use a 95% service target."
-        )
-        service_trials = pd.DataFrame({
-            "Scenario": ["Forecast only", "90% service", "95% service (current)", "98% service"],
-            "Demand covered (%)": [65.6, 94.8, 97.3, 98.6],
-            "Average leftover (days of sales)": [2.2, 8.4, 10.9, 13.7],
-        })
-        with st.expander("Compare ordering policies (research simulation)", expanded=False):
-            tradeoff_fig = go.Figure()
-            tradeoff_fig.add_trace(go.Bar(
-                x=service_trials["Scenario"], y=service_trials["Demand covered (%)"],
-                marker_color=["#A4B0C0", "#2569B2", "#138B84", "#5C87BC"],
-                text=[f"{v:.1f}%" for v in service_trials["Demand covered (%)"]],
-                textposition="outside", name="Demand coverage",
-            ))
-            tradeoff_fig.update_layout(
-                title="14-day orders that covered actual demand",
-                yaxis_title="Coverage (%)", yaxis=dict(range=[0, 110]),
-                height=350, margin=dict(t=60,b=40), showlegend=False,
-            )
-            st.plotly_chart(tradeoff_fig, use_container_width=True)
-            st.dataframe(service_trials, hide_index=True, use_container_width=True)
-            st.write(
-                "A 90% target covered 94.8% of actual 14-day demand with an average "
-                "8.4 days of stock left. The current 95% target covered 97.3% "
-                "with 10.9 days left. The sponsor can choose this trade-off, "
-                "but this dashboard does not recalculate ordering rules when a "
-                "different research scenario is selected."
-            )
-            readable_caption(
-                "Historical ordering-policy backtest: `M5_RAG_5_benchmark_v4.ipynb`. "
-                "Coverage and leftover stock are simulation results, not measured inventory costs."
-            )
 
-        # A separate 7/14-day stock check for the main selected item.
-        # This control does not affect the later comparison map or the 14-day order.
-        st.divider()
-        render_section_heading("Stock Check | No New Deliveries")
-        stock_check_horizon = st.radio(
-            "Stock check period", [7, 14],
-            format_func=lambda days: f"{days} days", horizontal=True,
-            key="inventory_stock_check_horizon")
-        if stock_check_horizon == 14:
-            all_daily_stock = load_14day_daily_forecasts()
-            if all_daily_stock is None:
-                st.warning("The 14-day daily forecast file is missing; showing the seven-day stock check.")
-                stock_check_horizon = 7
-            else:
-                stock_check_daily = all_daily_stock.loc[
-                    all_daily_stock["store_id"].eq(store) & all_daily_stock["item_id"].eq(item),
-                    ["date", "forecast"]].sort_values("date").copy()
-                if len(stock_check_daily) != 14:
-                    st.warning("This product lacks a full 14-day forecast; showing seven days.")
-                    stock_check_horizon = 7
-        if stock_check_horizon == 7:
-            stock_check_daily = item_data[["date", "forecast"]].sort_values("date").copy()
-
-        cumulative_stock_demand = stock_check_daily["forecast"].clip(lower=0).cumsum()
-        stock_check_demand = float(stock_check_daily["forecast"].clip(lower=0).sum())
-        stock_check_gap = max(0.0, stock_check_demand - float(on_hand))
-        stock_check_shortages = stock_check_daily.loc[cumulative_stock_demand.gt(float(on_hand))]
-        stock_check_date = (stock_check_shortages["date"].iloc[0].strftime("%b %d, %Y")
-                            if not stock_check_shortages.empty
-                            else f"Not within {stock_check_horizon} days")
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Starting Inventory", f"{on_hand} units")
-        k2.metric(f"{stock_check_horizon}-Day Demand Shortfall", f"{stock_check_gap:,.1f} units")
-        k3.metric(f"{stock_check_horizon}-Day Projected Stockout", stock_check_date)
-        readable_caption(f"We subtract predicted sales from your starting stock for {stock_check_horizon} days. "
-                   "This check assumes no deliveries; it is different from the 14-day replenishment recommendation.")
-        st.divider()
-
-
-        product_inspection_slot = st.container()
-
-        # MULTI_ITEM_RUNWAY_V3
-
+    # Stock Monitoring continues with a multi-product runway comparison.
     with runway_slot:
         render_section_heading("When Could Each Product Run Out?")
         runway_horizon = st.radio(
@@ -2626,12 +2588,9 @@ if active_section == "Inventory Planning":
         if runway_horizon == 14 and runway_14_data is None:
             st.warning("Upload the compact 14-day daily forecast to enable longer stock projections.")
             runway_horizon = 7
-        st.write(
-            "Select 3–8 products to compare. Each row shows a product, and each column "
-            "shows a forecast day. Green means enough stock for expected demand, yellow "
-            "means higher demand could exhaust stock, and red means expected demand "
-            "exceeds stock. Move the day slider to check each day's status. "
-            "The chart assumes no new deliveries."
+        readable_caption(
+            "Compare 3–8 products; green = covered, yellow = monitor, red = projected gap. "
+            "No deliveries assumed."
         )
 
         import math
@@ -2886,209 +2845,7 @@ if active_section == "Inventory Planning":
                 "are illustrative, not calibrated multi-day intervals."
             )
 
-            with product_inspection_slot:
-                # Product-level inspection
 
-                render_section_heading("Selected Product Inventory")
-
-                selected_product = st.selectbox(
-                    "Inspect a product (independent of the runway display)",
-                    sorted(inv_items["item_id"].unique().tolist()),
-                    key="runway_scaled_product"
-                )
-
-                product_runway = runway[
-                    runway["item_id"] == selected_product
-                ].sort_values("day")
-
-                day_record = product_runway[
-                    product_runway["day"] == runway_day
-                ].iloc[0]
-
-                starting_stock = simulated_stock[selected_product]
-
-                readable_caption(
-                    f"Scenario: {simulated_type[selected_product]} "
-                    f"| Starting inventory: {starting_stock:,} units"
-                )
-
-                c1, c2, c3 = st.columns(3)
-
-                c1.metric(
-                    "Starting Stock",
-                    f"{starting_stock:,} units"
-                )
-
-                c2.metric(
-                    "Expected Balance",
-                    f"{max(0, day_record['point_balance']):.1f} units"
-                )
-
-                c3.metric(
-                    "High-Demand Balance",
-                    f"{max(0, day_record['high_balance']):.1f} units"
-                )
-
-                stock_chart = go.Figure()
-
-                stock_chart.add_trace(
-                    go.Scatter(
-                        x=[0] + product_runway["day"].tolist(),
-                        y=[starting_stock] + (
-                            product_runway["point_balance"]
-                            .clip(lower=0).tolist()
-                        ),
-                        name="Point Forecast",
-                        mode="lines+markers",
-                        line=dict(color="#0071ce", width=3)
-                    )
-                )
-
-                stock_chart.add_trace(
-                    go.Scatter(
-                        x=[0] + product_runway["day"].tolist(),
-                        y=[starting_stock] + (
-                            product_runway["high_balance"]
-                            .clip(lower=0).tolist()
-                        ),
-                        name="Illustrative High Demand",
-                        mode="lines+markers",
-                        line=dict(
-                            color="#d39a23",
-                            width=2,
-                            dash="dash"
-                        )
-                    )
-                )
-
-                stock_chart.add_hline(
-                    y=0,
-                    line_dash="dot",
-                    line_color="#eb453d"
-                )
-
-                stock_chart.add_vline(
-                    x=runway_day,
-                    line_dash="dot",
-                    line_color="#777777"
-                )
-
-                stock_chart.update_layout(
-                    title=f"{runway_horizon}-Day Stock Projection — {selected_product}",
-                    xaxis_title="Forecast Day",
-                    yaxis_title="Projected Remaining Stock (Units)",
-                    xaxis=dict(dtick=1, range=[0, runway_horizon]),
-                    yaxis=dict(rangemode="tozero"),
-                    height=370,
-                    margin=dict(t=65, b=40),
-                    legend=dict(orientation="h", y=-0.3)
-                )
-
-                st.plotly_chart(
-                    stock_chart,
-                    use_container_width=True,
-                    config={"displayModeBar": False}
-                )
-
-                # INVENTORY_EXPLANATION_V1
-
-                render_section_heading("Potential Shortage (Units)")
-
-                point_unmet = max(
-                    0.0,
-                    -float(day_record["point_balance"])
-                )
-
-                high_unmet = max(
-                    0.0,
-                    -float(day_record["high_balance"])
-                )
-
-                unmet_col1, unmet_col2 = st.columns(2)
-
-                unmet_col1.metric(
-                    "Point-Forecast Shortage",
-                    f"{point_unmet:.2f} units"
-                )
-
-                unmet_col2.metric(
-                    "High-Demand Scenario Shortage",
-                    f"{high_unmet:.2f} units"
-                )
-
-                with st.expander("How estimated inventory is calculated"):
-                    st.markdown(
-                        "When estimated inventory "
-                        "is missing, starting inventory is generated using "
-                        "the seven-day LightGBM forecast. "
-                        "For estimates, products are consistently assigned "
-                        "to one of three assumption-based scenarios:"
-                    )
-
-                    st.markdown(
-                        "- **Low stock:** 65% of predicted seven-day "
-                        "demand, rounded down.\n"
-                        "- **Moderate stock:** halfway between predicted "
-                        "demand and the sum of daily P90 estimates, "
-                        "rounded up.\n"
-                        "- **High stock:** 115% of the sum of daily P90 "
-                        "estimates, rounded up, plus one unit."
-                    )
-
-                    st.info(
-                        "Manual stock overrides replace these predefined scenarios. "
-                        "Summed daily P90 values are not calibrated multi-day intervals."
-                    )
-
-                readable_caption(
-                    "A shortage begins when cumulative expected demand exceeds starting stock."
-                )
-
-                if day_record["point_balance"] < 0:
-                    st.error(
-                        "Estimated inventory is insufficient under "
-                        "the point forecast by the selected day."
-                    )
-                elif day_record["high_balance"] < 0:
-                    st.warning(
-                        "Expected inventory is sufficient, but the "
-                        "illustrative high-demand scenario shows risk."
-                    )
-                else:
-                    st.success(
-                        "Estimated inventory covers both scenarios "
-                        "through the selected day."
-                    )
-
-                readable_caption(
-                    "Balances stop at zero; unmet demand is shown separately rather than as negative stock."
-                )
-
-        st.divider()
-
-
-
-
-
-        # UNCERTAINTY_SCENARIO_V1
-        # These are illustrative sums of daily prediction bounds,
-        # not calibrated seven-day prediction intervals.
-
-        daily_intervals = item_data[
-            ["date", "forecast", "p10", "p90"]
-        ].sort_values("date").copy()
-
-        lower_daily_scenario = float(
-            daily_intervals["p10"].clip(lower=0).sum()
-        )
-
-        upper_daily_scenario = float(
-            daily_intervals["p90"].clip(lower=0).sum()
-        )
-
-        upper_scenario_shortfall = max(
-            0.0, upper_daily_scenario - float(on_hand)
-        )
 
 
 # AI ASSISTANT
