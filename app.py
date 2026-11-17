@@ -1645,9 +1645,24 @@ if active_section == "Executive Overview":
             "units_to_cover": "7-Day Gap Units",
             "sales_at_risk_usd": "7-Day Sales at Risk ($)",
         }).round(2)
-        readable_caption("Click a product row to load it into Demand Forecasting and Inventory Planning.")
+        readable_caption("Select a product to add it to the stock comparison chart in Inventory Planning.")
+        # Show the saved selection even when the native dataframe checkbox is reset
+        # after navigating between dashboard sections. Keep the table columns unchanged.
+        focused_priority_item = (
+            str(st.session_state.get("focused_item"))
+            if st.session_state.get("focused_store") == store else None
+        )
+        visible_priority_items = set(urgent["item_id"].astype(str))
+        if focused_priority_item not in visible_priority_items:
+            focused_priority_item = None
+
+        def highlight_focused_priority(row):
+            if str(row["Product"]) == focused_priority_item:
+                return ["background-color: #CDDFFA; color: #142D59"] * len(row)
+            return [""] * len(row)
+
         priority_event = st.dataframe(
-            priorities_display,
+            priorities_display.style.apply(highlight_focused_priority, axis=1),
             hide_index=True,
             use_container_width=True,
             on_select="rerun",
@@ -1664,10 +1679,11 @@ if active_section == "Executive Overview":
             st.session_state[latest_click_key] = chosen_item
             if chosen_item:
                 focus_product(chosen_item)
-        if st.session_state.get("focused_item") and st.session_state.get("focused_store") == store:
-            st.success(
-                f"{st.session_state['focused_item']} selected. Open Demand Forecasting "
-                "or Inventory Planning to see its details."
+                st.rerun()  # Refresh the highlight for the newly saved product.
+        if focused_priority_item:
+            st.caption(
+                f"**Selected product: {focused_priority_item}** · "
+                "View its demand forecast in **Demand Forecasting** or compare its estimated stock in **Inventory Planning**."
             )
 
     readable_caption(
@@ -2524,8 +2540,23 @@ if active_section == "Inventory Planning":
                     # Select a single product from the 14-day order plan to
                     # inspect its full calculation under Review & Approval.
                     st.caption("Select a product row below, then open **Review & Approval** to check its order details and make a decision.")
+                    # Keep the selected product visible after navigating between sections,
+                    # even if Streamlit resets its native row-selection checkbox.
+                    focused_order_item = (
+                        str(st.session_state.get("focused_item"))
+                        if st.session_state.get("focused_store") == store else None
+                    )
+                    if focused_order_item not in set(order_display["Product"].astype(str)):
+                        focused_order_item = None
+
+                    def highlight_focused_order(row):
+                        if str(row["Product"]) == focused_order_item:
+                            return ["background-color: #CDDFFA; color: #142D59"] * len(row)
+                        return [""] * len(row)
+
                     order_event = st.dataframe(
-                        order_display, hide_index=True, use_container_width=True,
+                        order_display.style.apply(highlight_focused_order, axis=1),
+                        hide_index=True, use_container_width=True,
                         on_select="rerun", selection_mode="single-row",
                         key=f"routine_order_table_{store}_{review_only}_{order_search.strip()}",
                         column_config={
@@ -2545,6 +2576,12 @@ if active_section == "Inventory Planning":
                             # previously selected held item from the review queue.
                             st.session_state[f"review_queue_selected_{store}"] = []
                             focus_product(selected_order_item)
+                            st.rerun()  # Show the saved selection immediately.
+                    if focused_order_item:
+                        st.caption(
+                            f"**Selected product: {focused_order_item}** · "
+                            "Open **Review & Approval** to see its order details."
+                        )
                     readable_caption("Held orders stay at zero until a manager approves them. Decisions are session-only.")
                     st.download_button(
                         "Download 14-day recommended orders CSV",
