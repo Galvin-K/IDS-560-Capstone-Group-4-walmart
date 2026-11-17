@@ -13,10 +13,27 @@ from inventory_engine import protection_period_order, repeat_week_scenario, appl
 from v4_policy_bridge import (offline_policy_status, load_offline_policy,
                               offline_v4_recommendation)
 from analysis_scope import SCOPES, resolve_question, scope_summary
-from Components.overview_intro import render_overview_intro
 from Components.model_summary import render_model_summary
 from Components.footer import render_footer
 from Components.dashboard_theme import render_dashboard_theme, render_section_heading
+
+
+# Inline overview guide: avoids an optional Components.overview_intro import
+# crashing the entire deployment when the module is missing from GitHub.
+def render_overview_intro(store: str) -> None:
+    steps = st.columns(3, gap="small")
+    with steps[0]:
+        with st.container(border=True):
+            st.markdown("**1 · Explore demand**")
+            st.caption(f"You're viewing **{store}**. Change stores in the sidebar and review the 7-day overview below.")
+    with steps[1]:
+        with st.container(border=True):
+            st.markdown("**2 · Plan inventory**")
+            st.caption("Open **Inventory Planning** to inspect 14-day replenishment decisions and manually adjust stock.")
+    with steps[2]:
+        with st.container(border=True):
+            st.markdown("**3 · Review evidence**")
+            st.caption("Use **Model Insights** for validation and **AI Assistant** for dated supporting evidence.")
 
 # OpenRouter-backed AI generation. Kept in app.py so the deployment does not
 # require an additional llm_provider.py module or extra third-party packages.
