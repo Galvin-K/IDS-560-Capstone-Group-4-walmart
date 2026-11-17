@@ -2425,7 +2425,6 @@ if active_section == "Inventory Planning":
             predicted_total = float(item_data["forecast"].sum())
             st.divider()
             render_section_heading("Selected Product — Order Details")
-            st.markdown(f"**{item}** · {dept} · {store}")
             with st.expander("Set or override inventory for this product", expanded=False):
                 selected_key = (str(store), str(item))
                 override_enabled = st.checkbox(
@@ -2452,11 +2451,6 @@ if active_section == "Inventory Planning":
                     if selected_key in st.session_state["inventory_overrides"]:
                         st.session_state["inventory_overrides"].pop(selected_key, None)
                         readable_caption("Removed the manual override. Other dashboard sections refresh on the next rerun.")
-            # Use one starting-stock display; the Monitoring tab contains the
-            # comparative stock screening and projected shortages.
-            col1, col2 = st.columns(2)
-
-
             selected_inventory_row = inv_items[
                 inv_items["item_id"] == item
             ]
@@ -2477,12 +2471,9 @@ if active_section == "Inventory Planning":
                 selected_inventory_row["inventory_source"].iloc[0]
                 if not selected_inventory_row.empty else "Simulated"
             )
-            st.caption(f"Starting stock: **{on_hand:,} units** ({selected_source})")
-
             # REAL 14-DAY POLICY — precomputed using the team's v4 LightGBM model,
             # M5 history, safety stock, confidence and hold/review rules. The only
             # live arithmetic is stock-dependent ordering; do NOT initialize M5 here.
-            readable_caption("Order estimate = 14-day demand + safety stock − stock available − incoming orders.")
             offline_available, offline_message = offline_policy_status()
             if not offline_available:
                 st.info(offline_message + ". Upload the generated CSV to forecasting/ to enable this section.")
@@ -2491,8 +2482,12 @@ if active_section == "Inventory Planning":
                     policy_table = load_offline_policy()
                     policy_rows = policy_table[policy_table["store_id"].eq(str(store))]
                     # Store-wide counts are already present in the order table.
-                    ordering_cols = st.columns(2)
-                    policy_on_order = ordering_cols[0].number_input(
+                    st.markdown("**Inventory used in this order estimate**")
+                    ordering_cols = st.columns(2, gap="medium")
+                    with ordering_cols[0]:
+                        st.metric("Starting stock", f"{on_hand:,} units",
+                                  help=f"Inventory source: {selected_source}")
+                    policy_on_order = ordering_cols[1].number_input(
                         "Already on order (units)", min_value=0, value=0, step=1,
                         key=f"v4_precomputed_on_order_{store}_{item}",
                         help="Units already ordered for the selected product, not included in current on-hand stock."
@@ -2513,6 +2508,7 @@ if active_section == "Inventory Planning":
                             if v4_selected["hold"] and manager_decision == "Approved"
                             else (0 if v4_selected["hold"] else int(v4_selected["order_qty"]))
                         )
+                        st.markdown("**14-day order calculation**")
                         metric_cols = st.columns(4)
                         metric_cols[0].metric("Expected demand (14 days)", f"{v4_selected['demand_14d']:,.1f}",
                                               help="Units we expect customers to buy during January 1–14.")
@@ -2557,14 +2553,13 @@ if active_section == "Inventory Planning":
                                 "Rejected": "Not approved for this demo session",
                             }.get(manager_decision, "Manager review required")
                             st.warning(
-                                f"**{status_note}**\n\n"
-                                f"**Reason:** {', '.join(hold_labels)}\n\n"
-                                f"**Manager action:**\n{review_text}\n\n"
-                                f"**Units if approved:** {conditional_units:,} "
-                                f"{'unit' if conditional_units == 1 else 'units'} "
-                                "(simulated; no real order placed)."
+                                f"**{status_note}** · {', '.join(hold_labels)}\n\n"
+                                f"**If approved:** {conditional_units:,} "
+                                f"{'unit' if conditional_units == 1 else 'units'}"
                             )
-                            st.caption("Manager approval controls are at the end of this tab. No real purchase is made.")
+                            with st.expander("What should the manager check?", expanded=False):
+                                st.markdown(review_text)
+                            st.caption("Approve or reject this simulated order at the bottom of the tab.")
                         else:
                             st.success(
                                 "**No hold** — No additional manager review is required by the system. "
@@ -2630,10 +2625,7 @@ if active_section == "Inventory Planning":
         st.markdown("#### Manager Decision")
         selected_for_decision = st.session_state.get(f"review_queue_selected_{store}", [])
         if selected_for_decision:
-            st.write(
-                f"Review the order quantity, hold reasons, and confidence above before "
-                f"deciding for **{selected_for_decision[0]}**."
-            )
+            st.caption("Review the hold reason, order estimate, and forecast confidence before deciding.")
             st.caption(
                 "Need supporting context? Open **AI Assistant** in the sidebar and ask about "
                 "the product or demand patterns. AI responses are advisory and may not "
