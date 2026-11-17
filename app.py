@@ -2875,10 +2875,10 @@ if active_section == "Inventory Planning":
         # Single time control: start at day 7; the same slider extends to day 14.
         # Only load the 14-day series if the user moves beyond the 7-day view.
         runway_day = st.slider(
-            "Inspect forecast day · Days 8–14 use the separate 14-day daily forecast export",
+            "Inspect forecast day",
             min_value=1, max_value=14, value=7,
             key="runway_inspect_day",
-            help="Starts at day 7. Move right to inspect up to 14 forecast days.",
+            help="Starts at day 7. Days 8–14 use the separate 14-day daily forecast export.",
         )
         runway_horizon = runway_day
         runway_14_data = load_14day_daily_forecasts() if runway_day > 7 else None
