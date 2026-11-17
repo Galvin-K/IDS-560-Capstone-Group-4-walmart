@@ -3622,15 +3622,20 @@ if active_section == "AI Assistant":
                     help="Return to the selected product's review with filters preserved.",
                 )
         with st.container(key="ai_response_card", border=True):
-            st.markdown(f"**Your question:** {result['question']}")
-            st.divider()
             if result.get("answer"):
-                st.markdown(result["answer"])
-            elif result.get("answer_error"):
-                st.warning(result["answer_error"])
+                # Render question, separator, and answer together to avoid the
+                # extra vertical gaps created by separate Streamlit blocks.
+                st.markdown(
+                    f"**Your question:** {result['question']}\n\n---\n\n"
+                    + result["answer"]
+                )
             else:
-                st.info("Historical evidence is available below. Select **Ask AI Assistant** "
-                        "to generate an explanation.")
+                st.markdown(f"**Your question:** {result['question']}")
+                if result.get("answer_error"):
+                    st.warning(result["answer_error"])
+                else:
+                    st.info("Historical evidence is available below. Select **Ask AI Assistant** "
+                            "to generate an explanation.")
             if result.get("answer_error") and result.get("answer"):
                 st.warning(result["answer_error"])
 
