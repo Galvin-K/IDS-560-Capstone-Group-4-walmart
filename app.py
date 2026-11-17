@@ -2113,9 +2113,9 @@ if active_section == "Inventory Planning":
             pd.to_datetime(inv_list["first_shortage"]).dt.strftime("%b %d").fillna("—")
         )
         inv_columns = {
-            "item_id": "Product", "dept_id": "Department", "Status": "Status",
+            "item_id": "Product", "dept_id": "Department",
             "demand": f"{action_horizon}-Day Demand",
-            "daily_p90_sum": "High-demand scenario*", "gap": "Demand Gap",
+            "daily_p90_sum": "High-demand scenario*",
             "units_to_cover": "Units to Cover", "Stockout date": "Stockout Date",
         }
         # Monitoring statuses are NOT order-approval or hold decisions.
@@ -2130,7 +2130,6 @@ if active_section == "Inventory Planning":
         inv_display = inv_list[list(inv_columns)].rename(columns=inv_columns)
         inv_display = inv_display.round({
             f"{action_horizon}-Day Demand": 2, "High-demand scenario*": 2,
-            "Demand Gap": 2,
         })
         # Monitoring is read-only for both 7- and 14-day horizons.
         # Product selection belongs to the actual 14-day replenishment table.
