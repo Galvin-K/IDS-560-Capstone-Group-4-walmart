@@ -2946,7 +2946,7 @@ if active_section == "Inventory Planning":
 
         if runway_horizon > 7:
             readable_caption("Beyond day 7, this stock comparison uses the separate 14-day "
-                             "daily forecast export; no deliveries or new orders are assumed.")
+                             "daily forecast export.")
 
         # Daily stock graphs (not purchase recommendations) use the selected horizon.
         runway_source = (
