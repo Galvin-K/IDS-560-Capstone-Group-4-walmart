@@ -1626,7 +1626,7 @@ if active_section == "Executive Overview":
 
     # Prioritized inventory action list
 
-    render_section_heading("Near-Term Shortage Priorities (Next 7 Days)")
+    render_section_heading("Priorities Shortage List (Next 7 Days)")
 
     # Seven-day sales exposure = UNROUNDED seven-day forecast gap * M5 price.
     # This is distinct from the lead-time KPI and whole-unit ordering value.
