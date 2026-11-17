@@ -1405,34 +1405,20 @@ if active_section == "Executive Overview":
         "Identify products whose forecast demand may exceed starting stock."
     )
 
-    readable_caption(
-        "Delivery estimate: 7 days by default (adjustable below)."
+    # Delivery time affects pre-delivery shortage exposure, not the fixed
+    # 14-day replenishment policy. Keep the control visible and concise.
+    inv_lead_days = st.selectbox(
+        "Expected delivery time",
+        options=list(range(1, 8)), index=6,
+        format_func=lambda days: f"{days} days (default)" if days == 7 else f"{days} days",
+        key="inv_overview_lead_days",
+        help="Choose the estimated supplier delivery time (1–7 days). This changes "
+             "only the pre-delivery shortage estimate, not the 14-day order plan."
     )
-    with st.expander("Inventory assumptions", expanded=False):
-        st.write(
-            "**Expected delivery time:** We assume a supplier takes seven days to deliver. "
-            "If your supplier delivers sooner, choose a shorter period below. "
-            "This changes the lead-time shortage and sales-at-risk figures, "
-            "but not the separate 14-day replenishment recommendations."
-        )
-        inv_lead_days = st.selectbox(
-            "Expected delivery time (days)",
-            options=list(range(1, 8)), index=6,
-            format_func=lambda days: f"{days} days (default)" if days == 7 else f"{days} days",
-            key="inv_overview_lead_days",
-            help="Only the first seven forecast days are used in this stock-risk view. "
-                 "Longer delivery times require a separate forecast-based assessment."
-        )
-        readable_caption(
-            "Dollar estimates use historical retail selling prices, not wholesale costs."
-        )
-
-    if inv_lead_days != 7:
-        st.caption(
-            f"Sales at risk now uses a {inv_lead_days}-day delivery estimate. "
-            "The 14-day order plan remains based on its fixed 7-day lead time "
-            "and 7-day stock review period."
-        )
+    readable_caption(
+        "Adjusts potential shortages before delivery only. The separate 14-day "
+        "replenishment plan continues to assume a 7-day lead time."
+    )
 
     # Calculate illustrative lead-time sales at risk.
 
