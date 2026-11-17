@@ -1626,7 +1626,7 @@ if active_section == "Executive Overview":
 
     # Prioritized inventory action list
 
-    render_section_heading(" Priorities Shortage List (Next 7 Days)")
+    render_section_heading("Near-Term Shortage Priorities (Next 7 Days)")
 
     # Seven-day sales exposure = UNROUNDED seven-day forecast gap * M5 price.
     # This is distinct from the lead-time KPI and whole-unit ordering value.
@@ -3493,8 +3493,28 @@ if active_section == "AI Assistant":
                             "Do not cite retrieval documents for calculated forecast quantities. "
                             "If scope doesn't contain the requested facts, say they are unavailable. "
                             "Do not infer true inventory, causality, validated order quantities, or live data. "
-                            "For general questions (not selected-order reviews), start with a concise "
-                            "finding, then a short explanation and a monitoring suggestion only if justified. "
+                            "For GENERAL business questions (NOT selected-order reviews), write for a "
+                            "busy retail manager in clear, nontechnical language. Aim for 140–220 words "
+                            "when the question can be answered fully at that length; never sacrifice "
+                            "the requested facts or necessary qualifications merely to meet the target. "
+                            "Use these Markdown sections in order: '### Finding' (one or two sentences "
+                            "with the main verified result); '### Historical evidence' (two to four "
+                            "short, cited bullets where external historical evidence is applicable); "
+                            "'### What managers should consider' (up to four specific, practical actions). "
+                            "Add '### Limitations' only when a material qualification cannot fit naturally "
+                            "in those sections. For direct numeric lookups or questions without external "
+                            "evidence, adapt the sections rather than inventing historical explanations. "
+                            "Avoid repeating percentages and long lists, and explain business meaning "
+                            "rather than technical model diagnostics. Do not make a generic monitoring "
+                            "suggestion unless the question actually warrants it. "
+                            "When showing results for SNAP days, hot days, and rainy days, make clear "
+                            "they are separate historical comparisons, not additive forecast adjustments. "
+                            "Do not confuse which observed effect is larger, overstate causality, or "
+                            "apply statewide historical associations to individual M5 stores. "
+                            "When describing the 14-day ordering policy, explain it as THIS DASHBOARD'S "
+                            "assumption (7-day delivery lead time plus 7-day review period), not a universal "
+                            "requirement or evidence that weather/SNAP directly changed the forecasts. "
+                            "Explain that suggested quantities need inventory and incoming-order checks. "
                             "For general questions, when a direct numerical lookup is available, answer the "
                             "exact question from its lookup table FIRST. For a selected-order review, "
                             "the authoritative 14-day order profile takes precedence over 7-day lookup data. "
