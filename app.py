@@ -1826,54 +1826,54 @@ if active_section == "Model Insights":
         st.plotly_chart(poster_fig, use_container_width=True)
         readable_caption("Forecast error increased modestly over longer periods; 7-day forecasts were most accurate.")
 
-        with st.expander("Explore detailed model comparisons", expanded=False):
-            comparison_horizon = st.radio(
-                "Comparison period", [7, 14, 28],
-                format_func=lambda d: f"{d} days", horizontal=True,
-                key="historical_model_comparison_period")
-            historical_models = pd.DataFrame([
-                {"Model": "Recent sales average (7 days)", "WAPE (%)": 74.58, "Bias (%)": -1.75, "RMSE (units)": 2.219, "Days": 7},
-                {"Model": "Recent sales average (28 days)", "WAPE (%)": 73.91, "Bias (%)": -2.76, "RMSE (units)": 2.202, "Days": 7},
-                {"Model": "TSB (intermittent demand)", "WAPE (%)": 72.816, "Bias (%)": -3.969, "RMSE (units)": 2.159, "Days": 7},
-                {"Model": "Exponential smoothing (SES)", "WAPE (%)": 72.846, "Bias (%)": -4.100, "RMSE (units)": 2.159, "Days": 7},
-                {"Model": "LightGBM (selected)", "WAPE (%)": 71.62, "Bias (%)": -0.70, "RMSE (units)": 2.040, "Days": 7},
-                {"Model": "Recent sales average (7 days)", "WAPE (%)": 75.77, "Bias (%)": -2.27, "RMSE (units)": 2.282, "Days": 14},
-                {"Model": "Recent sales average (28 days)", "WAPE (%)": 74.65, "Bias (%)": -3.08, "RMSE (units)": 2.243, "Days": 14},
-                {"Model": "TSB (intermittent demand)", "WAPE (%)": 73.729, "Bias (%)": -4.427, "RMSE (units)": 2.209, "Days": 14},
-                {"Model": "Exponential smoothing (SES)", "WAPE (%)": 73.763, "Bias (%)": -4.567, "RMSE (units)": 2.210, "Days": 14},
-                {"Model": "LightGBM (selected)", "WAPE (%)": 72.55, "Bias (%)": -1.31, "RMSE (units)": 2.080, "Days": 14},
-                {"Model": "Recent sales average (7 days)", "WAPE (%)": 77.25, "Bias (%)": -2.72, "RMSE (units)": 2.343, "Days": 28},
-                {"Model": "Recent sales average (28 days)", "WAPE (%)": 75.94, "Bias (%)": -3.58, "RMSE (units)": 2.294, "Days": 28},
-                {"Model": "TSB (intermittent demand)", "WAPE (%)": 75.060, "Bias (%)": -4.780, "RMSE (units)": 2.261, "Days": 28},
-                {"Model": "Exponential smoothing (SES)", "WAPE (%)": 75.104, "Bias (%)": -4.902, "RMSE (units)": 2.263, "Days": 28},
-                {"Model": "LightGBM (selected)", "WAPE (%)": 73.94, "Bias (%)": -1.67, "RMSE (units)": 2.123, "Days": 28},
-            ])
-            selected_historical = historical_models.loc[historical_models["Days"].eq(comparison_horizon)].copy()
-            st.dataframe(selected_historical.drop(columns="Days").round(2), hide_index=True,
-                         use_container_width=True)
-            compare_fig = go.Figure(go.Bar(
-                x=selected_historical["Model"], y=selected_historical["WAPE (%)"],
-                marker_color=["#184A8C" if m == "LightGBM (selected)" else "#B8CCE4"
-                              for m in selected_historical["Model"]],
-                text=selected_historical["WAPE (%)"].round(2), texttemplate="%{text:.2f}%",
-                textposition="outside"))
-            compare_fig.update_layout(title=f"{comparison_horizon}-day WAPE by method",
-                                      yaxis_title="WAPE (%)", xaxis_title="", height=370,
-                                      xaxis_tickangle=-18, yaxis=dict(rangemode="tozero"))
-            st.plotly_chart(compare_fig, use_container_width=True)
-            readable_caption("LightGBM had the lowest WAPE among the five reported methods at each horizon; TSB and SES were exploratory comparisons.")
-            bias_fig = go.Figure(go.Bar(
-                x=selected_historical["Model"], y=selected_historical["Bias (%)"],
-                marker_color=["#184A8C" if m == "LightGBM (selected)" else "#B8CCE4"
-                              for m in selected_historical["Model"]],
-                text=selected_historical["Bias (%)"].round(2),
-                texttemplate="%{text:.2f}%", textposition="outside"))
-            bias_fig.add_hline(y=0, line_color="#303030", line_width=1)
-            bias_fig.update_layout(title=f"{comparison_horizon}-day forecast bias",
-                                   xaxis_title="", yaxis_title="Signed bias (%)",
-                                   xaxis_tickangle=-18, height=360)
-            st.plotly_chart(bias_fig, use_container_width=True)
-            readable_caption("LightGBM's aggregate bias was closest to zero across the reported forecast periods.")
+        render_section_heading("Detailed Model Comparisons")
+        comparison_horizon = st.radio(
+            "Comparison period", [7, 14, 28],
+            format_func=lambda d: f"{d} days", horizontal=True,
+            key="historical_model_comparison_period")
+        historical_models = pd.DataFrame([
+            {"Model": "Recent sales average (7 days)", "WAPE (%)": 74.58, "Bias (%)": -1.75, "RMSE (units)": 2.219, "Days": 7},
+            {"Model": "Recent sales average (28 days)", "WAPE (%)": 73.91, "Bias (%)": -2.76, "RMSE (units)": 2.202, "Days": 7},
+            {"Model": "TSB (intermittent demand)", "WAPE (%)": 72.816, "Bias (%)": -3.969, "RMSE (units)": 2.159, "Days": 7},
+            {"Model": "Exponential smoothing (SES)", "WAPE (%)": 72.846, "Bias (%)": -4.100, "RMSE (units)": 2.159, "Days": 7},
+            {"Model": "LightGBM (selected)", "WAPE (%)": 71.62, "Bias (%)": -0.70, "RMSE (units)": 2.040, "Days": 7},
+            {"Model": "Recent sales average (7 days)", "WAPE (%)": 75.77, "Bias (%)": -2.27, "RMSE (units)": 2.282, "Days": 14},
+            {"Model": "Recent sales average (28 days)", "WAPE (%)": 74.65, "Bias (%)": -3.08, "RMSE (units)": 2.243, "Days": 14},
+            {"Model": "TSB (intermittent demand)", "WAPE (%)": 73.729, "Bias (%)": -4.427, "RMSE (units)": 2.209, "Days": 14},
+            {"Model": "Exponential smoothing (SES)", "WAPE (%)": 73.763, "Bias (%)": -4.567, "RMSE (units)": 2.210, "Days": 14},
+            {"Model": "LightGBM (selected)", "WAPE (%)": 72.55, "Bias (%)": -1.31, "RMSE (units)": 2.080, "Days": 14},
+            {"Model": "Recent sales average (7 days)", "WAPE (%)": 77.25, "Bias (%)": -2.72, "RMSE (units)": 2.343, "Days": 28},
+            {"Model": "Recent sales average (28 days)", "WAPE (%)": 75.94, "Bias (%)": -3.58, "RMSE (units)": 2.294, "Days": 28},
+            {"Model": "TSB (intermittent demand)", "WAPE (%)": 75.060, "Bias (%)": -4.780, "RMSE (units)": 2.261, "Days": 28},
+            {"Model": "Exponential smoothing (SES)", "WAPE (%)": 75.104, "Bias (%)": -4.902, "RMSE (units)": 2.263, "Days": 28},
+            {"Model": "LightGBM (selected)", "WAPE (%)": 73.94, "Bias (%)": -1.67, "RMSE (units)": 2.123, "Days": 28},
+        ])
+        selected_historical = historical_models.loc[historical_models["Days"].eq(comparison_horizon)].copy()
+        st.dataframe(selected_historical.drop(columns="Days").round(2), hide_index=True,
+                     use_container_width=True)
+        compare_fig = go.Figure(go.Bar(
+            x=selected_historical["Model"], y=selected_historical["WAPE (%)"],
+            marker_color=["#184A8C" if m == "LightGBM (selected)" else "#B8CCE4"
+                          for m in selected_historical["Model"]],
+            text=selected_historical["WAPE (%)"].round(2), texttemplate="%{text:.2f}%",
+            textposition="outside"))
+        compare_fig.update_layout(title=f"{comparison_horizon}-day WAPE by method",
+                                  yaxis_title="WAPE (%)", xaxis_title="", height=370,
+                                  xaxis_tickangle=-18, yaxis=dict(rangemode="tozero"))
+        st.plotly_chart(compare_fig, use_container_width=True)
+        readable_caption("LightGBM had the lowest WAPE among the five reported methods at each horizon; TSB and SES were exploratory comparisons.")
+        bias_fig = go.Figure(go.Bar(
+            x=selected_historical["Model"], y=selected_historical["Bias (%)"],
+            marker_color=["#184A8C" if m == "LightGBM (selected)" else "#B8CCE4"
+                          for m in selected_historical["Model"]],
+            text=selected_historical["Bias (%)"].round(2),
+            texttemplate="%{text:.2f}%", textposition="outside"))
+        bias_fig.add_hline(y=0, line_color="#303030", line_width=1)
+        bias_fig.update_layout(title=f"{comparison_horizon}-day forecast bias",
+                               xaxis_title="", yaxis_title="Signed bias (%)",
+                               xaxis_tickangle=-18, height=360)
+        st.plotly_chart(bias_fig, use_container_width=True)
+        readable_caption("LightGBM's aggregate bias was closest to zero across the reported forecast periods.")
 
     with patterns_tab:
         render_section_heading("Forecast Reliability")
@@ -1913,19 +1913,19 @@ if active_section == "Model Insights":
         st.plotly_chart(location_fig, use_container_width=True)
         readable_caption("Wisconsin Foods showed the strongest underforecasting (−3.53%); these group averages do not describe individual items.")
 
-        with st.expander("Explore model input importance", expanded=False):
-            feature_groups = pd.DataFrame({
-                "Input": ["Recent sales patterns", "Price", "Item and store type",
-                          "Calendar and events", "Same weekday history", "Forecast lead time"],
-                "Share of model gain (%)": [89.3, 5.1, 3.3, 1.2, 0.7, 0.3]})
-            gain_fig = go.Figure(go.Bar(x=feature_groups["Share of model gain (%)"],
-                                        y=feature_groups["Input"], orientation="h",
-                                        marker_color="#0071ce"))
-            gain_fig.update_layout(title="Feature groups by model gain",
-                                   xaxis_title="Share of model gain (%)", yaxis_title="",
-                                   yaxis=dict(autorange="reversed"), height=330)
-            st.plotly_chart(gain_fig, use_container_width=True)
-            readable_caption("Recent sales patterns account for 89.3% of model gain; feature importance is not causal evidence.")
+        render_section_heading("Model Input Importance")
+        feature_groups = pd.DataFrame({
+            "Input": ["Recent sales patterns", "Price", "Item and store type",
+                      "Calendar and events", "Same weekday history", "Forecast lead time"],
+            "Share of model gain (%)": [89.3, 5.1, 3.3, 1.2, 0.7, 0.3]})
+        gain_fig = go.Figure(go.Bar(x=feature_groups["Share of model gain (%)"],
+                                    y=feature_groups["Input"], orientation="h",
+                                    marker_color="#0071ce"))
+        gain_fig.update_layout(title="Feature groups by model gain",
+                               xaxis_title="Share of model gain (%)", yaxis_title="",
+                               yaxis=dict(autorange="reversed"), height=330)
+        st.plotly_chart(gain_fig, use_container_width=True)
+        readable_caption("Recent sales patterns account for 89.3% of model gain; feature importance is not causal evidence.")
 
     with ai_tab:
         render_section_heading("AI Assistant: Research Evaluation")
@@ -1954,14 +1954,14 @@ if active_section == "Model Insights":
         prec.metric("Flagging precision", "0.57", help="Share of flagged cases matching the evaluation outcome")
         reduction.metric("Fewer orders held", "33%", help="Compared with the older 14+ zero-sales-days rule")
         readable_caption("The revised review rules reduced holds by 33% in simulation, while retaining similar F1.")
-        with st.expander("What do these research results mean?", expanded=False):
-            st.write("All four AI approaches used the same research LLM, with 36 held-out cases "
-                     "run twice per system (72 runs per approach). Scoring was automated; human "
-                     "review remained pending. The deployed assistant has different inputs and prompts.")
-            st.write("The review policy distinguishes new items, possible stockouts, and possibly "
-                     "discontinued products. Flags are reasons to investigate, not proof of a stockout "
-                     "or discontinuation. Held items show zero immediately approved units and a "
-                     "separate conditional quantity if a manager clears the hold.")
+        st.markdown("**Interpretation & limitations**")
+        st.write("All four AI approaches used the same research LLM, with 36 held-out cases "
+                 "run twice per system (72 runs per approach). Scoring was automated; human "
+                 "review remained pending. The deployed assistant has different inputs and prompts.")
+        st.write("The review policy distinguishes new items, possible stockouts, and possibly "
+                 "discontinued products. Flags are reasons to investigate, not proof of a stockout "
+                 "or discontinuation. Held items show zero immediately approved units and a "
+                 "separate conditional quantity if a manager clears the hold.")
 
     with st.expander("Research sources, methodology & metric definitions", expanded=False):
         st.markdown(
