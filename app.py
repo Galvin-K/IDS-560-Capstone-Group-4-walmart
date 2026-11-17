@@ -42,7 +42,7 @@ def generate_answer(prompt: str, *, key: str,
     request_body = {
         "model": model,
         "temperature": 0,
-        "max_tokens": 1800,
+        "max_tokens": 2600,
         "messages": [
             {"role": "system", "content": (
                 "You are SmartStock AI's historical retail decision-support assistant. "
@@ -52,29 +52,57 @@ def generate_answer(prompt: str, *, key: str,
             {"role": "user", "content": prompt},
         ],
     }
-    request = Request(
-        "https://openrouter.ai/api/v1/chat/completions",
-        data=json.dumps(request_body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://ids-560-capstone-group-4-walmart.streamlit.app/",
-            "X-Title": "SmartStock AI - IDS 560",
-        },
-        method="POST",
-    )
-    try:
-        with urlopen(request, timeout=90) as response:
-            data = json.load(response)
-    except HTTPError as exc:
-        # Do not expose response headers, request details or credentials.
-        raise RuntimeError(f"AI model request failed (HTTP {exc.code}).") from exc
-    except (URLError, TimeoutError) as exc:
-        raise RuntimeError("AI model provider could not be reached.") from exc
-    choices = data.get("choices", [])
-    if not choices:
-        return ""
-    return str(choices[0].get("message", {}).get("content") or "").strip()
+    def make_request(body):
+        request = Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://ids-560-capstone-group-4-walmart.streamlit.app/",
+                "X-Title": "SmartStock AI - IDS 560",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=90) as response:
+                return json.load(response)
+        except HTTPError as exc:
+            raise RuntimeError(f"AI model request failed (HTTP {exc.code}).") from exc
+        except (URLError, TimeoutError) as exc:
+            raise RuntimeError("AI model provider could not be reached.") from exc
+
+    # The provider may return a syntactically successful HTTP response after
+    # hitting max_tokens. Never display/validate that unfinished text.
+    for attempt, token_budget in enumerate((2600, 3800)):
+        request_body["max_tokens"] = token_budget
+        data = make_request(request_body)
+        choices = data.get("choices") or []
+        if not choices:
+            raise RuntimeError("The AI provider returned no answer.")
+        choice = choices[0]
+        message = choice.get("message") or {}
+        content = message.get("content") or ""
+        if isinstance(content, list):
+            content = "\n".join(str(part.get("text", "")) for part in content
+                                if isinstance(part, dict) and part.get("type") == "text")
+        answer = str(content).strip()
+        finish_reason = (choice.get("finish_reason") or "").lower()
+        native_finish_reason = str(choice.get("native_finish_reason") or "").lower()
+        truncated = finish_reason in ("length", "max_tokens") or native_finish_reason in (
+            "max_tokens", "length")
+        if truncated:
+            if attempt == 0:
+                continue
+            raise RuntimeError("The AI response exceeded the length limit twice. "
+                               "Please ask a shorter question; no incomplete answer was saved.")
+        if not answer:
+            raise RuntimeError("The AI provider returned an empty answer.")
+        if finish_reason and finish_reason not in ("stop", "end_turn", "eos"):
+            raise RuntimeError("The AI response ended unexpectedly "
+                               f"({finish_reason}); no incomplete answer was saved.")
+        return answer
+    raise RuntimeError("The AI response could not be completed.")
 
 
 
