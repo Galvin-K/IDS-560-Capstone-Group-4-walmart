@@ -2040,10 +2040,16 @@ if active_section == "Inventory Planning":
             "Shortage check period", [7, 14], horizontal=True,
             format_func=lambda days: f"{days} days", key="action_list_horizon",
         )
-        inv_only = st.checkbox(
-            "Show shortages and high-demand monitoring only",
-            value=True, key="inv_overview_only"
-        )
+        # The 7-day view is dedicated to urgent monitoring, so always show
+        # shortage and high-demand candidates. The optional filter is needed
+        # only for the longer 14-day screening view.
+        if action_horizon == 7:
+            inv_only = True
+        else:
+            inv_only = st.checkbox(
+                "Show shortages and high-demand monitoring only",
+                value=True, key="inv_overview_only_14d"
+            )
         inv_search = st.text_input("Search product ID", key="inv_overview_search")
 
         if action_horizon == 7:
@@ -2243,15 +2249,17 @@ if active_section == "Inventory Planning":
                         "Search recommended orders by product ID",
                         key="recommended_order_product_search",
                     )
-                    order_attention_only = st.checkbox(
-                        "Show suggested orders and items needing review only",
-                        value=True, key="recommended_orders_attention_only"
+                    review_only = st.checkbox(
+                        "Show products flagged for manager review only",
+                        value=False, key="recommended_orders_review_only"
                     )
                     filtered_policy = order_policy
-                    if order_attention_only:
+                    if review_only:
+                        # Filter on the actual review policy flag, not positive
+                        # order quantities. Items without a hold must not appear.
+                        # Approved/rejected items remain visible as reviewed history.
                         filtered_policy = filtered_policy.loc[
-                            filtered_policy["suggested_units"].gt(0)
-                            | filtered_policy["hold"]
+                            filtered_policy["hold"].fillna(False).astype(bool)
                         ]
                     if order_search.strip():
                         filtered_policy = filtered_policy.loc[
