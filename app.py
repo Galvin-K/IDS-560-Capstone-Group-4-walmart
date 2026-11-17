@@ -699,58 +699,6 @@ def render_unified_project_header():
     st.html(markup)
 
 
-render_unified_project_header()
-
-
-st.markdown(
-    "**Plan inventory with fewer surprises.** Check expected sales, spot products that may run short, "
-    "and review suggested orders for your store. You can change starting stock when you know the actual quantity."
-)
-readable_caption(
-    "Historical Walmart sales data · Forecast period begins January 1, 2016."
-)
-
-with st.expander("Which planning period should I use?", expanded=False):
-    col_week, col_order = st.columns(2)
-    with col_week:
-        st.markdown("**7 days — Check this week's demand**")
-        st.write("Review expected sales and possible shortages. Some demand charts also offer 14 days.")
-    with col_order:
-        st.markdown("**14 days — Plan replenishment**")
-        st.write("Review how much to order, including extra safety stock and items needing a manager's check.")
-    readable_caption("Model Insights includes historical 28-day evaluation results; replenishment recommendations remain based on 14 days.")
-
-with st.expander("What do these dashboard terms mean?", expanded=False):
-    st.markdown(
-        "**Predicted demand:** How many units we expect customers to buy.\n\n"
-        "**Stock gap:** The amount predicted demand exceeds available starting stock. "
-        "A gap is not automatically a purchase recommendation.\n\n"
-        "**Safety stock:** Extra units we plan to keep in case demand is higher than expected.\n\n"
-        "**Order-up-to target:** The amount of stock we want available for the 14-day planning period, "
-        "including the safety buffer.\n\n"
-        "**On order:** Units we have already ordered but have not received.\n\n"
-        "**Manager review / hold:** A warning to check an item before approving a new order.\n\n"
-        "**Forecast range (P10–P90):** A lower-to-upper demand estimate from the model, "
-        "not a guaranteed minimum or maximum.\n\n"
-        "**Forecast error (WAPE):** How far past predictions were from actual sales overall. "
-        "Lower is better; an error of 72% means the sum of absolute forecast errors "
-        "was about 72% of the total actual sales in the historical test."
-    )
-
-with st.expander("About the Forecast & Data", expanded=False):
-    st.markdown(
-        "**Where does our data come from?**\n\n"
-        "We use the **Walmart M5 forecasting dataset**, which records daily product sales, "
-        "weekly selling prices, and calendar information for 10 stores in "
-        "California, Texas, and Wisconsin.\n\n"
-        "We use these records to forecast demand and estimate inventory needs. "
-        "The dataset does **not** provide actual stock on hand, supplier delivery times, "
-        "or purchase orders, so the inventory-planning inputs are estimates. "
-        "You can enter a product's actual starting stock in Inventory Planning.\n\n"
-        "Use the 7-day view to assess potential shortages and the 14-day plan for "
-        "suggested replenishment orders."
-    )
-
 # 4. SIDEBAR NAVIGATION & FILTERS
 
 st.sidebar.markdown("### Navigation")
@@ -1014,6 +962,42 @@ inv_first_day = inv_data["date"].min()
 # ============================================================
 
 if active_section == "Executive Overview":
+    render_unified_project_header()
+
+    st.markdown(
+        "**Plan inventory with fewer surprises.** Check expected sales, spot products that may run short, "
+        "and review suggested orders for your store."
+    )
+    readable_caption(
+        "Historical Walmart M5 data · Forecasts begin January 1, 2016 · Starting inventory is simulated."
+    )
+
+    with st.expander("Which planning period should I use?", expanded=False):
+        col_week, col_order = st.columns(2)
+        with col_week:
+            st.markdown("**7 days — Check this week's demand**")
+            st.write("Review expected sales and possible shortages. Some demand charts also offer 14 days.")
+        with col_order:
+            st.markdown("**14 days — Plan replenishment**")
+            st.write("Review how much to order, including extra safety stock and items needing a manager's check.")
+        readable_caption("Model Insights includes historical 28-day evaluation results; replenishment recommendations remain based on 14 days.")
+
+
+    with st.expander("About the Forecast & Data", expanded=False):
+        st.markdown(
+            "**Where does our data come from?**\n\n"
+            "We use the **Walmart M5 forecasting dataset**, which records daily product sales, "
+            "weekly selling prices, and calendar information for 10 stores in "
+            "California, Texas, and Wisconsin.\n\n"
+            "We use these records to forecast demand and estimate inventory needs. "
+            "The dataset does **not** provide actual stock on hand, supplier delivery times, "
+            "or purchase orders, so the inventory-planning inputs are estimates. "
+            "You can enter a product's actual starting stock in Inventory Planning.\n\n"
+            "Use the 7-day view to assess potential shortages and the 14-day plan for "
+            "suggested replenishment orders."
+        )
+
+
     st.header("Executive Overview")
     # The shared intro component also emits a legacy data-scope caption under
     # the navigation guide. Its content belongs with the calculation details.
@@ -1648,15 +1632,6 @@ if active_section == "Demand Forecasting":
     dept, filtered, item, item_data = forecast_dept, forecast_filtered, forecast_item, forecast_item_data
     forecast_horizon = product_horizon
     st.subheader("Product forecast KPIs")
-
-    forecast_origin = (
-        item_data["forecast_origin"].iloc[0].date()
-    )
-
-    st.info(
-        f"Store: {store} | Product: {item} | "
-        f"Forecast Origin: {forecast_origin}"
-    )
 
     predicted_total = float(item_data["forecast"].sum())
 
@@ -2511,10 +2486,9 @@ if active_section == "Inventory Planning":
     # live arithmetic is stock-dependent ordering; do NOT initialize M5 here.
     st.divider()
     render_section_heading("14-Day Replenishment | Suggested Orders")
-    st.write(
-        "**January 1–14, 2016.** This is the ordering view. We combine expected demand "
-        "with a safety buffer, subtract stock already available or on order, and flag items "
-        "that need a manager's review. The rest of the inventory charts use seven days."
+    readable_caption(
+        "14-day replenishment: predicted demand + safety stock − available and incoming units. "
+        "Flagged items require manager review."
     )
     offline_available, offline_message = offline_policy_status()
     if not offline_available:
