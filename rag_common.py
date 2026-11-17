@@ -15,19 +15,14 @@ import requests
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # ============================================================== 1. Configuration
-from pathlib import Path
-
-PROJECT_DIR = str(Path(__file__).resolve().parent) + "/"
-
-M5_DIR = PROJECT_DIR + "M5/datasets/"
-RAG_DIR = PROJECT_DIR + "RAG/"
-RAW_DIR = RAG_DIR + "raw/"
-
-FORECAST_DIR = PROJECT_DIR + "forecasting/"
-
-CUBE_FILE = FORECAST_DIR + "forecast_cube_lightgbm_50.npz"
-SEGMENTS_FILE = FORECAST_DIR + "series_segments_50.csv"
-SEG_ERROR_FILE = FORECAST_DIR + "lightgbm_error_by_segment_50.csv"
+PROJECT_DIR = "/content/drive/MyDrive/IDS 560- Agentic AI & Inventory Project/"
+M5_DIR = PROJECT_DIR + "M5 EDA/datasets/"                            # calendar, sales, sell_prices, weather
+RAG_DIR = PROJECT_DIR + "RAG FILES/"                                 # everything the notebooks read and write
+RAW_DIR = RAG_DIR + "raw/"                                           # cached downloads
+FORECAST_DIR = PROJECT_DIR + "M5 Forecasting/M5_Forecasting_Outputs/"
+CUBE_FILE = FORECAST_DIR + "forecast_cube_lightgbm_50.npz"           # every weekly forecast of the M5 forecasting model
+SEGMENTS_FILE = FORECAST_DIR + "series_segments_50.csv"              # demand type and volume level of each series
+SEG_ERROR_FILE = FORECAST_DIR + "lightgbm_error_by_segment_50.csv"   # the model's weekly error by segment
 
 WINDOW_START, WINDOW_END = "2011-01-01", "2016-06-30"
 STATES = {"CA": "CALIFORNIA", "TX": "TEXAS", "WI": "WISCONSIN"}
@@ -36,7 +31,7 @@ CATS = ["FOODS", "HOBBIES", "HOUSEHOLD"]
 
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"       # text embedding (Hugging Face)
 RERANK_MODEL = "BAAI/bge-reranker-base"      # re-scores the top passages for each question (Hugging Face)
-OPENROUTER_MODEL = "nvidia/nemotron-3.5-super-vl:free"   # any model id ending in ":free" (see openrouter.ai/models)
+OPENROUTER_MODEL = "anthropic/claude-haiku-5.5"   # any model id 
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
 LLM_TIMEOUT = 90
 SEC_USER_AGENT = "IDS560 Group 4 student project"   # notebook 1 sets the full name and email (the SEC requires one)
@@ -970,12 +965,27 @@ def build_prompt(item_id, store_id, as_of, fc, qty, ev, upcoming):
         lines.append(f"[E{n}] ({r['doc_type']}, {r['source']}, published {r['published']:%Y-%m-%d}, {r['state']}) {r['title']}\n{r['text'][:1500]}")
     return "\n".join(lines)
 
+_SECRETS = {}
 def get_secret(name):
+    """A secret (e.g. OPENROUTER_API_KEY) from Colab Secrets, an environment variable or Streamlit's secrets. Read once and
+    remembered, because Colab's Secrets lookup can stall for about 10 seconds when repeated for every model call."""
+    if _SECRETS.get(name):
+        return _SECRETS[name]
+    value = None
     try:
         from google.colab import userdata
-        return userdata.get(name)
+        value = userdata.get(name)
     except Exception:
-        return os.environ.get(name)
+        value = os.environ.get(name)
+        if not value:
+            try:
+                import streamlit as st
+                value = st.secrets.get(name)
+            except Exception:
+                value = None
+    if value:
+        _SECRETS[name] = value
+    return value
 
 def generate_text(system, prompt, max_tokens=1200):
     """Send the prompt to the OpenRouter model. Returns None if no key is set; retries once on an empty reply."""
@@ -1158,28 +1168,19 @@ TESTS = [
     (56, "Which suppliers had the longest delivery delays last quarter?", "2015-09-16", None, None, [], "no_evidence", None),
 ]
 NO_DATA_CARDS = {"ref:data_limits", "ref:stores"}      # a no-answer question is handled if one of these comes first
+
+# ============================================================== 10. Setup
 def set_paths(project_dir, m5_dir=None):
-    global PROJECT_DIR, M5_DIR, RAG_DIR, RAW_DIR
-    global FORECAST_DIR, CUBE_FILE, SEGMENTS_FILE
-    global SEG_ERROR_FILE, SETTINGS_FILE
-
-    PROJECT_DIR = str(Path(project_dir).resolve()) + "/"
-
-    M5_DIR = (
-        str(Path(m5_dir).resolve()) + "/"
-        if m5_dir
-        else PROJECT_DIR + "M5/datasets/"
-    )
-
-    RAG_DIR = PROJECT_DIR + "RAG/"
+    """Point every path at another project folder (the defaults are the team's Google Drive)."""
+    global PROJECT_DIR, M5_DIR, RAG_DIR, RAW_DIR, FORECAST_DIR, CUBE_FILE, SEGMENTS_FILE, SEG_ERROR_FILE, SETTINGS_FILE
+    PROJECT_DIR = project_dir
+    M5_DIR = m5_dir or PROJECT_DIR + "M5 EDA/datasets/"
+    RAG_DIR = PROJECT_DIR + "RAG FILES/"
     RAW_DIR = RAG_DIR + "raw/"
-
-    FORECAST_DIR = PROJECT_DIR + "forecasting/"
-
+    FORECAST_DIR = PROJECT_DIR + "M5 Forecasting/M5_Forecasting_Outputs/"
     CUBE_FILE = FORECAST_DIR + "forecast_cube_lightgbm_50.npz"
     SEGMENTS_FILE = FORECAST_DIR + "series_segments_50.csv"
     SEG_ERROR_FILE = FORECAST_DIR + "lightgbm_error_by_segment_50.csv"
-
     SETTINGS_FILE = RAG_DIR + f"settings_{RUN_TAG}.json"
 
 def setup(m5=True, library=True, forecasts=True, reranker=True):
@@ -1195,3 +1196,249 @@ def setup(m5=True, library=True, forecasts=True, reranker=True):
         load_library(reranker)
     print(f"Setup done in {time.time() - t0:.0f}s | files are read from and saved to {RAG_DIR} (names end in _{RUN_TAG})")
 
+
+
+# ============================================================== 11. Checked answers for the dashboard (added; recommend() and ask() are unchanged)
+# recommend_checked() and answer_checked() run the same agent as notebooks 3 and 6 and then check the model's reply with the
+# validation rules of notebook 3. If a critical check fails, the model is asked once more with the problems listed. The result
+# carries the checks, an explanation-confidence level and plain-language warnings for the dashboard. answer_question() is ask()
+# with three additions: a question that names an item and store (e.g. "FOODS_3_090 at CA_1") also gets that item's order, flags and
+# confidence as passage [E1]; a date outside the forecast data gives a "no forecast for this date" passage instead of an error;
+# and a store that is not in the data is named as missing.
+CHECK_LABELS = {
+    "quantity_correct": "The recommendation states the ordering rule's quantity (for a held order: 0 and the if-confirmed quantity)",
+    "citations_valid": "Every [E#] points to a passage the model was given",
+    "no_future_sources": "No cited passage is dated after the decision date",
+    "reasons_cited": "Most reasons cite a passage",
+    "names_state_category": "The answer names the store's state and the item's category",
+    "flags_reported": "Every flag (and a hold) is mentioned",
+    "no_unsupported_claims": "No uncited claim about weather, SNAP, the economy and similar",
+    "numbers_verified": "Every number in the answer appears in what the model was given",
+    "confidence_stated": "The answer gives the same forecast confidence level as the item profile",
+    "answer_correct": "The answer names the forecast-data result",
+    "states_assumption": "An inventory answer says stock on hand is an assumption",
+    "handles_missing": "With no relevant evidence, the answer says so",
+}
+ORDER_CHECKS = ["quantity_correct", "citations_valid", "no_future_sources", "reasons_cited", "names_state_category",
+                "flags_reported", "no_unsupported_claims", "numbers_verified", "confidence_stated"]
+ORDER_CRITICAL = ["quantity_correct", "citations_valid", "no_future_sources", "flags_reported", "numbers_verified"]
+QUESTION_CHECKS = ["answer_correct", "states_assumption", "citations_valid", "no_future_sources", "reasons_cited",
+                   "no_unsupported_claims", "numbers_verified", "handles_missing", "flags_reported", "confidence_stated"]
+QUESTION_CRITICAL = ["answer_correct", "citations_valid", "no_future_sources", "numbers_verified", "handles_missing", "flags_reported"]
+_CAT_WORD = {"FOODS": "food", "HOBBIES": "hobb", "HOUSEHOLD": "household"}
+_OUTSIDE_RE = re.compile(r"\b(" + "|".join(re.escape(w) for w in [
+    "weather", "storm", "snow", "rain", "heat", "flood", "hurricane", "cold", "snap", "benefit", "economy", "economic", "spending",
+    "consumer", "inflation", "gas price", "unemployment", "trend", "year over year", "year-over-year", "competitor", "promotion",
+    "beige", "walmart said", "management"]) + r")")
+_FLAG_WORDS = {"NEW_ITEM": ("new item", "new product", "launched", "no sales history", "first sale"),
+               "POSSIBLE_STOCKOUT": ("stock-out", "stockout", "out of stock", "empty shelf", "shelf"),
+               "POSSIBLY_DISCONTINUED": ("discontinu", "still carr", "still sold", "no longer"),
+               "STALE_SEGMENT": ("out of date", "segment", "no sales in 2011")}
+_MISSING_WORDS = ("no supporting evidence", "does not contain", "doesn't contain", "not in the data", "cannot be answered",
+                  "not available", "no data", "no forecast")
+_ASSUMPTION_WORDS = ("assum", "no inventory data", "not in the data", "inventory is not", "does not include inventory", "estimate")
+_NUM_RE = re.compile(r"(?<![\w.])[-−+]?\d[\d,]*(?:\.\d+)?")
+
+def _numbers_in(text):
+    text = re.sub(r"\[?E\d+\]?", " ", text); text = re.sub(r"\d{4}-\d{2}-\d{2}", " ", text)
+    out = []
+    for m in _NUM_RE.findall(text):
+        s = m.replace(",", "").replace("−", "-").lstrip("+")
+        try:
+            out.append((float(s), len(s.split(".")[1]) if "." in s else 0))
+        except ValueError:
+            pass
+    return out
+
+def unverified_numbers(answer, prompt):
+    """Numbers in the answer that are not in the prompt (same rule as notebook 3: integers up to 31 and years are not checked;
+    a share can be written as a fraction or a percentage)."""
+    have = [abs(v) for v, _ in _numbers_in(prompt)]
+    bad = []
+    for v, dec in _numbers_in(answer):
+        a = abs(v)
+        if (dec == 0 and a <= 31) or (dec == 0 and 1990 <= a <= 2035):
+            continue
+        tol = 0.5 * 10 ** (-dec) + 1e-9
+        if not any(abs(a - b) <= tol or abs(a - 100 * b) <= tol or abs(a / 100 - b) <= tol / 100 for b in have):
+            bad.append(v)
+    return bad
+
+def _common_checks(answer, ev, prompt, as_of, skip_bullets=False):
+    cited = sorted({int(x) for x in re.findall(r"E(\d+)", answer)})
+    valid = [c for c in cited if 1 <= c <= len(ev)]
+    bullets = [l for l in answer.splitlines() if l.strip().startswith(("-", "*", "•"))]
+    if skip_bullets:
+        bullets = [b for b in bullets if not re.search(r"nothing important|cannot tell|data cannot", b.lower())]
+    uncited = [b.lower() for b in bullets if not re.search(r"E\d+", b)]
+    cited_share = round(float(np.mean([bool(re.search(r"E\d+", b)) for b in bullets])), 2) if bullets else 0.0
+    bad = unverified_numbers(answer, prompt)
+    return {"citations_valid": len(cited) == len(valid),
+            "no_future_sources": int(sum(ev.iloc[c - 1]["published"] > pd.Timestamp(as_of) for c in valid)) == 0,
+            "no_unsupported_claims": not any(_OUTSIDE_RE.search(b) for b in uncited),
+            "numbers_verified": len(bad) == 0}, {"cited_share": cited_share, "unverified_numbers": bad, "passages_cited": valid}
+
+def _flags_ok(low, flags, hold):
+    ok = all(any(w in low for w in _FLAG_WORDS[f["code"]]) for f in flags)
+    return (ok and "hold" in low) if hold else ok
+
+def _finish(checks, all_checks, critical):
+    crit = all(checks.get(c) is not False for c in critical)
+    rest = all(checks.get(c) is not False for c in all_checks)
+    level = "High" if crit and rest else "Medium" if crit else "Low"
+    failed = [c for c in all_checks if checks.get(c) is False]
+    return {"checks": checks, "explanation_confidence": level, "failed": failed,
+            "critical_failed": [c for c in failed if c in critical],
+            "warnings": [CHECK_LABELS[c] + ": not met" for c in failed]}
+
+def check_order_answer(res):
+    """Validation checks for a recommend() result (the rules of notebook 3's order matrix)."""
+    answer = res.get("answer") or ""
+    if not answer.strip():
+        return {"checks": {}, "explanation_confidence": "No answer", "failed": [], "critical_failed": ["answered"],
+                "warnings": ["The model returned no explanation; the order, flags and confidence above are still valid."]}
+    ev, q, low = res["evidence"], res["order"], answer.lower()
+    item_id = str(ev.iloc[0]["title"]).split(": ")[-1].split(" at ")[0] if len(ev) else ""
+    store_id = str(ev.iloc[0]["title"]).split(" at ")[-1] if len(ev) else ""
+    as_of = ev.iloc[0]["published"] if len(ev) else pd.Timestamp.max
+    c, extra = _common_checks(answer, ev, res["prompt"], as_of)
+    rec = re.search(r"Recommendation:(.*)", answer)
+    rec_numbers = {int(float(x)) for x in re.findall(r"\d+(?:\.\d+)?", rec.group(1).replace(",", ""))} if rec else set()
+    need = {q["order_qty"]} | ({q["if_confirmed_order_qty"]} if q["hold"] else set())
+    conf_m = re.search(r"Forecast confidence:\s*\**\s*(High|Medium|Low)", answer, re.I)
+    st, cat = store_id.split("_")[0], item_id.split("_")[0]
+    c.update({"quantity_correct": need <= rec_numbers,
+              "reasons_cited": extra["cited_share"] >= 0.8,
+              "names_state_category": STATE_NAMES.get(st, "?").lower() in low and _CAT_WORD.get(cat, "?") in low,
+              "flags_reported": _flags_ok(low, res["flags"], q["hold"]) if (res["flags"] or q["hold"]) else None,
+              "confidence_stated": bool(conf_m) and conf_m.group(1).title() == res["confidence"]["level"]})
+    return {**_finish(c, ORDER_CHECKS, ORDER_CRITICAL), **extra}
+
+def check_question_answer(res):
+    """Validation checks for an ask() / answer_question() result (the rules of notebook 3's question matrix, without the
+    test-only checks that need a known right answer)."""
+    answer = res.get("answer") or ""
+    if not answer.strip():
+        return {"checks": {}, "explanation_confidence": "No answer", "failed": [], "critical_failed": ["answered"],
+                "warnings": ["The model returned no answer; the evidence and forecast data above are still valid."]}
+    ev, lk, low = res["evidence"], res.get("lookup"), answer.lower()
+    c, extra = _common_checks(answer, ev, res["prompt"], res["as_of"], skip_bullets=True)
+    says_missing = any(w in low for w in _MISSING_WORDS)
+    po = res.get("order_info")
+    real = ev[~ev["doc_type"].isin(["note"])] if len(ev) else ev
+    conf_m = re.search(r"(High|Medium|Low)\b", answer)
+    c.update({"answer_correct": any(k.lower() in low for k in lk["keys"]) if (lk and lk.get("keys")) else None,
+              "states_assumption": any(w in low for w in _ASSUMPTION_WORDS) if (lk and lk.get("uses_stock")) or po else None,
+              "reasons_cited": extra["cited_share"] >= 0.6 or (len(real) == 0 and says_missing),
+              "handles_missing": says_missing if len(real) == 0 else None,
+              "flags_reported": _flags_ok(low, po["flags"], po["order"]["hold"]) if po and (po["flags"] or po["order"]["hold"]) else None,
+              "confidence_stated": (bool(conf_m) and po["confidence"]["level"].lower() in low) if po else None})
+    return {**_finish(c, QUESTION_CHECKS, QUESTION_CRITICAL), **extra}
+
+_ITEM_RE = re.compile(r"\b((?:FOODS|HOBBIES|HOUSEHOLD)_\d_\d{3})\b", re.I)
+_STORE_RE = re.compile(r"\b((?:CA|TX|WI)_\d+)\b", re.I)
+
+def _note(text, as_of, state):
+    return {"doc_type": "note", "source": "System note", "title": "Data availability", "url": "", "published": pd.Timestamp(as_of),
+            "state": state or "US", "text": text, "doc_id": "note", "chunk_id": "note", "score": np.nan, "relevance": np.nan, "category": "ALL"}
+
+ITEM_QUESTION_RULES = """
+- If a passage of type item_profile is given, it holds the item's computed order, flags and forecast confidence. Restate the
+  forecast confidence level and every flag's check; if the order is on hold, say "hold" and give the if-confirmed quantity.
+- A passage of type note describes data that is missing (an unknown store, or a date without a forecast). Say so plainly."""
+
+def answer_question(question, as_of, state=None, category=None, k=8, call_llm=True):
+    """ask() for the dashboard: also handles a named item and store, dates without a forecast and unknown stores (see above)."""
+    category = category or category_of(question)
+    kind, kw = route_question(question)
+    notes, lookup, po = [], None, None
+    stores = [s.upper() for s in _STORE_RE.findall(question)]
+    known = set(ids["store_id"])
+    unknown = [s for s in stores if s not in known]
+    if unknown:
+        notes.append(f"Store(s) {', '.join(unknown)} are not in the M5 data, which has stores {', '.join(sorted(known))}.")
+        if kind == "compare_stores":
+            kw = {"stores": [s for s in stores if s in known]}
+    if kind:
+        try:
+            lookup = forecast_lookup(kind, as_of, **kw)
+        except ValueError as e:
+            notes.append(f"No forecast for this date: {e}.")
+    items = [i.upper() for i in _ITEM_RE.findall(question)]
+    known_stores = [s for s in stores if s in known]
+    if items and known_stores and has_series(items[0], known_stores[0]):
+        it, sid = items[0], known_stores[0]
+        end = int(day_index[pd.Timestamp(as_of)])
+        row = series_row(it, sid)
+        on_hand = int(round(ASSUMED_STOCK_DAYS * float(vals[row, max(0, end - 27): end + 1].mean())))
+        try:
+            po = place_order(it, sid, as_of, on_hand)
+            prof = item_profile(it, sid, as_of, po["forecast"], po["segment"], po["flags"], po["confidence"], po["history"])
+            q = po["order"]
+            prof["text"] += (f" Order for the next {ORDER_DAYS} days from the ordering rule (stock on hand ASSUMED to be {on_hand} units, "
+                             f"{ASSUMED_STOCK_DAYS} days of recent sales, because M5 has no inventory data): "
+                             + (f"HOLD, order 0 until checked; if confirmed, order {q['if_confirmed_order_qty']} units." if q["hold"]
+                                else f"order {q['order_qty']} units (expected demand {q['expected_demand']}, safety stock {q['safety_stock']})."))
+            po["profile"], po["on_hand"] = prof, on_hand
+            state = state or sid[:2]
+            category = category or it.split("_")[0]
+        except Exception as e:
+            notes.append(f"Could not compute an order for {it} at {sid}: {e}.")
+            po = None
+    elif items and known_stores:
+        notes.append(f"Item {items[0]} is not sold at store {known_stores[0]} in the M5 data.")
+    ev = retrieve(question, as_of, state, k=(5 if (lookup or po) else k), category=category)
+    ev = ev[~(ev["relevance"] < RELEVANCE_MIN)].reset_index(drop=True)
+    first = []
+    if po:
+        first.append({**po["profile"], "relevance": np.nan, "category": "ALL"})
+    if lookup:
+        first.append({"doc_type": "forecast_data", "source": "M5 forecasting model (forecast cube)", "title": f"Forecast data: {kind.replace('_', ' ')}",
+                      "url": "", "published": pd.Timestamp(as_of), "state": state or "US", "text": lookup["text"], "doc_id": "forecast_data",
+                      "chunk_id": "forecast_data", "score": np.nan, "relevance": np.nan, "category": "ALL"})
+    first += [_note(n, as_of, state) for n in notes]
+    if first:
+        ev = pd.concat([pd.DataFrame(first), ev], ignore_index=True)
+    prompt = (f"Decision date: {pd.Timestamp(as_of):%Y-%m-%d}. Store state: {STATE_NAMES.get(state, 'any')}. "
+              f"Question: {question}\n\nEvidence:\n" + ("\n".join(
+                  f"[E{n}] ({r['doc_type']}, {r['source']}, published {r['published']:%Y-%m-%d}, {r['state']}) {r['title']}\n{r['text'][:2000]}"
+                  for n, (_, r) in enumerate(ev.iterrows(), 1)) or "(no relevant passages found)"))
+    system = ASK_PROMPT + ITEM_QUESTION_RULES
+    answer = generate_text(system, prompt) if call_llm else None
+    return {"question": question, "as_of": as_of, "state": state, "evidence": ev, "prompt": prompt, "system": system,
+            "answer": answer, "lookup": lookup, "order_info": po, "notes": notes}
+
+def _retry_prompt(prompt, answer, chk):
+    return (prompt + "\n\nYour previous answer was:\n" + answer + "\n\nIt failed these checks: "
+            + "; ".join(CHECK_LABELS.get(c, c) for c in chk["failed"])
+            + (f". Numbers not found in the prompt: {', '.join(f'{v:g}' for v in chk['unverified_numbers'])}" if chk.get("unverified_numbers") else "")
+            + ". Write the answer again in the same format, fixing these problems.")
+
+def recommend_checked(item_id, store_id, as_of, on_hand, max_retries=1, **kw):
+    """recommend() + validation checks + one retry if a critical check fails. Adds 'checks', 'explanation_confidence',
+    'warnings' and 'attempts' to the result. The order, flags and confidence never depend on the model."""
+    res = recommend(item_id, store_id, as_of, on_hand, verbose=False, **kw)
+    chk, attempts = check_order_answer(res), 1
+    while res.get("answer") and chk["critical_failed"] and attempts <= max_retries:
+        new = generate_text(SYSTEM_PROMPT, _retry_prompt(res["prompt"], res["answer"], chk))
+        attempts += 1
+        if new:
+            trial = {**res, "answer": new}
+            new_chk = check_order_answer(trial)
+            if len(new_chk["failed"]) <= len(chk["failed"]):
+                res, chk = trial, new_chk
+    return {**res, **chk, "attempts": attempts}
+
+def answer_checked(question, as_of, state=None, max_retries=1, **kw):
+    """answer_question() + validation checks + one retry if a critical check fails."""
+    res = answer_question(question, as_of, state, **kw)
+    chk, attempts = check_question_answer(res), 1
+    while res.get("answer") and chk["critical_failed"] and attempts <= max_retries:
+        new = generate_text(res["system"], _retry_prompt(res["prompt"], res["answer"], chk))
+        attempts += 1
+        if new:
+            trial = {**res, "answer": new}
+            new_chk = check_question_answer(trial)
+            if len(new_chk["failed"]) <= len(chk["failed"]):
+                res, chk = trial, new_chk
+    return {**res, **chk, "attempts": attempts}
