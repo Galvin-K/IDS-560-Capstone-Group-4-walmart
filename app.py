@@ -1183,7 +1183,7 @@ if active_section == "Executive Overview":
     }
     </style>""", unsafe_allow_html=True)
 
-    st.header("Executive Overview")
+    st.header("How to Use This Dashboard")
     render_overview_intro(store)
     dept = dept_options[0]  # Legacy default; Executive Overview covers all departments.
     filtered = store_df.copy()
