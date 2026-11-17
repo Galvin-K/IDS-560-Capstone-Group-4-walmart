@@ -968,9 +968,6 @@ if active_section == "Executive Overview":
         "**Plan inventory with fewer surprises.** Check expected sales, spot products that may run short, "
         "and review suggested orders for your store."
     )
-    readable_caption(
-        "Historical Walmart M5 data · Forecasts begin January 1, 2016 · Starting inventory is simulated."
-    )
 
     with st.expander("Which planning period should I use?", expanded=False):
         col_week, col_order = st.columns(2)
