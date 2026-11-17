@@ -801,6 +801,22 @@ def record_selected_manager_decisions(store_id, decision):
 def record_manager_decision(store_id, product_id, decision):
     st.session_state["manager_review_decisions"][(str(store_id), str(product_id))] = decision
 
+def ask_ai_about_selected_order(store_id):
+    """Route the current held product into the existing AI answer workflow."""
+    selected = st.session_state.get(f"review_queue_selected_{store_id}", [])
+    if not selected:
+        return
+    product_id = str(selected[0])
+    st.session_state["assistant_handoff_question"] = (
+        f"For product {product_id} at store {store_id}, what should a manager "
+        "check before approving its proposed 14-day replenishment order? "
+        "Use available forecast figures and historical evidence. Separate "
+        "verified findings from missing information, and do not assume "
+        "that the order has already been approved."
+    )
+    st.session_state["main_section_nav"] = "AI Assistant"
+
+
 def clear_manager_decisions():
     st.session_state["manager_review_decisions"] = {}
 
@@ -2553,13 +2569,15 @@ if active_section == "Inventory Planning":
                                 "Rejected": "Not approved for this demo session",
                             }.get(manager_decision, "Manager review required")
                             st.warning(
-                                f"**{status_note}** · {', '.join(hold_labels)}\n\n"
-                                f"**If approved:** {conditional_units:,} "
-                                f"{'unit' if conditional_units == 1 else 'units'}"
+                                f"**{status_note}**\n\n"
+                                f"**Reason for review:** {', '.join(hold_labels)}\n\n"
+                                f"**Order quantity if approved:** {conditional_units:,} "
+                                f"{'unit' if conditional_units == 1 else 'units'}\n\n"
+                                f"**Before approving:** {review_steps[0]}"
                             )
-                            with st.expander("What should the manager check?", expanded=False):
-                                st.markdown(review_text)
-                            st.caption("Approve or reject this simulated order at the bottom of the tab.")
+                            if len(review_steps) > 1:
+                                with st.expander("Additional manager checks", expanded=False):
+                                    st.markdown("\n".join(f"- {step}" for step in review_steps[1:]))
                         else:
                             st.success(
                                 "**No hold** — No additional manager review is required by the system. "
@@ -2626,10 +2644,17 @@ if active_section == "Inventory Planning":
         selected_for_decision = st.session_state.get(f"review_queue_selected_{store}", [])
         if selected_for_decision:
             st.caption("Review the hold reason, order estimate, and forecast confidence before deciding.")
+            st.button(
+                "Ask AI about this product", icon=":material/smart_toy:",
+                key=f"queue_ask_ai_{store}",
+                on_click=ask_ai_about_selected_order, args=(store,),
+                use_container_width=False,
+                help="Open AI Assistant and automatically ask a question about the selected product. "
+                     "AI evidence is advisory; it does not approve an order.",
+            )
             st.caption(
-                "Need supporting context? Open **AI Assistant** in the sidebar and ask about "
-                "the product or demand patterns. AI responses are advisory and may not "
-                "include the latest manager-review flags."
+                "The assistant will use the selected product and store to look for relevant "
+                "forecast figures and historical evidence. It cannot approve an order."
             )
             decision_cols = st.columns(3)
             decision_cols[0].button(
@@ -3034,14 +3059,19 @@ if active_section == "AI Assistant":
                     help="This setting has not been validated as a relevance threshold."
                 )
 
+    # A manager may hand off a selected product from Review & Approval.
+    # Consume the handoff once, so normal reruns never regenerate answers.
+    auto_question = st.session_state.pop("assistant_handoff_question", None)
+    if auto_question:
+        st.session_state["assistant_question_input"] = auto_question
+    elif "assistant_question_input" not in st.session_state:
+        st.session_state["assistant_question_input"] = (
+            "What historical factors might have affected Foods demand in California?"
+        )
+
     with st.form("rag_question_form"):
         user_question = st.text_area(
-            "Your question",
-            value=(
-                "What historical factors might have affected "
-                "Foods demand in California?"
-            ),
-            height=90
+            "Your question", key="assistant_question_input", height=90
         )
 
         ask_col, evidence_col = st.columns(2)
@@ -3054,6 +3084,9 @@ if active_section == "AI Assistant":
                 "Find Historical Evidence", use_container_width=True
             )
 
+    # A product handoff behaves like a single user-triggered Ask submission.
+    # The normal question input and results remain editable and reusable.
+    ask_clicked = bool(ask_clicked or auto_question)
     # Persist assistant results across Streamlit reruns. Both submit buttons
     # refresh evidence, but opening evidence must not erase an existing answer.
     if search_clicked or ask_clicked:
