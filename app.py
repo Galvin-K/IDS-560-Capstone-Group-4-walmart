@@ -1645,7 +1645,7 @@ if active_section == "Executive Overview":
             "units_to_cover": "7-Day Gap Units",
             "sales_at_risk_usd": "7-Day Sales at Risk ($)",
         }).round(2)
-        readable_caption("Select a product to add it to the stock comparison chart in Inventory Planning.")
+        readable_caption("Select a product to view its forecast in Demand Forecasting and add it to the stock comparison chart in Inventory Planning.")
         # Show the saved selection even when the native dataframe checkbox is reset
         # after navigating between dashboard sections. Keep the table columns unchanged.
         focused_priority_item = (
@@ -2539,7 +2539,7 @@ if active_section == "Inventory Planning":
                     })
                     # Select a single product from the 14-day order plan to
                     # inspect its full calculation under Review & Approval.
-                    st.caption("Select a product row below, then open **Review & Approval** to check its order details and make a decision.")
+                    st.caption("Select a product to add it to the stock comparison chart, then open **Review & Approval** to check its order details.")
                     # Keep the selected product visible after navigating between sections,
                     # even if Streamlit resets its native row-selection checkbox.
                     focused_order_item = (
@@ -2680,7 +2680,7 @@ if active_section == "Inventory Planning":
                                     "confidence": "Forecast Confidence",
                                     "review_decision": "Decision",
                                 })
-                                st.caption("Click a product row to view its 14-day order details below.")
+                                st.caption("Select a held product to review its 14-day order calculation and make a decision below.")
                                 selection_key = f"review_queue_selected_{store}"
                                 queue_options = review_matches["item_id"].astype(str).tolist()
                                 # Keep only a single active product; a changed queue filter
