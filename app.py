@@ -1955,8 +1955,8 @@ if active_section == "Demand Forecasting":
 if active_section == "Model Insights":
     st.header("Model Insights")
     readable_caption("Historical evaluation on the 2016 M5 holdout sample; not live store performance.")
-    performance_tab, patterns_tab, ai_tab = st.tabs([
-        "Forecast Performance", "Demand Patterns", "AI & RAG Evaluation"
+    patterns_tab, performance_tab, ai_tab = st.tabs([
+        "Demand Patterns", "Forecast Performance", "AI & RAG Evaluation"
     ])
 
     with performance_tab:
