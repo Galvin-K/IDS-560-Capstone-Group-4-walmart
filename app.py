@@ -2653,45 +2653,29 @@ if active_section == "Inventory Planning":
                                     selected_previous = [selected_previous]
                                 selected_previous = [pid for pid in selected_previous if pid in queue_options]
                                 st.session_state[selection_key] = selected_previous[:1]
-                                # Streamlit's native row-selection checkbox is transient:
-                                # returning from another page can clear it even when the
-                                # actual selected product is saved in session_state.
-                                # Show an independent, persistent marker and highlight
-                                # for the saved product without changing the selection API.
+                                # Keep the existing table layout, and visually distinguish
+                                # the product saved across page changes. The native Streamlit
+                                # row checkbox may reset when the table is recreated.
                                 active_queue_product = (
                                     st.session_state[selection_key][0]
                                     if st.session_state[selection_key] else None
                                 )
-                                marked_display = queue_display.copy()
-                                marked_display.insert(
-                                    0, "Selected",
-                                    ["✓" if pid == active_queue_product else ""
-                                     for pid in queue_options],
-                                )
 
                                 def mark_active_queue_row(row):
-                                    is_active = row["Product"] == active_queue_product
-                                    return (["background-color: #E5EEFF; color: #173B70"]
-                                            * len(row) if is_active else [""] * len(row))
+                                    if row["Product"] == active_queue_product:
+                                        return ["background-color: #CDDFFA; color: #142D59"] * len(row)
+                                    return [""] * len(row)
 
-                                queue_styled = marked_display.style.apply(
-                                    mark_active_queue_row, axis=1
-                                )
                                 queue_event = st.dataframe(
-                                    queue_styled, use_container_width=True, hide_index=True,
+                                    queue_display.style.apply(mark_active_queue_row, axis=1),
+                                    use_container_width=True, hide_index=True,
                                     height=min(420, 45 + 35 * len(queue_display)),
                                     on_select="rerun", selection_mode="single-row",
                                     key=f"review_queue_table_{store}_{queue_dept}_{queue_reason}",
-                                    column_config={
-                                        "Selected": st.column_config.TextColumn(
-                                            "Selected", width="small",
-                                            help="✓ marks the saved selected product, including after returning from AI Assistant."
-                                        ),
-                                        "Units if Approved": st.column_config.NumberColumn(
-                                            "Units if Approved", format="%d",
-                                            help="Suggested units only after a manager clears the hold."
-                                        ),
-                                    },
+                                    column_config={"Units if Approved": st.column_config.NumberColumn(
+                                        "Units if Approved", format="%d",
+                                        help="Suggested units only after a manager clears the hold."
+                                    )},
                                 )
                                 chosen_rows = queue_event.selection.rows
                                 if chosen_rows and chosen_rows[0] < len(queue_options):
@@ -2701,7 +2685,7 @@ if active_section == "Inventory Planning":
                                         st.rerun()  # refresh the persisted visual marker
                                 if st.session_state[selection_key]:
                                     st.caption(
-                                        f"Selected: **{st.session_state[selection_key][0]}** · "
+                                        f"**Selected product: {st.session_state[selection_key][0]}** · "
                                         "Review its calculation and hold reason below before deciding."
                                     )
                         readable_caption("To adjust stock, use the selected product's order details below.")
