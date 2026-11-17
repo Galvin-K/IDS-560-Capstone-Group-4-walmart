@@ -2402,7 +2402,7 @@ if active_section == "Inventory Planning":
                     })
                     # Select a single product from the 14-day order plan to
                     # inspect its full calculation under Review & Approval.
-                    st.caption("Select an order row to view its product details in Review & Approval.")
+                    st.caption("Select a product row below, then open **Review & Approval** to check its order details and make a decision.")
                     order_event = st.dataframe(
                         order_display, hide_index=True, use_container_width=True,
                         on_select="rerun", selection_mode="single-row",
