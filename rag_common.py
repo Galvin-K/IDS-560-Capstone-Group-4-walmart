@@ -241,7 +241,7 @@ def eligible_passages(as_of, state=None, category=None, doc_types=None):
     latest = cand.loc[keyed].groupby("series_key")["published"].transform("max")
     return cand.drop(index=latest.index[cand.loc[keyed, "published"] < latest])
 
-def retrieve(query, as_of, state=None, k=6, category=None, method="full", doc_types=None, per_doc=1, per_type=3, pool=30):
+def retrieve(query, as_of, state=None, k=8, category=None, method="full", doc_types=None, per_doc=1, per_type=3, pool=30, relevance_min=None):
     """Best passages for a question as of a date. method: "full" (hybrid + reranker, the agent's), "hybrid+category",
     "dense+category", "dense" (meaning only, no category filter: the v1-v2 search), "keyword", "random" (benchmark baselines)."""
     cand = eligible_passages(as_of, state, category if method != "dense" else None, doc_types)
@@ -264,6 +264,9 @@ def retrieve(query, as_of, state=None, k=6, category=None, method="full", doc_ty
         top = cand.head(pool)
         rel = RERANKER.predict([(query, t[:2000]) for t in top["embed_text"]], show_progress_bar=False)
         cand = top.assign(relevance=np.asarray(rel, dtype=float)).sort_values("relevance", ascending=False)
+        if relevance_min is not None:
+            # Drop weak matches before selecting diverse documents.
+            cand = cand.loc[pd.to_numeric(cand["relevance"], errors="coerce") >= float(relevance_min)].copy()
     out, n_doc, n_type = [], {}, {}
     for i, r in cand.iterrows():
         if n_doc.get(r["doc_id"], 0) >= per_doc or n_type.get(r["doc_type"], 0) >= per_type:
