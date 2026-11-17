@@ -8,8 +8,8 @@ import streamlit as st
 def render_overview_intro(store: str) -> None:
     """Show three always-visible white navigation cards on Executive Overview.
 
-    Native st.container backgrounds were inherited from the page theme; explicitly
-    styled HTML surfaces avoid that and match the white store/KPI cards.
+    White card surfaces with subtle navy, gold, and blue top accents match
+    the dashboard presentation while preserving readability.
     """
     safe_store = escape(str(store))
     st.html(f"""
@@ -20,9 +20,12 @@ def render_overview_intro(store: str) -> None:
       }}
       .eo-nav-guide .eo-nav-card {{
         box-sizing:border-box; min-width:0; background:#fff !important;
-        border:1px solid #d2dbe6; border-radius:9px;
-        padding:16px 15px 17px; min-height:116px;
+        border:1px solid #d2dbe6; border-top:4px solid #1f3368; border-radius:9px;
+        padding:13px 15px 17px; min-height:116px;
       }}
+      .eo-nav-guide .eo-nav-card:nth-child(1) {{border-top-color:#1f3368;}}
+      .eo-nav-guide .eo-nav-card:nth-child(2) {{border-top-color:#f4bd35;}}
+      .eo-nav-guide .eo-nav-card:nth-child(3) {{border-top-color:#4877b9;}}
       .eo-nav-guide .eo-nav-title {{
         color:#172e58; font-size:16px; font-weight:700;
         line-height:1.45; margin:0 0 15px;
